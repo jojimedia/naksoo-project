@@ -342,7 +342,7 @@ function ProfileImage({ member }: { member: CrewMember }) {
       width={48}
       height={48}
       unoptimized
-      className="h-11 w-11 rounded-full border border-white/10 bg-slate-800 object-cover xl:h-9 xl:w-9 2xl:h-10 2xl:w-10 min-[1680px]:h-11 min-[1680px]:w-11"
+      className="h-11 w-11 rounded-full border border-white/10 bg-slate-800 object-cover xl:h-10 xl:w-10 2xl:h-10 2xl:w-10 min-[1800px]:h-11 min-[1800px]:w-11"
     />
   );
 }
@@ -352,8 +352,8 @@ function MemberRow({ member }: { member: CrewMember }) {
     member.change_balloons >= 0 ? "text-emerald-300" : "text-rose-300";
 
   return (
-    <div className="grid min-h-[78px] grid-cols-[34px_46px_minmax(0,1fr)_150px] grid-rows-[17px_28px_18px] items-center gap-x-2 gap-y-1 border-t border-white/[0.04] px-1 py-2.5 xl:grid-cols-[26px_40px_minmax(0,1fr)_116px] 2xl:grid-cols-[30px_42px_minmax(0,1fr)_128px] min-[1680px]:grid-cols-[34px_46px_minmax(0,1fr)_150px]">
-      <p className="row-span-2 row-start-2 self-center text-center text-[18px] font-black leading-none tabular-nums text-slate-500 xl:text-[16px] min-[1680px]:text-[18px]">
+    <div className="grid min-h-[78px] grid-cols-[34px_46px_minmax(0,1fr)_150px] grid-rows-[17px_28px_18px] items-center gap-x-2 gap-y-1 border-t border-white/[0.04] px-1 py-2.5 xl:grid-cols-[30px_42px_minmax(0,1fr)_132px] 2xl:grid-cols-[28px_42px_minmax(0,1fr)_128px] min-[1800px]:grid-cols-[34px_46px_minmax(0,1fr)_150px]">
+      <p className="row-span-2 row-start-2 self-center text-center text-[18px] font-black leading-none tabular-nums text-slate-500 xl:text-[17px] 2xl:text-[17px] min-[1800px]:text-[18px]">
         {member.rank}
       </p>
       <div className="row-span-2 row-start-2 self-center">
@@ -361,22 +361,22 @@ function MemberRow({ member }: { member: CrewMember }) {
       </div>
 
       <p
-        className={`col-start-4 row-start-1 self-end text-right text-[17px] font-black leading-none tabular-nums xl:text-[14px] 2xl:text-[15px] min-[1680px]:text-[17px] ${changeColor}`}
+        className={`col-start-4 row-start-1 self-end text-right text-[17px] font-black leading-none tabular-nums xl:text-[15px] 2xl:text-[16px] min-[1800px]:text-[17px] ${changeColor}`}
       >
         {formatSignedPercent(member.change_rate)}
       </p>
 
-      <p className="col-start-3 row-start-2 min-w-0 truncate text-[23px] font-extrabold leading-none text-slate-100 md:text-[24px] xl:text-[18px] 2xl:text-[20px] min-[1680px]:text-[23px]">
+      <p className="col-start-3 row-start-2 min-w-0 truncate text-[23px] font-extrabold leading-none text-slate-100 md:text-[24px] xl:text-[21px] 2xl:text-[22px] min-[1800px]:text-[23px]">
         {member.nickname}
       </p>
-      <p className="col-start-4 row-start-2 text-right text-[28px] font-black leading-none whitespace-nowrap tabular-nums text-sky-300 xl:text-[21px] 2xl:text-[23px] min-[1680px]:text-[28px]">
+      <p className="col-start-4 row-start-2 text-right text-[28px] font-black leading-none whitespace-nowrap tabular-nums text-sky-300 xl:text-[24px] 2xl:text-[25px] min-[1800px]:text-[28px]">
         {formatNumber(member.current_balloons)}
       </p>
 
-      <p className="col-start-3 row-start-3 truncate text-[17px] font-extrabold leading-none tabular-nums text-sky-200 xl:text-[14px] 2xl:text-[15px] min-[1680px]:text-[17px]">
+      <p className="col-start-3 row-start-3 truncate text-[17px] font-extrabold leading-none tabular-nums text-sky-200 xl:text-[15px] 2xl:text-[16px] min-[1800px]:text-[17px]">
         {formatNumber(member.display_day_balloons)}
       </p>
-      <p className="col-start-4 row-start-3 truncate text-right text-[16px] font-extrabold leading-none whitespace-nowrap tabular-nums text-slate-400 xl:text-[12px] 2xl:text-[13px] min-[1680px]:text-[16px]">
+      <p className="col-start-4 row-start-3 truncate text-right text-[16px] font-extrabold leading-none whitespace-nowrap tabular-nums text-slate-400 xl:text-[14px] 2xl:text-[15px] min-[1800px]:text-[16px]">
         지난 달 {formatNumber(member.previous_balloons)}
       </p>
     </div>
@@ -472,8 +472,8 @@ export default async function Home() {
           </button>
         </header>
 
-        <div className="mx-auto grid max-w-[420px] grid-cols-1 gap-2 md:max-w-[820px] md:grid-cols-2 xl:max-w-none xl:grid-cols-5">
-          {data.crews.slice(0, 5).map((crew, index) => (
+        <div className="mx-auto grid max-w-[420px] grid-cols-1 gap-2 md:max-w-[820px] md:grid-cols-2 lg:max-w-[1210px] lg:grid-cols-3 xl:max-w-[1620px] xl:grid-cols-4 2xl:max-w-none 2xl:grid-cols-5">
+          {data.crews.map((crew, index) => (
             <CrewCard key={crew.crew_name} crew={crew} index={index} />
           ))}
         </div>
