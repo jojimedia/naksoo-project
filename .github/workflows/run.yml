@@ -1,8 +1,8 @@
 name: naksoo backend update
 
-"on":
+on:
   schedule:
-    - cron: "0 */3 * * *"
+    - cron: "17 */1 * * *"
   workflow_dispatch:
 
 permissions:
@@ -11,6 +11,9 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: 코드 가져오기
