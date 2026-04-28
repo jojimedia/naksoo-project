@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Naksoo Dashboard",
+  title: "크루별 낙수표",
   description: "Naksoo project monthly balloon dashboard",
 };
 
