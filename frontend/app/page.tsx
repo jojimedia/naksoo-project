@@ -275,7 +275,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
         members,
       };
     })
-    .sort((a, b) => b.current_total_balloons - a.current_total_balloons)
+    .sort((a, b) => b.average_current_balloons - a.average_current_balloons)
     .map((crew, index) => ({ ...crew, rank: index + 1 }));
 
   return {
