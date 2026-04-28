@@ -1,11 +1,19 @@
 import Image from "next/image";
 import MobileCrewCard from "./mobile-crew-card";
+import StreamerMemberRow from "./streamer-member-row";
 
 const DATA_URL =
   "https://raw.githubusercontent.com/jojimedia/naksoo-project/main/backend/data/result.json";
 
 type DailyBalloons = {
   day: number;
+  balloons: number;
+};
+
+type Fan = {
+  rank: number;
+  user_id: string;
+  nickname: string;
   balloons: number;
 };
 
@@ -21,6 +29,7 @@ type CrewMember = {
   display_day_balloons: number;
   current_daily_balloons: DailyBalloons[];
   previous_daily_balloons: DailyBalloons[];
+  monthly_top_fans: Fan[];
 };
 
 type CrewCard = {
@@ -63,6 +72,7 @@ type MonthlyStats = {
   month: number;
   total_balloons: number;
   daily_balloons: DailyBalloons[];
+  fans?: Omit<Fan, "rank">[];
 };
 
 type RankingItem = {
@@ -124,10 +134,6 @@ const crewHeaderThemes = [
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
-}
-
-function formatSignedPercent(value: number) {
-  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
 function normalizeImageUrl(url: string) {
@@ -212,6 +218,18 @@ function sumDaily(items: RankingItem[], period: "current_month" | "previous_mont
     .sort((a, b) => a.day - b.day);
 }
 
+function getMonthlyTopFans(item: RankingItem) {
+  return [...(item.current_month.fans ?? [])]
+    .sort((a, b) => b.balloons - a.balloons)
+    .slice(0, 10)
+    .map((fan, index) => ({
+      rank: index + 1,
+      user_id: fan.user_id,
+      nickname: fan.nickname,
+      balloons: fan.balloons,
+    }));
+}
+
 function makeCrewCardData(result: NaksooResult): CrewCardData {
   const displayDate = getDisplayDate();
   const successfulItems = result.items.filter((item) => item.success);
@@ -248,6 +266,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             ),
             current_daily_balloons: item.current_month.daily_balloons,
             previous_daily_balloons: item.previous_month.daily_balloons,
+            monthly_top_fans: getMonthlyTopFans(item),
           };
         });
       const currentTotal = members.reduce(
@@ -322,62 +341,13 @@ function StatBox({
 
   return (
     <div
-      className={`flex min-h-[82px] flex-col items-center justify-center rounded-2xl border p-2.5 text-center ${colorClass}`}
+      className={`flex min-h-[76px] flex-col items-center justify-center rounded-2xl border px-2 py-2 text-center md:min-h-[74px] lg:min-h-[72px] min-[1800px]:min-h-[82px] ${colorClass}`}
     >
-      <p className="text-xs font-semibold text-slate-400 md:text-sm">
+      <p className="text-[12px] font-semibold text-slate-400 md:text-[12px] min-[1800px]:text-sm">
         {label}
       </p>
-      <p className="mt-1 text-[24px] font-black leading-none tabular-nums md:text-[28px]">
+      <p className="mt-1 text-[22px] font-black leading-none tabular-nums md:text-[22px] lg:text-[20px] xl:text-[21px] 2xl:text-[23px] min-[1800px]:text-[26px]">
         {formatNumber(value)}
-      </p>
-    </div>
-  );
-}
-
-function ProfileImage({ member }: { member: CrewMember }) {
-  return (
-    <Image
-      src={member.profile_image_url}
-      alt=""
-      width={48}
-      height={48}
-      unoptimized
-      className="h-10 w-10 rounded-full border border-white/10 bg-slate-800 object-cover xl:h-10 xl:w-10 min-[1800px]:h-11 min-[1800px]:w-11"
-    />
-  );
-}
-
-function MemberRow({ member }: { member: CrewMember }) {
-  const changeColor =
-    member.change_balloons >= 0 ? "text-emerald-300" : "text-rose-300";
-
-  return (
-    <div className="grid min-h-[74px] grid-cols-[28px_42px_minmax(0,1fr)_132px] grid-rows-[16px_26px_17px] items-center gap-x-2 gap-y-1 border-t border-white/[0.04] px-1 py-2.5 xl:grid-cols-[28px_42px_minmax(0,1fr)_124px] 2xl:grid-cols-[26px_42px_minmax(0,1fr)_120px] min-[1800px]:grid-cols-[30px_46px_minmax(0,1fr)_136px]">
-      <p className="row-span-2 row-start-2 self-center text-center text-[16px] font-black leading-none tabular-nums text-slate-500 xl:text-[16px] min-[1800px]:text-[17px]">
-        {member.rank}
-      </p>
-      <div className="row-span-2 row-start-2 self-center">
-        <ProfileImage member={member} />
-      </div>
-
-      <p
-        className={`col-start-4 row-start-1 self-end text-right text-[14px] font-black leading-none tabular-nums xl:text-[15px] 2xl:text-[15px] min-[1800px]:text-[16px] ${changeColor}`}
-      >
-        {formatSignedPercent(member.change_rate)}
-      </p>
-
-      <p className="col-start-3 row-start-2 min-w-0 truncate text-[18px] font-extrabold leading-none text-slate-100 xl:text-[20px] 2xl:text-[20px] min-[1800px]:text-[22px]">
-        {member.nickname}
-      </p>
-      <p className="col-start-4 row-start-2 text-right text-[22px] font-black leading-none whitespace-nowrap tabular-nums text-sky-300 xl:text-[23px] 2xl:text-[23px] min-[1800px]:text-[26px]">
-        {formatNumber(member.current_balloons)}
-      </p>
-
-      <p className="col-start-3 row-start-3 truncate text-[14px] font-extrabold leading-none tabular-nums text-sky-200 xl:text-[15px] min-[1800px]:text-[16px]">
-        {formatNumber(member.display_day_balloons)}
-      </p>
-      <p className="col-start-4 row-start-3 truncate text-right text-[13px] font-extrabold leading-none whitespace-nowrap tabular-nums text-slate-400 xl:text-[14px] min-[1800px]:text-[15px]">
-        지난 달 {formatNumber(member.previous_balloons)}
       </p>
     </div>
   );
@@ -404,7 +374,7 @@ function CrewCardHeader({
         {crew.crew_name}
       </h2>
 
-      <div className="mt-4 grid grid-cols-2 items-center gap-2.5">
+      <div className="mt-4 grid grid-cols-2 items-center gap-2">
         <StatBox label="전체 합계" value={crew.current_total_balloons} color="sky" />
         <StatBox
           label="평균 별풍"
@@ -421,7 +391,7 @@ function CrewCardBody({ crew }: { crew: CrewCard }) {
     <div className="bg-slate-950 px-2.5 py-4">
       <div>
         {crew.members.map((member) => (
-          <MemberRow key={member.user_id} member={member} />
+          <StreamerMemberRow key={member.user_id} member={member} />
         ))}
       </div>
     </div>
