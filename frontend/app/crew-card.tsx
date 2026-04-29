@@ -26,6 +26,7 @@ type CrewMember = {
   nickname: string;
   profile_image_url: string;
   broadcast_start: string | null;
+  is_live: boolean;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;

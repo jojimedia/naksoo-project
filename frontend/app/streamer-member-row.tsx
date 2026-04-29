@@ -19,6 +19,7 @@ type CrewMember = {
   nickname: string;
   profile_image_url: string;
   broadcast_start: string | null;
+  is_live: boolean;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;
@@ -95,7 +96,7 @@ export default function StreamerMemberRow({
   const [isOpen, setIsOpen] = useState(false);
   const changeColor =
     member.change_balloons >= 0 ? "text-emerald-300" : "text-rose-300";
-  const isResting = !member.broadcast_start;
+  const isResting = !member.is_live;
 
   return (
     <div className="border-t border-white/[0.04]">

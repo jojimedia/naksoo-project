@@ -135,6 +135,38 @@ async def fetch_station(client, user_id):
     }
 
 
+async def fetch_live_status(client, user_id):
+    """SOOPTV 생방송 정보 API에서 현재 공개 방송 중 여부를 가져온다."""
+
+    url = "https://live.sooplive.co.kr/afreeca/player_live_api.php"
+    payload = {
+        "bid": user_id,
+        "from_api": "0",
+        "mode": "landing",
+        "player_type": "html5",
+    }
+
+    res = await client.post(
+        url,
+        data=payload,
+        headers={
+            **HEADERS,
+            "Origin": "https://live.sooplive.co.kr",
+            "Referer": f"https://live.sooplive.co.kr/{user_id}",
+        },
+    )
+
+    if res.status_code != 200:
+        raise RuntimeError(f"live status 실패: {user_id} {res.status_code}")
+
+    channel = res.json().get("CHANNEL", {})
+
+    return {
+        "is_live": channel.get("RESULT") == 1 and channel.get("BPWD") != "Y",
+        "is_password": channel.get("BPWD") == "Y",
+    }
+
+
 # =========================
 # 풍투 별풍선 API
 # =========================
@@ -288,6 +320,14 @@ async def fetch_one_member(client, member, period, semaphore):
 
             await asyncio.sleep(0.5)
 
+            live_status = await retry(
+                lambda: fetch_live_status(client, user_id),
+                retries=3,
+                delay=1,
+            )
+
+            await asyncio.sleep(0.5)
+
             # 현재월 별풍 데이터 가져오기
             current_balloon_data = await retry(
                 lambda: fetch_balloon(
@@ -319,7 +359,13 @@ async def fetch_one_member(client, member, period, semaphore):
                 "user_id": station_data.get("user_id") or user_id,
                 "nickname": station_data.get("nickname"),
                 "profile_image_url": station_data.get("profile_image_url"),
-                "broadcast_start": station_data.get("broadcast_start"),
+                "broadcast_start": (
+                    station_data.get("broadcast_start")
+                    if live_status["is_live"]
+                    else None
+                ),
+                "is_live": live_status["is_live"],
+                "is_password_broadcast": live_status["is_password"],
 
                 "current_month": build_month_data(
                     current_balloon_data,
@@ -346,6 +392,8 @@ async def fetch_one_member(client, member, period, semaphore):
                 "nickname": None,
                 "profile_image_url": None,
                 "broadcast_start": None,
+                "is_live": False,
+                "is_password_broadcast": False,
 
                 "current_month": {
                     "year": current_year,

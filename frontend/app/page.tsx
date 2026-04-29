@@ -22,6 +22,7 @@ type CrewMember = {
   nickname: string;
   profile_image_url: string;
   broadcast_start: string | null;
+  is_live: boolean;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;
@@ -96,6 +97,8 @@ type RankingItem = {
   nickname: string;
   profile_image_url: string;
   broadcast_start?: string | null;
+  is_live?: boolean;
+  is_password_broadcast?: boolean;
   current_month: MonthlyStats;
   previous_month: MonthlyStats;
   success: boolean;
@@ -213,9 +216,15 @@ function getMonthlyStatsForDate(
 function getDailyBalloonsForDisplayDate(
   item: RankingItem,
   result: NaksooResult,
-  displayDate: CrewCardData["display_date"],
 ) {
-  const targetDate = parseKstDateTime(item.broadcast_start) ?? displayDate;
+  const targetDate =
+    item.is_live && item.broadcast_start
+      ? parseKstDateTime(item.broadcast_start)
+      : null;
+
+  if (!targetDate) {
+    return 0;
+  }
 
   return getDailyBalloonsForDate(
     getMonthlyStatsForDate(item, result, targetDate),
@@ -597,6 +606,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             nickname: item.nickname,
             profile_image_url: normalizeImageUrl(item.profile_image_url),
             broadcast_start: item.broadcast_start ?? null,
+            is_live: item.is_live ?? false,
             current_balloons: current,
             previous_balloons: previous,
             change_balloons: current - previous,
@@ -604,7 +614,6 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             display_day_balloons: getDailyBalloonsForDisplayDate(
               item,
               result,
-              displayDate,
             ),
             current_daily_balloons: item.current_month.daily_balloons,
             previous_daily_balloons: item.previous_month.daily_balloons,
