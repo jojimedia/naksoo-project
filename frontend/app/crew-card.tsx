@@ -53,6 +53,9 @@ type NaksooGod = {
   all_targets: NaksooGodTarget[];
 };
 
+type CrewKing = NaksooGod;
+type CrewBodyMode = "members" | "gods" | "kings";
+
 type CrewCardData = {
   rank: number;
   crew_name: string;
@@ -61,6 +64,7 @@ type CrewCardData = {
   average_current_balloons: number;
   members: CrewMember[];
   naksoo_gods: NaksooGod[];
+  crew_kings: CrewKing[];
 };
 
 const crewHeaderThemes = [
@@ -161,15 +165,15 @@ function CrewCardHeader({
   );
 }
 
-function NaksooGodRow({ god }: { god: NaksooGod }) {
-  const [profileSrc, setProfileSrc] = useState(god.profile_image_url);
+function PatronRow({ patron }: { patron: NaksooGod | CrewKing }) {
+  const [profileSrc, setProfileSrc] = useState(patron.profile_image_url);
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="border-t border-white/[0.04]">
       <div className="grid min-h-[74px] grid-cols-[24px_40px_minmax(0,1fr)_112px] grid-rows-[16px_26px_17px] items-center gap-x-2 gap-y-1 px-1 py-2.5 md:grid-cols-[24px_40px_minmax(0,1fr)_106px] lg:grid-cols-[24px_40px_minmax(0,1fr)_104px] xl:grid-cols-[24px_40px_minmax(0,1fr)_108px] 2xl:grid-cols-[26px_42px_minmax(0,1fr)_120px] min-[1800px]:grid-cols-[30px_46px_minmax(0,1fr)_136px]">
         <p className="row-span-2 row-start-2 self-center text-center text-[16px] font-black leading-none tabular-nums text-slate-500 xl:text-[16px] min-[1800px]:text-[17px]">
-          {god.rank}
+          {patron.rank}
         </p>
         <div className="row-span-2 row-start-2 self-center">
           <Image
@@ -184,30 +188,30 @@ function NaksooGodRow({ god }: { god: NaksooGod }) {
         </div>
 
         <p className="col-start-4 row-start-1 self-end text-right text-[13px] font-black leading-none tabular-nums text-amber-300 xl:text-[14px] min-[1800px]:text-[15px]">
-          {god.all_targets.length}명
+          {patron.all_targets.length}명
         </p>
         <button
           type="button"
           className="col-start-3 row-start-2 block min-w-0 cursor-pointer truncate text-left text-[18px] font-extrabold leading-none text-slate-100 hover:text-amber-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 xl:text-[19px] 2xl:text-[19px] min-[1800px]:text-[22px]"
           aria-expanded={isOpen}
-          aria-label={`${god.nickname} 후원 대상 ${isOpen ? "접기" : "열기"}`}
+          aria-label={`${patron.nickname} 후원 대상 ${isOpen ? "접기" : "열기"}`}
           onClick={() => setIsOpen((current) => !current)}
         >
-          {god.nickname}
+          {patron.nickname}
         </button>
         <p className="col-start-4 row-start-2 text-right text-[20px] font-black leading-none whitespace-nowrap tabular-nums text-sky-300 xl:text-[21px] 2xl:text-[22px] min-[1800px]:text-[26px]">
-          {formatNumber(god.total_balloons)}
+          {formatNumber(patron.total_balloons)}
         </p>
 
         <p className="col-start-3 row-start-3 truncate text-[14px] font-extrabold leading-none text-sky-200 xl:text-[15px] min-[1800px]:text-[16px]">
-          {god.max_target_nickname}
+          {patron.max_target_nickname}
         </p>
         <p className="col-start-4 row-start-3 truncate text-right text-[13px] font-extrabold leading-none whitespace-nowrap tabular-nums text-slate-400 xl:text-[14px] min-[1800px]:text-[15px]">
-          몰빵 {god.max_target_rate.toFixed(1)}%
+          몰빵 {patron.max_target_rate.toFixed(1)}%
         </p>
       </div>
 
-      {isOpen ? <NaksooTargetRanking targets={god.all_targets} /> : null}
+      {isOpen ? <NaksooTargetRanking targets={patron.all_targets} /> : null}
     </div>
   );
 }
@@ -243,54 +247,98 @@ function NaksooTargetRanking({ targets }: { targets: NaksooGodTarget[] }) {
 }
 
 function CrewCardBody({ crew }: { crew: CrewCardData }) {
-  const [showGods, setShowGods] = useState(false);
+  const [mode, setMode] = useState<CrewBodyMode>("members");
   const [showFormula, setShowFormula] = useState(false);
-  // 카드 본문은 같은 공간에서 스트리머 목록과 낙수의 신 목록만 전환한다.
+  // 카드 본문은 같은 공간에서 스트리머, 낙수의 신, 큰손 랭킹 목록만 전환한다.
   const rows = useMemo(
-    () =>
-      showGods
-        ? crew.naksoo_gods.map((god) => (
-            <NaksooGodRow key={`${god.rank}-${god.user_id}`} god={god} />
-          ))
-        : crew.members.map((member) => (
-            <StreamerMemberRow key={member.user_id} member={member} />
-          )),
-    [crew.members, crew.naksoo_gods, showGods],
+    () => {
+      if (mode === "gods") {
+        return crew.naksoo_gods.map((god) => (
+          <PatronRow key={`god-${god.rank}-${god.user_id}`} patron={god} />
+        ));
+      }
+
+      if (mode === "kings") {
+        return crew.crew_kings.map((king) => (
+          <PatronRow key={`king-${king.rank}-${king.user_id}`} patron={king} />
+        ));
+      }
+
+      return crew.members.map((member) => (
+        <StreamerMemberRow key={member.user_id} member={member} />
+      ));
+    },
+    [crew.members, crew.naksoo_gods, crew.crew_kings, mode],
   );
+  const emptyMessage =
+    mode === "kings"
+      ? "큰손 랭킹 없음"
+      : mode === "gods"
+        ? "낙수의 신 없음"
+        : "크루원 데이터 없음";
+  const activeCount =
+    mode === "kings"
+      ? crew.crew_kings.length
+      : mode === "gods"
+        ? crew.naksoo_gods.length
+        : crew.member_count;
 
   return (
     <div className="bg-slate-950 px-2.5 py-4">
       <div className="relative mb-2 flex items-center justify-between px-1">
-        <button
-          type="button"
-          className={`rounded-full border px-3 py-1.5 text-xs font-black transition-colors ${
-            showGods
-              ? "border-amber-300/40 bg-amber-300/15 text-amber-200"
-              : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-amber-300/30 hover:text-amber-200"
-          }`}
-          aria-pressed={showGods}
-          onClick={() => setShowGods((current) => !current)}
-        >
-          낙수의 신
-        </button>
-
         <div className="flex items-center gap-1.5">
-          <p className="text-sm font-black tabular-nums text-slate-500">
-            {crew.naksoo_gods.length}명
-          </p>
+          <button
+            type="button"
+            className={`rounded-full border px-3 py-1.5 text-xs font-black transition-colors ${
+              mode === "gods"
+                ? "border-amber-300/40 bg-amber-300/15 text-amber-200"
+                : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-amber-300/30 hover:text-amber-200"
+            }`}
+            aria-pressed={mode === "gods"}
+            onClick={() => {
+              setShowFormula(false);
+              setMode((current) => (current === "gods" ? "members" : "gods"));
+            }}
+          >
+            낙수의 신
+          </button>
 
           <button
             type="button"
-            className="flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[10px] font-black text-slate-400 transition-colors hover:border-amber-300/30 hover:text-amber-200"
-            aria-label={`낙수의 신 계산식 ${showFormula ? "닫기" : "열기"}`}
-            aria-expanded={showFormula}
-            onClick={() => setShowFormula((current) => !current)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-black transition-colors ${
+              mode === "kings"
+                ? "border-amber-300/40 bg-amber-300/15 text-amber-200"
+                : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-amber-300/30 hover:text-amber-200"
+            }`}
+            aria-pressed={mode === "kings"}
+            onClick={() => {
+              setShowFormula(false);
+              setMode((current) => (current === "kings" ? "members" : "kings"));
+            }}
           >
-            i
+            큰손 랭킹
           </button>
         </div>
 
-        {showFormula ? (
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-black tabular-nums text-slate-500">
+            {activeCount}명
+          </p>
+
+          {mode === "gods" ? (
+            <button
+              type="button"
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[10px] font-black text-slate-400 transition-colors hover:border-amber-300/30 hover:text-amber-200"
+              aria-label={`낙수의 신 계산식 ${showFormula ? "닫기" : "열기"}`}
+              aria-expanded={showFormula}
+              onClick={() => setShowFormula((current) => !current)}
+            >
+              i
+            </button>
+          ) : null}
+        </div>
+
+        {mode === "gods" && showFormula ? (
           <div className="absolute top-9 left-1 z-10 w-[min(330px,calc(100vw-56px))] rounded-2xl border border-amber-300/20 bg-slate-950 p-3 text-xs font-bold leading-5 text-slate-300 shadow-2xl shadow-black/50">
             <div className="mb-2 flex items-center justify-between">
               <p className="font-black text-amber-200">낙수의 신 계산식</p>
@@ -316,7 +364,7 @@ function CrewCardBody({ crew }: { crew: CrewCardData }) {
           rows
         ) : (
           <p className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-6 text-center text-sm font-bold text-slate-500">
-            낙수의 신 없음
+            {emptyMessage}
           </p>
         )}
       </div>

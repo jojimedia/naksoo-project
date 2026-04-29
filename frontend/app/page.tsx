@@ -49,6 +49,8 @@ type NaksooGod = {
   all_targets: NaksooGodTarget[];
 };
 
+type CrewKing = NaksooGod;
+
 type CrewCard = {
   rank: number;
   crew_name: string;
@@ -57,6 +59,7 @@ type CrewCard = {
   average_current_balloons: number;
   members: CrewMember[];
   naksoo_gods: NaksooGod[];
+  crew_kings: CrewKing[];
 };
 
 type CrewCardData = {
@@ -316,6 +319,71 @@ function getNaksooGods(
     }));
 }
 
+function getCrewKings(crewItems: RankingItem[]) {
+  const fans = new Map<
+    string,
+    {
+      user_id: string;
+      nickname: string;
+      total_balloons: number;
+      targets: Map<string, number>;
+    }
+  >();
+
+  for (const item of crewItems) {
+    for (const fan of item.current_month.fans ?? []) {
+      const key = fan.user_id || fan.nickname;
+      const current = fans.get(key) ?? {
+        user_id: fan.user_id,
+        nickname: fan.nickname,
+        total_balloons: 0,
+        targets: new Map<string, number>(),
+      };
+
+      current.total_balloons += fan.balloons;
+      current.targets.set(
+        item.nickname,
+        (current.targets.get(item.nickname) ?? 0) + fan.balloons,
+      );
+      fans.set(key, current);
+    }
+  }
+
+  return Array.from(fans.values())
+    .map((fan) => {
+      const targets = Array.from(fan.targets.entries()).sort((a, b) => b[1] - a[1]);
+      const maxTarget = targets[0] ?? ["", 0];
+      const maxTargetRate =
+        fan.total_balloons > 0 ? (maxTarget[1] / fan.total_balloons) * 100 : 0;
+
+      return {
+        ...fan,
+        target_count: targets.length,
+        max_target_nickname: maxTarget[0],
+        max_target_balloons: maxTarget[1],
+        max_target_rate: maxTargetRate,
+        all_targets: targets.map(([nickname, balloons]) => ({
+          nickname,
+          balloons,
+        })),
+      };
+    })
+    .sort((a, b) => b.total_balloons - a.total_balloons)
+    .slice(0, 15)
+    .map((fan, index) => ({
+      rank: index + 1,
+      user_id: fan.user_id,
+      nickname: fan.nickname,
+      profile_image_url: getSoopProfileImageUrl(fan.user_id),
+      total_balloons: fan.total_balloons,
+      target_count: fan.target_count,
+      max_target_nickname: fan.max_target_nickname,
+      max_target_balloons: fan.max_target_balloons,
+      max_target_rate: Number(fan.max_target_rate.toFixed(1)),
+      all_targets: fan.all_targets,
+    }));
+}
+
 function makeCrewCardData(result: NaksooResult): CrewCardData {
   const displayDate = getDisplayDate();
   const successfulItems = result.items.filter((item) => item.success);
@@ -369,6 +437,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
         average_current_balloons: Math.round(currentTotal / members.length),
         members,
         naksoo_gods: getNaksooGods(crewItems, naksooThresholds),
+        crew_kings: getCrewKings(crewItems),
       };
     })
     .sort((a, b) => b.average_current_balloons - a.average_current_balloons)
