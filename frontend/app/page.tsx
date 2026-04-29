@@ -408,8 +408,8 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#1D4ED8_0%,transparent_28%),radial-gradient(circle_at_top_right,#0F766E_0%,transparent_26%),linear-gradient(180deg,#020617_0%,#0F172A_48%,#020617_100%)] text-slate-100">
       <div className="mx-auto max-w-[1920px] px-5 pt-5 pb-10">
-        <header className="mb-3 text-center">
-          <h1 className="flex items-center justify-center gap-3 text-[28px] font-black tracking-tight text-white md:gap-4 md:text-[42px]">
+        <header className="mb-2 text-center">
+          <h1 className="flex items-center justify-center gap-3 text-[25px] font-black leading-none tracking-tight text-white md:gap-4 md:text-[38px]">
             <Image
               src="/images/starballoon.png"
               alt=""
@@ -421,12 +421,29 @@ export default async function Home() {
             <span>크루별 개인 방송 낙수표</span>
           </h1>
 
-          <button className="mt-4 text-base font-medium text-slate-400 md:text-lg">
+          <button className="mt-1 text-base font-medium leading-tight text-slate-400 md:text-lg">
             {Number(data.created_date.slice(0, 4))}년{" "}
             {Number(data.created_date.slice(5, 7))}월{" "}
             {Number(data.created_date.slice(8, 10))}일{" "}
             {data.created_time.slice(0, 5)} 업데이트 출처: 풍투데이
           </button>
+
+          <div>
+            <p className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold leading-tight text-slate-500 md:text-sm">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="shrink-0 fill-current"
+              >
+                <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
+                <path d="M11 11h2v6h-2zm0-4h2v2h-2z" />
+              </svg>
+              <span>현재 크루 방송 출연자 기준으로 집계됩니다.</span>
+            </p>
+          </div>
         </header>
 
         <div className="mx-auto grid max-w-[420px] grid-cols-1 gap-2 md:max-w-[820px] md:grid-cols-2 lg:max-w-[1210px] lg:grid-cols-3 xl:max-w-[1620px] xl:grid-cols-4 2xl:max-w-none 2xl:grid-cols-5">
