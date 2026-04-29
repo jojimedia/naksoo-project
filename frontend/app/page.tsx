@@ -257,19 +257,21 @@ function getNaksooGods(
 
   for (const item of crewItems) {
     for (const fan of item.current_month.fans ?? []) {
-      const current = fans.get(fan.nickname) ?? {
+      const key = fan.user_id || fan.nickname;
+      const current = fans.get(key) ?? {
         user_id: fan.user_id,
         nickname: fan.nickname,
         total_balloons: 0,
         targets: new Map<string, number>(),
       };
 
+      current.nickname = fan.nickname;
       current.total_balloons += fan.balloons;
       current.targets.set(
         item.nickname,
         (current.targets.get(item.nickname) ?? 0) + fan.balloons,
       );
-      fans.set(fan.nickname, current);
+      fans.set(key, current);
     }
   }
 
