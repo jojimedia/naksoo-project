@@ -275,54 +275,73 @@ def extract_fans(balloon_data, limit=50):
     return result
 
 
-async def fetch_fan_profile(client, user_id, fan_profile_cache):
+async def fetch_fan_profile(
+    client,
+    user_id,
+    fan_profile_cache,
+    fan_profile_lock,
+    fan_profile_semaphore,
+):
     """SOOPTV station API에서 후원자 최신 닉네임/프로필을 가져온다."""
 
     if not user_id:
         return None
 
-    if user_id in fan_profile_cache:
-        return fan_profile_cache[user_id]
+    async with fan_profile_lock:
+        if user_id in fan_profile_cache:
+            return fan_profile_cache[user_id]
 
-    try:
-        station_data = await retry(
-            lambda: fetch_station(client, user_id),
-            retries=2,
-            delay=0.5,
-        )
-        profile = {
-            "nickname": station_data.get("nickname"),
-            "profile_image_url": station_data.get("profile_image_url"),
-        }
-    except Exception:
-        profile = None
+    async with fan_profile_semaphore:
+        async with fan_profile_lock:
+            if user_id in fan_profile_cache:
+                return fan_profile_cache[user_id]
 
-    fan_profile_cache[user_id] = profile
+        try:
+            station_data = await retry(
+                lambda: fetch_station(client, user_id),
+                retries=2,
+                delay=0.5,
+            )
+            profile = {
+                "nickname": station_data.get("nickname"),
+                "profile_image_url": station_data.get("profile_image_url"),
+            }
+        except Exception:
+            profile = None
+
+        async with fan_profile_lock:
+            fan_profile_cache[user_id] = profile
 
     return profile
 
 
-async def enrich_fans_with_profiles(client, fans, fan_profile_cache):
+async def enrich_fans_with_profiles(
+    client,
+    fans,
+    fan_profile_cache,
+    fan_profile_lock,
+    fan_profile_semaphore,
+):
     """화면에 노출될 팬 목록에 최신 닉네임/프로필을 채운다."""
 
-    enriched = []
-
-    for fan in fans:
+    async def enrich_one(fan):
         profile = await fetch_fan_profile(
             client,
             fan.get("user_id"),
             fan_profile_cache,
+            fan_profile_lock,
+            fan_profile_semaphore,
         )
 
-        enriched.append({
+        return {
             **fan,
             "nickname": profile.get("nickname") if profile else fan.get("nickname"),
             "profile_image_url": (
                 profile.get("profile_image_url") if profile else None
             ),
-        })
+        }
 
-    return enriched
+    return await asyncio.gather(*(enrich_one(fan) for fan in fans))
 
 
 def build_month_data(balloon_data, year, month):
@@ -341,7 +360,15 @@ def build_month_data(balloon_data, year, month):
 # 멤버 1명 데이터 가져오기
 # =========================
 
-async def fetch_one_member(client, member, period, semaphore, fan_profile_cache):
+async def fetch_one_member(
+    client,
+    member,
+    period,
+    semaphore,
+    fan_profile_cache,
+    fan_profile_lock,
+    fan_profile_semaphore,
+):
     """
     구글시트 멤버 1명에 대해:
     1. station API로 닉네임 / 프로필 이미지 가져오기
@@ -413,6 +440,8 @@ async def fetch_one_member(client, member, period, semaphore, fan_profile_cache)
                 client,
                 current_month_data["fans"],
                 fan_profile_cache,
+                fan_profile_lock,
+                fan_profile_semaphore,
             )
 
             return {
@@ -626,6 +655,8 @@ async def main():
         # 동시에 너무 많은 요청을 보내지 않도록 제한
         semaphore = asyncio.Semaphore(2)
         fan_profile_cache = {}
+        fan_profile_lock = asyncio.Lock()
+        fan_profile_semaphore = asyncio.Semaphore(10)
 
         async with httpx.AsyncClient(
             follow_redirects=True,
@@ -639,6 +670,8 @@ async def main():
                     period,
                     semaphore,
                     fan_profile_cache,
+                    fan_profile_lock,
+                    fan_profile_semaphore,
                 )
                 for member in members
             ]
