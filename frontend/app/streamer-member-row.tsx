@@ -3,6 +3,9 @@
 import Image from "next/image";
 import { useState } from "react";
 
+const PROFILE_FALLBACK_URL =
+  "https://res.sooplive.com/images/svg/thumb_profile.svg";
+
 type Fan = {
   rank: number;
   user_id: string;
@@ -32,13 +35,16 @@ function formatSignedPercent(value: number) {
 }
 
 function ProfileImage({ member }: { member: CrewMember }) {
+  const [src, setSrc] = useState(member.profile_image_url);
+
   return (
     <Image
-      src={member.profile_image_url}
+      src={src}
       alt=""
       width={48}
       height={48}
       unoptimized
+      onError={() => setSrc(PROFILE_FALLBACK_URL)}
       className="h-10 w-10 rounded-full border border-white/10 bg-slate-800 object-cover xl:h-10 xl:w-10 min-[1800px]:h-11 min-[1800px]:w-11"
     />
   );

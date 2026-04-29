@@ -1,6 +1,5 @@
 import Image from "next/image";
-import MobileCrewCard from "./mobile-crew-card";
-import StreamerMemberRow from "./streamer-member-row";
+import CrewCard from "./crew-card";
 
 const DATA_URL =
   "https://raw.githubusercontent.com/jojimedia/naksoo-project/main/backend/data/result.json";
@@ -32,6 +31,24 @@ type CrewMember = {
   monthly_top_fans: Fan[];
 };
 
+type NaksooGodTarget = {
+  nickname: string;
+  balloons: number;
+};
+
+type NaksooGod = {
+  rank: number;
+  user_id: string;
+  nickname: string;
+  profile_image_url: string;
+  total_balloons: number;
+  target_count: number;
+  max_target_nickname: string;
+  max_target_balloons: number;
+  max_target_rate: number;
+  targets: NaksooGodTarget[];
+};
+
 type CrewCard = {
   rank: number;
   crew_name: string;
@@ -46,6 +63,7 @@ type CrewCard = {
   current_daily_balloons: DailyBalloons[];
   previous_daily_balloons: DailyBalloons[];
   members: CrewMember[];
+  naksoo_gods: NaksooGod[];
 };
 
 type CrewCardData = {
@@ -99,45 +117,14 @@ type NaksooResult = {
   items: RankingItem[];
 };
 
-const crewHeaderThemes = [
-  {
-    header:
-      "border-cyan-300/25 bg-linear-to-br from-cyan-950 via-slate-900 to-teal-950 shadow-cyan-950/35",
-    rankBadge: "border-cyan-300/35 bg-cyan-300/15 text-cyan-200",
-    title: "text-cyan-50",
-  },
-  {
-    header:
-      "border-rose-300/25 bg-linear-to-br from-rose-950 via-slate-900 to-orange-950 shadow-rose-950/35",
-    rankBadge: "border-rose-300/35 bg-rose-300/15 text-rose-200",
-    title: "text-rose-50",
-  },
-  {
-    header:
-      "border-violet-300/25 bg-linear-to-br from-violet-950 via-slate-900 to-fuchsia-950 shadow-violet-950/35",
-    rankBadge: "border-violet-300/35 bg-violet-300/15 text-violet-200",
-    title: "text-violet-50",
-  },
-  {
-    header:
-      "border-emerald-300/25 bg-linear-to-br from-emerald-950 via-slate-900 to-lime-950 shadow-emerald-950/35",
-    rankBadge: "border-emerald-300/35 bg-emerald-300/15 text-emerald-200",
-    title: "text-emerald-50",
-  },
-  {
-    header:
-      "border-amber-300/25 bg-linear-to-br from-amber-950 via-slate-900 to-yellow-950 shadow-amber-950/35",
-    rankBadge: "border-amber-300/35 bg-amber-300/15 text-amber-200",
-    title: "text-amber-50",
-  },
-];
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("ko-KR").format(value);
-}
-
 function normalizeImageUrl(url: string) {
   return url.startsWith("//") ? `https:${url}` : url;
+}
+
+function getSoopProfileImageUrl(userId: string) {
+  const prefix = userId.slice(0, 2);
+
+  return `https://stimg.sooplive.com/LOGO/${prefix}/${userId}/m/${userId}.webp`;
 }
 
 function getChangeRate(current: number, previous: number) {
@@ -230,9 +217,126 @@ function getMonthlyTopFans(item: RankingItem) {
     }));
 }
 
+function getNaksooThresholds(
+  successfulItems: RankingItem[],
+  result: NaksooResult,
+) {
+  const dataDay = Number(result.created_date.slice(8, 10));
+  const daysInMonth = new Date(
+    result.current_period.year,
+    result.current_period.month,
+    0,
+  ).getDate();
+  const monthProgress = dataDay / daysInMonth;
+  const correctionRate = Math.max(monthProgress, 0.25);
+  const overallTotal = successfulItems.reduce(
+    (sum, item) => sum + item.current_month.total_balloons,
+    0,
+  );
+  const overallAverage = overallTotal / successfulItems.length;
+  const adjustedOverallAverage = overallAverage / correctionRate;
+
+  return {
+    correctionRate,
+    totalFloor: Math.round(adjustedOverallAverage * 0.18),
+    perTargetThreshold: Math.round(adjustedOverallAverage * 0.012),
+  };
+}
+
+function getNaksooGods(
+  crewItems: RankingItem[],
+  thresholds: ReturnType<typeof getNaksooThresholds>,
+) {
+  const crewTotal = crewItems.reduce(
+    (sum, item) => sum + item.current_month.total_balloons,
+    0,
+  );
+  const crewAverage = crewTotal / crewItems.length;
+  const adjustedCrewTotal = crewTotal / thresholds.correctionRate;
+  const adjustedCrewAverage = crewAverage / thresholds.correctionRate;
+  const totalThreshold = Math.round(
+    Math.max(
+      adjustedCrewTotal * 0.01,
+      adjustedCrewAverage * 0.15,
+      thresholds.totalFloor,
+    ),
+  );
+  const fans = new Map<
+    string,
+    {
+      user_id: string;
+      nickname: string;
+      total_balloons: number;
+      targets: Map<string, number>;
+    }
+  >();
+
+  for (const item of crewItems) {
+    for (const fan of item.current_month.fans ?? []) {
+      const current = fans.get(fan.nickname) ?? {
+        user_id: fan.user_id,
+        nickname: fan.nickname,
+        total_balloons: 0,
+        targets: new Map<string, number>(),
+      };
+
+      current.total_balloons += fan.balloons;
+      current.targets.set(
+        item.nickname,
+        (current.targets.get(item.nickname) ?? 0) + fan.balloons,
+      );
+      fans.set(fan.nickname, current);
+    }
+  }
+
+  return Array.from(fans.values())
+    .map((fan) => {
+      const targets = Array.from(fan.targets.entries()).sort((a, b) => b[1] - a[1]);
+      const qualifiedTargets = targets.filter(
+        ([, balloons]) => balloons >= thresholds.perTargetThreshold,
+      );
+      const maxTarget = targets[0] ?? ["", 0];
+      const maxTargetRate =
+        fan.total_balloons > 0 ? (maxTarget[1] / fan.total_balloons) * 100 : 0;
+
+      return {
+        ...fan,
+        target_count: qualifiedTargets.length,
+        max_target_nickname: maxTarget[0],
+        max_target_balloons: maxTarget[1],
+        max_target_rate: maxTargetRate,
+        targets: qualifiedTargets.map(([nickname, balloons]) => ({
+          nickname,
+          balloons,
+        })),
+      };
+    })
+    .filter(
+      (fan) =>
+        fan.total_balloons >= totalThreshold &&
+        fan.target_count >= 3 &&
+        fan.max_target_rate < 80,
+    )
+    .sort((a, b) => b.total_balloons - a.total_balloons)
+    .slice(0, 10)
+    .map((fan, index) => ({
+      rank: index + 1,
+      user_id: fan.user_id,
+      nickname: fan.nickname,
+      profile_image_url: getSoopProfileImageUrl(fan.user_id),
+      total_balloons: fan.total_balloons,
+      target_count: fan.target_count,
+      max_target_nickname: fan.max_target_nickname,
+      max_target_balloons: fan.max_target_balloons,
+      max_target_rate: Number(fan.max_target_rate.toFixed(1)),
+      targets: fan.targets,
+    }));
+}
+
 function makeCrewCardData(result: NaksooResult): CrewCardData {
   const displayDate = getDisplayDate();
   const successfulItems = result.items.filter((item) => item.success);
+  const naksooThresholds = getNaksooThresholds(successfulItems, result);
   const crewNames = Array.from(
     new Set(successfulItems.map((item) => item.crew_name)),
   );
@@ -292,6 +396,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
         current_daily_balloons: sumDaily(crewItems, "current_month"),
         previous_daily_balloons: sumDaily(crewItems, "previous_month"),
         members,
+        naksoo_gods: getNaksooGods(crewItems, naksooThresholds),
       };
     })
     .sort((a, b) => b.average_current_balloons - a.average_current_balloons)
@@ -323,96 +428,6 @@ async function getCrewCardData() {
   }
 
   return makeCrewCardData((await response.json()) as NaksooResult);
-}
-
-function StatBox({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: "sky" | "emerald";
-}) {
-  const colorClass =
-    color === "sky"
-      ? "border-sky-400/15 bg-sky-400/[0.07] text-sky-300"
-      : "border-emerald-400/15 bg-emerald-400/[0.07] text-emerald-300";
-
-  return (
-    <div
-      className={`flex min-h-[76px] flex-col items-center justify-center rounded-2xl border px-2 py-2 text-center md:min-h-[74px] lg:min-h-[72px] min-[1800px]:min-h-[82px] ${colorClass}`}
-    >
-      <p className="text-[12px] font-semibold text-slate-400 md:text-[12px] min-[1800px]:text-sm">
-        {label}
-      </p>
-      <p className="mt-1 text-[22px] font-black leading-none tabular-nums md:text-[22px] lg:text-[20px] xl:text-[21px] 2xl:text-[23px] min-[1800px]:text-[26px]">
-        {formatNumber(value)}
-      </p>
-    </div>
-  );
-}
-
-function CrewCardHeader({
-  crew,
-  theme,
-}: {
-  crew: CrewCard;
-  theme: (typeof crewHeaderThemes)[number];
-}) {
-  return (
-    <div className={`relative border-b px-4 py-4 shadow-inner ${theme.header}`}>
-      <div
-        className={`absolute top-4 right-4 rounded-full border px-3 py-1.5 text-sm font-black md:text-base ${theme.rankBadge}`}
-      >
-        #{crew.rank}
-      </div>
-
-      <h2
-        className={`px-16 text-center text-2xl font-black tracking-tight md:text-[28px] ${theme.title}`}
-      >
-        {crew.crew_name}
-      </h2>
-
-      <div className="mt-4 grid grid-cols-2 items-center gap-2">
-        <StatBox label="전체 합계" value={crew.current_total_balloons} color="sky" />
-        <StatBox
-          label="평균 별풍"
-          value={crew.average_current_balloons}
-          color="emerald"
-        />
-      </div>
-    </div>
-  );
-}
-
-function CrewCardBody({ crew }: { crew: CrewCard }) {
-  return (
-    <div className="bg-slate-950 px-2.5 py-4">
-      <div>
-        {crew.members.map((member) => (
-          <StreamerMemberRow key={member.user_id} member={member} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CrewCard({ crew, index }: { crew: CrewCard; index: number }) {
-  const theme = crewHeaderThemes[index % crewHeaderThemes.length];
-  const header = <CrewCardHeader crew={crew} theme={theme} />;
-  const body = <CrewCardBody crew={crew} />;
-
-  return (
-    <>
-      <MobileCrewCard header={header} body={body} />
-
-      <section className="hidden overflow-hidden rounded-[28px] bg-slate-950 shadow-2xl shadow-black/30 backdrop-blur-xl md:block">
-        {header}
-        {body}
-      </section>
-    </>
-  );
 }
 
 export default async function Home() {
