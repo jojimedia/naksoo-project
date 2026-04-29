@@ -46,7 +46,7 @@ type NaksooGod = {
   max_target_nickname: string;
   max_target_balloons: number;
   max_target_rate: number;
-  targets: NaksooGodTarget[];
+  all_targets: NaksooGodTarget[];
 };
 
 type CrewCard = {
@@ -54,14 +54,7 @@ type CrewCard = {
   crew_name: string;
   member_count: number;
   current_total_balloons: number;
-  previous_total_balloons: number;
-  change_balloons: number;
-  change_rate: number;
   average_current_balloons: number;
-  average_previous_balloons: number;
-  top_member: CrewMember | null;
-  current_daily_balloons: DailyBalloons[];
-  previous_daily_balloons: DailyBalloons[];
   members: CrewMember[];
   naksoo_gods: NaksooGod[];
 };
@@ -191,20 +184,6 @@ function getDailyBalloonsForDisplayDate(
   );
 }
 
-function sumDaily(items: RankingItem[], period: "current_month" | "previous_month") {
-  const days = new Map<number, number>();
-
-  for (const item of items) {
-    for (const daily of item[period].daily_balloons) {
-      days.set(daily.day, (days.get(daily.day) ?? 0) + daily.balloons);
-    }
-  }
-
-  return Array.from(days.entries())
-    .map(([day, balloons]) => ({ day, balloons }))
-    .sort((a, b) => a.day - b.day);
-}
-
 function getMonthlyTopFans(item: RankingItem) {
   return [...(item.current_month.fans ?? [])]
     .sort((a, b) => b.balloons - a.balloons)
@@ -236,6 +215,7 @@ function getNaksooThresholds(
   const overallAverage = overallTotal / successfulItems.length;
   const adjustedOverallAverage = overallAverage / correctionRate;
 
+  // 월초 데이터가 너무 작게 잡히지 않도록 전체 평균을 월 진행률로 보정한다.
   return {
     correctionRate,
     totalFloor: Math.round(adjustedOverallAverage * 0.18),
@@ -254,6 +234,7 @@ function getNaksooGods(
   const crewAverage = crewTotal / crewItems.length;
   const adjustedCrewTotal = crewTotal / thresholds.correctionRate;
   const adjustedCrewAverage = crewAverage / thresholds.correctionRate;
+  // 낙신 선정 컷: 크루 규모 컷과 전체 평균 기반 하한을 함께 적용한다.
   const totalThreshold = Math.round(
     Math.max(
       adjustedCrewTotal * 0.01,
@@ -289,6 +270,7 @@ function getNaksooGods(
     }
   }
 
+  // 선정은 개인별 컷 이상 대상수로 판단하되, 상세는 크루 내 전체 후원 분포를 보여준다.
   return Array.from(fans.values())
     .map((fan) => {
       const targets = Array.from(fan.targets.entries()).sort((a, b) => b[1] - a[1]);
@@ -305,7 +287,8 @@ function getNaksooGods(
         max_target_nickname: maxTarget[0],
         max_target_balloons: maxTarget[1],
         max_target_rate: maxTargetRate,
-        targets: qualifiedTargets.map(([nickname, balloons]) => ({
+        qualified_target_count: qualifiedTargets.length,
+        all_targets: targets.map(([nickname, balloons]) => ({
           nickname,
           balloons,
         })),
@@ -314,7 +297,7 @@ function getNaksooGods(
     .filter(
       (fan) =>
         fan.total_balloons >= totalThreshold &&
-        fan.target_count >= 3 &&
+        fan.qualified_target_count >= 3 &&
         fan.max_target_rate < 80,
     )
     .sort((a, b) => b.total_balloons - a.total_balloons)
@@ -325,11 +308,11 @@ function getNaksooGods(
       nickname: fan.nickname,
       profile_image_url: getSoopProfileImageUrl(fan.user_id),
       total_balloons: fan.total_balloons,
-      target_count: fan.target_count,
+      target_count: fan.qualified_target_count,
       max_target_nickname: fan.max_target_nickname,
       max_target_balloons: fan.max_target_balloons,
       max_target_rate: Number(fan.max_target_rate.toFixed(1)),
-      targets: fan.targets,
+      all_targets: fan.all_targets,
     }));
 }
 
@@ -377,24 +360,13 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
         (sum, member) => sum + member.current_balloons,
         0,
       );
-      const previousTotal = members.reduce(
-        (sum, member) => sum + member.previous_balloons,
-        0,
-      );
 
       return {
         rank: 0,
         crew_name: crewName,
         member_count: members.length,
         current_total_balloons: currentTotal,
-        previous_total_balloons: previousTotal,
-        change_balloons: currentTotal - previousTotal,
-        change_rate: Number(getChangeRate(currentTotal, previousTotal).toFixed(1)),
         average_current_balloons: Math.round(currentTotal / members.length),
-        average_previous_balloons: Math.round(previousTotal / members.length),
-        top_member: members[0] ?? null,
-        current_daily_balloons: sumDaily(crewItems, "current_month"),
-        previous_daily_balloons: sumDaily(crewItems, "previous_month"),
         members,
         naksoo_gods: getNaksooGods(crewItems, naksooThresholds),
       };
@@ -476,7 +448,6 @@ export default async function Home() {
               카카오톡 오픈채팅 문의하기
             </a>
           </section>
-
         </footer>
       </div>
     </main>

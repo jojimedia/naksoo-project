@@ -50,7 +50,7 @@ type NaksooGod = {
   max_target_nickname: string;
   max_target_balloons: number;
   max_target_rate: number;
-  targets: NaksooGodTarget[];
+  all_targets: NaksooGodTarget[];
 };
 
 type CrewCardData = {
@@ -163,6 +163,7 @@ function CrewCardHeader({
 
 function NaksooGodRow({ god }: { god: NaksooGod }) {
   const [profileSrc, setProfileSrc] = useState(god.profile_image_url);
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="border-t border-white/[0.04]">
@@ -183,11 +184,17 @@ function NaksooGodRow({ god }: { god: NaksooGod }) {
         </div>
 
         <p className="col-start-4 row-start-1 self-end text-right text-[13px] font-black leading-none tabular-nums text-amber-300 xl:text-[14px] min-[1800px]:text-[15px]">
-          {god.target_count}명
+          {god.all_targets.length}명
         </p>
-        <p className="col-start-3 row-start-2 min-w-0 truncate text-[18px] font-extrabold leading-none text-slate-100 xl:text-[19px] 2xl:text-[19px] min-[1800px]:text-[22px]">
+        <button
+          type="button"
+          className="col-start-3 row-start-2 block min-w-0 cursor-pointer truncate text-left text-[18px] font-extrabold leading-none text-slate-100 hover:text-amber-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 xl:text-[19px] 2xl:text-[19px] min-[1800px]:text-[22px]"
+          aria-expanded={isOpen}
+          aria-label={`${god.nickname} 후원 대상 ${isOpen ? "접기" : "열기"}`}
+          onClick={() => setIsOpen((current) => !current)}
+        >
           {god.nickname}
-        </p>
+        </button>
         <p className="col-start-4 row-start-2 text-right text-[20px] font-black leading-none whitespace-nowrap tabular-nums text-sky-300 xl:text-[21px] 2xl:text-[22px] min-[1800px]:text-[26px]">
           {formatNumber(god.total_balloons)}
         </p>
@@ -199,6 +206,38 @@ function NaksooGodRow({ god }: { god: NaksooGod }) {
           몰빵 {god.max_target_rate.toFixed(1)}%
         </p>
       </div>
+
+      {isOpen ? <NaksooTargetRanking targets={god.all_targets} /> : null}
+    </div>
+  );
+}
+
+function NaksooTargetRanking({ targets }: { targets: NaksooGodTarget[] }) {
+  return (
+    <div className="mx-1 mb-3 rounded-2xl border border-white/[0.07] bg-slate-900/80 px-3 py-3 shadow-inner shadow-black/25">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-black text-slate-100">후원 대상</p>
+        <p className="text-xs font-bold text-slate-500">전체 {targets.length}명</p>
+      </div>
+
+      <div className="space-y-1.5">
+        {targets.map((target, index) => (
+          <div
+            key={`${index + 1}-${target.nickname}`}
+            className="grid min-h-9 grid-cols-[34px_minmax(0,1fr)_104px] items-center gap-2 rounded-xl bg-white/[0.035] px-2.5 py-1.5"
+          >
+            <p className="text-center text-sm font-black tabular-nums text-slate-500">
+              {index + 1}
+            </p>
+            <p className="min-w-0 truncate text-[15px] font-extrabold text-slate-100">
+              {target.nickname}
+            </p>
+            <p className="text-right text-[15px] font-black tabular-nums text-amber-300">
+              {formatNumber(target.balloons)}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -206,6 +245,7 @@ function NaksooGodRow({ god }: { god: NaksooGod }) {
 function CrewCardBody({ crew }: { crew: CrewCardData }) {
   const [showGods, setShowGods] = useState(false);
   const [showFormula, setShowFormula] = useState(false);
+  // 카드 본문은 같은 공간에서 스트리머 목록과 낙수의 신 목록만 전환한다.
   const rows = useMemo(
     () =>
       showGods

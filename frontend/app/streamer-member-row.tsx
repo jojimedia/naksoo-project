@@ -68,10 +68,10 @@ function FanRanking({ fans }: { fans: Fan[] }) {
               <p className="text-center text-sm font-black tabular-nums text-slate-500">
                 {fan.rank}
               </p>
-              <p className="min-w-0 truncate text-sm font-extrabold text-slate-100">
+              <p className="min-w-0 truncate text-[15px] font-extrabold text-slate-100">
                 {fan.nickname}
               </p>
-              <p className="text-right text-sm font-black tabular-nums text-amber-300">
+              <p className="text-right text-[15px] font-black tabular-nums text-amber-300">
                 {formatNumber(fan.balloons)}
               </p>
             </div>
