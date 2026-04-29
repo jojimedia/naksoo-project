@@ -111,13 +111,13 @@ async def fetch_google_sheet_members():
 
 async def fetch_station(client, user_id):
     """
-    station API에서 BJ 기본 정보를 가져온다.
+    SOOPTV station API에서 기본 정보를 가져온다.
     - user_id
     - user_nick
     - profile_image
     """
 
-    url = f"https://static.poong.today/sooplive/api/{user_id}/station"
+    url = f"https://api-channel.sooplive.com/v1.1/channel/{user_id}/station"
 
     res = await client.get(url)
 
@@ -128,9 +128,10 @@ async def fetch_station(client, user_id):
     station = data.get("station", {})
 
     return {
-        "user_id": station.get("user_id") or user_id,
-        "nickname": station.get("user_nick"),
-        "profile_image_url": data.get("profile_image"),
+        "user_id": station.get("userId") or user_id,
+        "nickname": station.get("userNick"),
+        "profile_image_url": station.get("profileImage"),
+        "broadcast_start": station.get("broadStart"),
     }
 
 
@@ -318,6 +319,7 @@ async def fetch_one_member(client, member, period, semaphore):
                 "user_id": station_data.get("user_id") or user_id,
                 "nickname": station_data.get("nickname"),
                 "profile_image_url": station_data.get("profile_image_url"),
+                "broadcast_start": station_data.get("broadcast_start"),
 
                 "current_month": build_month_data(
                     current_balloon_data,
@@ -343,6 +345,7 @@ async def fetch_one_member(client, member, period, semaphore):
                 "user_id": user_id,
                 "nickname": None,
                 "profile_image_url": None,
+                "broadcast_start": None,
 
                 "current_month": {
                     "year": current_year,

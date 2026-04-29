@@ -18,6 +18,7 @@ type CrewMember = {
   user_id: string;
   nickname: string;
   profile_image_url: string;
+  broadcast_start: string | null;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;
@@ -94,6 +95,7 @@ export default function StreamerMemberRow({
   const [isOpen, setIsOpen] = useState(false);
   const changeColor =
     member.change_balloons >= 0 ? "text-emerald-300" : "text-rose-300";
+  const isResting = !member.broadcast_start;
 
   return (
     <div className="border-t border-white/[0.04]">
@@ -124,9 +126,15 @@ export default function StreamerMemberRow({
           {formatNumber(member.current_balloons)}
         </p>
 
-        <p className="col-start-3 row-start-3 truncate text-[14px] font-extrabold leading-none tabular-nums text-sky-200 xl:text-[15px] min-[1800px]:text-[16px]">
-          {formatNumber(member.display_day_balloons)}
-        </p>
+        {isResting ? (
+          <p className="col-start-3 row-start-3 inline-flex w-fit max-w-full items-center rounded-full border border-slate-600/40 bg-slate-800/70 px-2 py-0.5 text-[12px] font-black leading-none text-slate-400 xl:text-[13px] min-[1800px]:text-[14px]">
+            휴식 중
+          </p>
+        ) : (
+          <p className="col-start-3 row-start-3 truncate text-[14px] font-extrabold leading-none tabular-nums text-sky-200 xl:text-[15px] min-[1800px]:text-[16px]">
+            {formatNumber(member.display_day_balloons)}
+          </p>
+        )}
         <p className="col-start-4 row-start-3 truncate text-right text-[13px] font-extrabold leading-none whitespace-nowrap tabular-nums text-slate-400 xl:text-[14px] min-[1800px]:text-[15px]">
           지난 달 {formatNumber(member.previous_balloons)}
         </p>

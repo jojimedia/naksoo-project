@@ -21,6 +21,7 @@ type CrewMember = {
   user_id: string;
   nickname: string;
   profile_image_url: string;
+  broadcast_start: string | null;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;
@@ -94,6 +95,7 @@ type RankingItem = {
   user_id: string;
   nickname: string;
   profile_image_url: string;
+  broadcast_start?: string | null;
   current_month: MonthlyStats;
   previous_month: MonthlyStats;
   success: boolean;
@@ -111,6 +113,19 @@ type NaksooResult = {
     month: number;
   };
   items: RankingItem[];
+};
+
+type SoopStation = {
+  station?: {
+    userId?: string;
+    userNick?: string;
+    profileImage?: string;
+  };
+};
+
+type FanStationProfile = {
+  nickname: string;
+  profile_image_url: string;
 };
 
 function normalizeImageUrl(url: string) {
@@ -152,19 +167,47 @@ function getKstDateParts(date = new Date()) {
   };
 }
 
-function getDisplayDate() {
-  const now = getKstDateParts();
-  const displayDate = new Date(Date.UTC(now.year, now.month - 1, now.day, 12));
+function getDisplayDate(now = getKstDateParts()) {
+  return {
+    year: now.year,
+    month: now.month,
+    day: now.day,
+  };
+}
 
-  if (now.hour < 9) {
-    displayDate.setUTCDate(displayDate.getUTCDate() - 1);
+function parseKstDateTime(value?: string | null) {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (!match) {
+    return null;
   }
 
   return {
-    year: displayDate.getUTCFullYear(),
-    month: displayDate.getUTCMonth() + 1,
-    day: displayDate.getUTCDate(),
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
   };
+}
+
+function getDailyBalloonsForDate(
+  period: MonthlyStats | null,
+  day: number,
+) {
+  return period?.daily_balloons.find((daily) => daily.day === day)?.balloons ?? 0;
+}
+
+function getMonthlyStatsForDate(
+  item: RankingItem,
+  result: NaksooResult,
+  date: Pick<ReturnType<typeof getKstDateParts>, "year" | "month" | "day">,
+) {
+  return date.year === result.current_period.year &&
+    date.month === result.current_period.month
+      ? item.current_month
+      : date.year === result.previous_period.year &&
+          date.month === result.previous_period.month
+        ? item.previous_month
+        : null;
 }
 
 function getDailyBalloonsForDisplayDate(
@@ -172,18 +215,11 @@ function getDailyBalloonsForDisplayDate(
   result: NaksooResult,
   displayDate: CrewCardData["display_date"],
 ) {
-  const period =
-    displayDate.year === result.current_period.year &&
-    displayDate.month === result.current_period.month
-      ? item.current_month
-      : displayDate.year === result.previous_period.year &&
-          displayDate.month === result.previous_period.month
-        ? item.previous_month
-        : null;
+  const targetDate = parseKstDateTime(item.broadcast_start) ?? displayDate;
 
-  return (
-    period?.daily_balloons.find((daily) => daily.day === displayDate.day)
-      ?.balloons ?? 0
+  return getDailyBalloonsForDate(
+    getMonthlyStatsForDate(item, result, targetDate),
+    targetDate.day,
   );
 }
 
@@ -226,6 +262,37 @@ function getNaksooThresholds(
   };
 }
 
+function getFanDisplayNicknames(crewItems: RankingItem[]) {
+  const nicknames = new Map<
+    string,
+    {
+      nickname: string;
+      balloons: number;
+    }
+  >();
+
+  for (const item of crewItems) {
+    for (const fan of item.current_month.fans ?? []) {
+      const key = fan.user_id || fan.nickname;
+      const current = nicknames.get(key);
+
+      if (!current || fan.balloons > current.balloons) {
+        nicknames.set(key, {
+          nickname: fan.nickname,
+          balloons: fan.balloons,
+        });
+      }
+    }
+  }
+
+  return new Map(
+    Array.from(nicknames.entries()).map(([key, value]) => [
+      key,
+      value.nickname,
+    ]),
+  );
+}
+
 function getNaksooGods(
   crewItems: RankingItem[],
   thresholds: ReturnType<typeof getNaksooThresholds>,
@@ -245,6 +312,7 @@ function getNaksooGods(
       thresholds.totalFloor,
     ),
   );
+  const displayNicknames = getFanDisplayNicknames(crewItems);
   const fans = new Map<
     string,
     {
@@ -260,12 +328,11 @@ function getNaksooGods(
       const key = fan.user_id || fan.nickname;
       const current = fans.get(key) ?? {
         user_id: fan.user_id,
-        nickname: fan.nickname,
+        nickname: displayNicknames.get(key) ?? fan.nickname,
         total_balloons: 0,
         targets: new Map<string, number>(),
       };
 
-      current.nickname = fan.nickname;
       current.total_balloons += fan.balloons;
       current.targets.set(
         item.nickname,
@@ -322,6 +389,7 @@ function getNaksooGods(
 }
 
 function getCrewKings(crewItems: RankingItem[]) {
+  const displayNicknames = getFanDisplayNicknames(crewItems);
   const fans = new Map<
     string,
     {
@@ -337,7 +405,7 @@ function getCrewKings(crewItems: RankingItem[]) {
       const key = fan.user_id || fan.nickname;
       const current = fans.get(key) ?? {
         user_id: fan.user_id,
-        nickname: fan.nickname,
+        nickname: displayNicknames.get(key) ?? fan.nickname,
         total_balloons: 0,
         targets: new Map<string, number>(),
       };
@@ -386,8 +454,124 @@ function getCrewKings(crewItems: RankingItem[]) {
     }));
 }
 
+function collectDisplayedFanUserIds(data: CrewCardData) {
+  const userIds = new Set<string>();
+
+  for (const crew of data.crews) {
+    for (const member of crew.members) {
+      for (const fan of member.monthly_top_fans) {
+        if (fan.user_id) {
+          userIds.add(fan.user_id);
+        }
+      }
+    }
+
+    for (const patron of [...crew.naksoo_gods, ...crew.crew_kings]) {
+      if (patron.user_id) {
+        userIds.add(patron.user_id);
+      }
+    }
+  }
+
+  return Array.from(userIds);
+}
+
+async function fetchFanStationProfile(userId: string) {
+  const response = await fetch(
+    `https://api-channel.sooplive.com/v1.1/channel/${encodeURIComponent(
+      userId,
+    )}/station`,
+    {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json,text/plain,*/*",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = (await response.json()) as SoopStation;
+  const station = data.station;
+  const nickname = station?.userNick;
+
+  if (!nickname) {
+    return null;
+  }
+
+  return [
+    station.userId ?? userId,
+    {
+      nickname,
+      profile_image_url: station.profileImage ?? getSoopProfileImageUrl(userId),
+    },
+  ] as const;
+}
+
+async function fetchFanStationProfiles(userIds: string[]) {
+  const profiles = new Map<string, FanStationProfile>();
+  const batchSize = 20;
+
+  for (let index = 0; index < userIds.length; index += batchSize) {
+    const batch = userIds.slice(index, index + batchSize);
+    const results = await Promise.allSettled(
+      batch.map((userId) => fetchFanStationProfile(userId)),
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) {
+        const [userId, profile] = result.value;
+        profiles.set(userId, profile);
+      }
+    }
+  }
+
+  return profiles;
+}
+
+function applyFanStationProfiles(
+  data: CrewCardData,
+  profiles: Map<string, FanStationProfile>,
+): CrewCardData {
+  return {
+    ...data,
+    crews: data.crews.map((crew) => ({
+      ...crew,
+      members: crew.members.map((member) => ({
+        ...member,
+        monthly_top_fans: member.monthly_top_fans.map((fan) => ({
+          ...fan,
+          nickname: profiles.get(fan.user_id)?.nickname ?? fan.nickname,
+        })),
+      })),
+      naksoo_gods: crew.naksoo_gods.map((god) => {
+        const profile = profiles.get(god.user_id);
+
+        return {
+          ...god,
+          nickname: profile?.nickname ?? god.nickname,
+          profile_image_url: profile?.profile_image_url ?? god.profile_image_url,
+        };
+      }),
+      crew_kings: crew.crew_kings.map((king) => {
+        const profile = profiles.get(king.user_id);
+
+        return {
+          ...king,
+          nickname: profile?.nickname ?? king.nickname,
+          profile_image_url:
+            profile?.profile_image_url ?? king.profile_image_url,
+        };
+      }),
+    })),
+  };
+}
+
 function makeCrewCardData(result: NaksooResult): CrewCardData {
-  const displayDate = getDisplayDate();
+  const now = getKstDateParts();
+  const displayDate = getDisplayDate(now);
   const successfulItems = result.items.filter((item) => item.success);
   const naksooThresholds = getNaksooThresholds(successfulItems, result);
   const crewNames = Array.from(
@@ -412,6 +596,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             user_id: item.user_id,
             nickname: item.nickname,
             profile_image_url: normalizeImageUrl(item.profile_image_url),
+            broadcast_start: item.broadcast_start ?? null,
             current_balloons: current,
             previous_balloons: previous,
             change_balloons: current - previous,
@@ -470,7 +655,10 @@ async function getCrewCardData() {
     throw new Error(`데이터를 불러오지 못했습니다. (${response.status})`);
   }
 
-  return makeCrewCardData((await response.json()) as NaksooResult);
+  const data = makeCrewCardData((await response.json()) as NaksooResult);
+  const profiles = await fetchFanStationProfiles(collectDisplayedFanUserIds(data));
+
+  return applyFanStationProfiles(data, profiles);
 }
 
 export default async function Home() {
