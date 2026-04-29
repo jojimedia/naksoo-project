@@ -462,6 +462,22 @@ export default async function Home() {
             <CrewCard key={crew.crew_name} crew={crew} index={index} />
           ))}
         </div>
+
+        <footer className="mx-auto mt-8 max-w-[720px] border-t border-white/10 px-2 pt-6 text-center text-sm font-medium text-slate-400">
+          <section>
+            <h2 className="text-base font-black text-slate-200">문의 / 요청</h2>
+            <p className="mt-2">데이터 수정 및 오류 제보는 오픈카톡으로 보내주세요</p>
+            <a
+              href="https://open.kakao.com/o/gPGWUCsi"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-sm font-black text-amber-200 transition-colors hover:border-amber-300/45 hover:bg-amber-300/15"
+            >
+              카카오톡 오픈채팅 문의하기
+            </a>
+          </section>
+
+        </footer>
       </div>
     </main>
   );
