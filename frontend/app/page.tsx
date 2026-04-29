@@ -13,6 +13,7 @@ type Fan = {
   rank: number;
   user_id: string;
   nickname: string;
+  profile_image_url?: string | null;
   balloons: number;
 };
 
@@ -116,19 +117,6 @@ type NaksooResult = {
     month: number;
   };
   items: RankingItem[];
-};
-
-type SoopStation = {
-  station?: {
-    userId?: string;
-    userNick?: string;
-    profileImage?: string;
-  };
-};
-
-type FanStationProfile = {
-  nickname: string;
-  profile_image_url: string;
 };
 
 function normalizeImageUrl(url: string) {
@@ -327,6 +315,7 @@ function getNaksooGods(
     {
       user_id: string;
       nickname: string;
+      profile_image_url?: string | null;
       total_balloons: number;
       targets: Map<string, number>;
     }
@@ -338,10 +327,12 @@ function getNaksooGods(
       const current = fans.get(key) ?? {
         user_id: fan.user_id,
         nickname: displayNicknames.get(key) ?? fan.nickname,
+        profile_image_url: fan.profile_image_url,
         total_balloons: 0,
         targets: new Map<string, number>(),
       };
 
+      current.profile_image_url ??= fan.profile_image_url;
       current.total_balloons += fan.balloons;
       current.targets.set(
         item.nickname,
@@ -387,7 +378,8 @@ function getNaksooGods(
       rank: index + 1,
       user_id: fan.user_id,
       nickname: fan.nickname,
-      profile_image_url: getSoopProfileImageUrl(fan.user_id),
+      profile_image_url:
+        fan.profile_image_url ?? getSoopProfileImageUrl(fan.user_id),
       total_balloons: fan.total_balloons,
       target_count: fan.qualified_target_count,
       max_target_nickname: fan.max_target_nickname,
@@ -404,6 +396,7 @@ function getCrewKings(crewItems: RankingItem[]) {
     {
       user_id: string;
       nickname: string;
+      profile_image_url?: string | null;
       total_balloons: number;
       targets: Map<string, number>;
     }
@@ -415,10 +408,12 @@ function getCrewKings(crewItems: RankingItem[]) {
       const current = fans.get(key) ?? {
         user_id: fan.user_id,
         nickname: displayNicknames.get(key) ?? fan.nickname,
+        profile_image_url: fan.profile_image_url,
         total_balloons: 0,
         targets: new Map<string, number>(),
       };
 
+      current.profile_image_url ??= fan.profile_image_url;
       current.total_balloons += fan.balloons;
       current.targets.set(
         item.nickname,
@@ -453,7 +448,8 @@ function getCrewKings(crewItems: RankingItem[]) {
       rank: index + 1,
       user_id: fan.user_id,
       nickname: fan.nickname,
-      profile_image_url: getSoopProfileImageUrl(fan.user_id),
+      profile_image_url:
+        fan.profile_image_url ?? getSoopProfileImageUrl(fan.user_id),
       total_balloons: fan.total_balloons,
       target_count: fan.target_count,
       max_target_nickname: fan.max_target_nickname,
@@ -461,121 +457,6 @@ function getCrewKings(crewItems: RankingItem[]) {
       max_target_rate: Number(fan.max_target_rate.toFixed(1)),
       all_targets: fan.all_targets,
     }));
-}
-
-function collectDisplayedFanUserIds(data: CrewCardData) {
-  const userIds = new Set<string>();
-
-  for (const crew of data.crews) {
-    for (const member of crew.members) {
-      for (const fan of member.monthly_top_fans) {
-        if (fan.user_id) {
-          userIds.add(fan.user_id);
-        }
-      }
-    }
-
-    for (const patron of [...crew.naksoo_gods, ...crew.crew_kings]) {
-      if (patron.user_id) {
-        userIds.add(patron.user_id);
-      }
-    }
-  }
-
-  return Array.from(userIds);
-}
-
-async function fetchFanStationProfile(userId: string) {
-  const response = await fetch(
-    `https://api-channel.sooplive.com/v1.1/channel/${encodeURIComponent(
-      userId,
-    )}/station`,
-    {
-      cache: "no-store",
-      headers: {
-        Accept: "application/json,text/plain,*/*",
-      },
-    },
-  );
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const data = (await response.json()) as SoopStation;
-  const station = data.station;
-  const nickname = station?.userNick;
-
-  if (!nickname) {
-    return null;
-  }
-
-  return [
-    station.userId ?? userId,
-    {
-      nickname,
-      profile_image_url: station.profileImage ?? getSoopProfileImageUrl(userId),
-    },
-  ] as const;
-}
-
-async function fetchFanStationProfiles(userIds: string[]) {
-  const profiles = new Map<string, FanStationProfile>();
-  const batchSize = 20;
-
-  for (let index = 0; index < userIds.length; index += batchSize) {
-    const batch = userIds.slice(index, index + batchSize);
-    const results = await Promise.allSettled(
-      batch.map((userId) => fetchFanStationProfile(userId)),
-    );
-
-    for (const result of results) {
-      if (result.status === "fulfilled" && result.value) {
-        const [userId, profile] = result.value;
-        profiles.set(userId, profile);
-      }
-    }
-  }
-
-  return profiles;
-}
-
-function applyFanStationProfiles(
-  data: CrewCardData,
-  profiles: Map<string, FanStationProfile>,
-): CrewCardData {
-  return {
-    ...data,
-    crews: data.crews.map((crew) => ({
-      ...crew,
-      members: crew.members.map((member) => ({
-        ...member,
-        monthly_top_fans: member.monthly_top_fans.map((fan) => ({
-          ...fan,
-          nickname: profiles.get(fan.user_id)?.nickname ?? fan.nickname,
-        })),
-      })),
-      naksoo_gods: crew.naksoo_gods.map((god) => {
-        const profile = profiles.get(god.user_id);
-
-        return {
-          ...god,
-          nickname: profile?.nickname ?? god.nickname,
-          profile_image_url: profile?.profile_image_url ?? god.profile_image_url,
-        };
-      }),
-      crew_kings: crew.crew_kings.map((king) => {
-        const profile = profiles.get(king.user_id);
-
-        return {
-          ...king,
-          nickname: profile?.nickname ?? king.nickname,
-          profile_image_url:
-            profile?.profile_image_url ?? king.profile_image_url,
-        };
-      }),
-    })),
-  };
 }
 
 function makeCrewCardData(result: NaksooResult): CrewCardData {
@@ -664,10 +545,7 @@ async function getCrewCardData() {
     throw new Error(`데이터를 불러오지 못했습니다. (${response.status})`);
   }
 
-  const data = makeCrewCardData((await response.json()) as NaksooResult);
-  const profiles = await fetchFanStationProfiles(collectDisplayedFanUserIds(data));
-
-  return applyFanStationProfiles(data, profiles);
+  return makeCrewCardData((await response.json()) as NaksooResult);
 }
 
 export default async function Home() {

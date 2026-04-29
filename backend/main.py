@@ -275,6 +275,56 @@ def extract_fans(balloon_data, limit=50):
     return result
 
 
+async def fetch_fan_profile(client, user_id, fan_profile_cache):
+    """SOOPTV station API에서 후원자 최신 닉네임/프로필을 가져온다."""
+
+    if not user_id:
+        return None
+
+    if user_id in fan_profile_cache:
+        return fan_profile_cache[user_id]
+
+    try:
+        station_data = await retry(
+            lambda: fetch_station(client, user_id),
+            retries=2,
+            delay=0.5,
+        )
+        profile = {
+            "nickname": station_data.get("nickname"),
+            "profile_image_url": station_data.get("profile_image_url"),
+        }
+    except Exception:
+        profile = None
+
+    fan_profile_cache[user_id] = profile
+
+    return profile
+
+
+async def enrich_fans_with_profiles(client, fans, fan_profile_cache):
+    """화면에 노출될 팬 목록에 최신 닉네임/프로필을 채운다."""
+
+    enriched = []
+
+    for fan in fans:
+        profile = await fetch_fan_profile(
+            client,
+            fan.get("user_id"),
+            fan_profile_cache,
+        )
+
+        enriched.append({
+            **fan,
+            "nickname": profile.get("nickname") if profile else fan.get("nickname"),
+            "profile_image_url": (
+                profile.get("profile_image_url") if profile else None
+            ),
+        })
+
+    return enriched
+
+
 def build_month_data(balloon_data, year, month):
     """특정 월의 별풍선 데이터를 하나의 객체로 정리한다."""
 
@@ -291,7 +341,7 @@ def build_month_data(balloon_data, year, month):
 # 멤버 1명 데이터 가져오기
 # =========================
 
-async def fetch_one_member(client, member, period, semaphore):
+async def fetch_one_member(client, member, period, semaphore, fan_profile_cache):
     """
     구글시트 멤버 1명에 대해:
     1. station API로 닉네임 / 프로필 이미지 가져오기
@@ -354,6 +404,17 @@ async def fetch_one_member(client, member, period, semaphore):
                 delay=1,
             )
 
+            current_month_data = build_month_data(
+                current_balloon_data,
+                current_year,
+                current_month,
+            )
+            current_month_data["fans"] = await enrich_fans_with_profiles(
+                client,
+                current_month_data["fans"],
+                fan_profile_cache,
+            )
+
             return {
                 "crew_name": crew_name,
                 "user_id": station_data.get("user_id") or user_id,
@@ -367,11 +428,7 @@ async def fetch_one_member(client, member, period, semaphore):
                 "is_live": live_status["is_live"],
                 "is_password_broadcast": live_status["is_password"],
 
-                "current_month": build_month_data(
-                    current_balloon_data,
-                    current_year,
-                    current_month,
-                ),
+                "current_month": current_month_data,
 
                 "previous_month": build_month_data(
                     previous_balloon_data,
@@ -568,6 +625,7 @@ async def main():
 
         # 동시에 너무 많은 요청을 보내지 않도록 제한
         semaphore = asyncio.Semaphore(2)
+        fan_profile_cache = {}
 
         async with httpx.AsyncClient(
             follow_redirects=True,
@@ -575,7 +633,13 @@ async def main():
             headers=HEADERS,
         ) as client:
             tasks = [
-                fetch_one_member(client, member, period, semaphore)
+                fetch_one_member(
+                    client,
+                    member,
+                    period,
+                    semaphore,
+                    fan_profile_cache,
+                )
                 for member in members
             ]
 
