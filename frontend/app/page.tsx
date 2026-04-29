@@ -421,7 +421,7 @@ export default async function Home() {
             <span>크루별 개인 방송 낙수표</span>
           </h1>
 
-          <button className="mt-1 text-base font-medium leading-tight text-slate-400 md:text-lg">
+          <button className="mt-1 text-sm font-medium leading-tight text-slate-400 md:text-lg">
             {Number(data.created_date.slice(0, 4))}년{" "}
             {Number(data.created_date.slice(5, 7))}월{" "}
             {Number(data.created_date.slice(8, 10))}일{" "}
