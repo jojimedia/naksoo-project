@@ -136,7 +136,7 @@ async def fetch_station(client, user_id):
 
 
 async def fetch_live_status(client, user_id):
-    """SOOPTV 생방송 정보 API에서 현재 공개 방송 중 여부를 가져온다."""
+    """SOOPTV 생방송 정보 API에서 비번방 여부와 공개 방송 여부를 가져온다."""
 
     url = "https://live.sooplive.co.kr/afreeca/player_live_api.php"
     payload = {
@@ -165,6 +165,18 @@ async def fetch_live_status(client, user_id):
         "is_live": channel.get("RESULT") == 1 and channel.get("BPWD") != "Y",
         "is_password": channel.get("BPWD") == "Y",
     }
+
+
+def resolve_live_status(station_data, live_status):
+    """
+    19금 방송은 player API에서 시청 제한 응답으로 내려와 RESULT가 1이 아닐 수 있다.
+    station API에 방송 시작 시간이 있고 비번방이 아니면 방송 중으로 본다.
+    """
+
+    if live_status["is_password"]:
+        return False
+
+    return live_status["is_live"] or bool(station_data.get("broadcast_start"))
 
 
 # =========================
@@ -443,6 +455,7 @@ async def fetch_one_member(
                 fan_profile_lock,
                 fan_profile_semaphore,
             )
+            is_live = resolve_live_status(station_data, live_status)
 
             return {
                 "crew_name": crew_name,
@@ -451,10 +464,10 @@ async def fetch_one_member(
                 "profile_image_url": station_data.get("profile_image_url"),
                 "broadcast_start": (
                     station_data.get("broadcast_start")
-                    if live_status["is_live"]
+                    if is_live
                     else None
                 ),
-                "is_live": live_status["is_live"],
+                "is_live": is_live,
                 "is_password_broadcast": live_status["is_password"],
 
                 "current_month": current_month_data,
