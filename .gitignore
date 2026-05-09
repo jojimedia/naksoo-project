@@ -2,4 +2,7 @@
 .DS_Store
 .DS_Store
 data/
-backend/data/*.json
+backend/data/*
+!backend/data/
+!backend/data/.gitkeep
+!backend/data/result.json
