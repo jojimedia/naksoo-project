@@ -4,6 +4,7 @@ import asyncio
 import csv
 import json
 import shutil
+from collections import Counter
 from io import StringIO
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -35,6 +36,12 @@ HEADERS = {
     "Accept": "application/json,text/plain,*/*",
     "Referer": "https://poong.today/",
     "Origin": "https://poong.today",
+}
+
+POONG_HEADERS = {
+    **HEADERS,
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
 }
 
 
@@ -103,6 +110,18 @@ async def fetch_google_sheet_members():
         })
 
     return members
+
+
+def print_crawl_targets(members):
+    """구글시트에서 읽은 크롤링 대상 목록을 출력한다."""
+
+    print("크롤링 대상 목록")
+
+    for index, member in enumerate(members, start=1):
+        print(
+            f"  {index:03d}. "
+            f"{member['crew_name']} / {member['user_id']}"
+        )
 
 
 # =========================
@@ -196,21 +215,30 @@ async def fetch_balloon(client, user_id, year, month):
         f"?id={user_id}&year={year}&month={month}"
     )
 
-    res = await client.get(url)
+    res = await client.get(url, headers=POONG_HEADERS)
 
     if res.status_code != 200:
+        body_preview = res.text[:200].replace("\n", " ")
         raise RuntimeError(
-            f"balloon 실패: {user_id} {year}-{month} {res.status_code}"
+            f"balloon 실패: {user_id} {year}-{month} "
+            f"{res.status_code} body={body_preview!r}"
         )
 
-    return res.json()
+    try:
+        return res.json()
+    except ValueError as e:
+        body_preview = res.text[:200].replace("\n", " ")
+        raise RuntimeError(
+            f"balloon JSON 파싱 실패: {user_id} {year}-{month} "
+            f"body={body_preview!r}"
+        ) from e
 
 
 # =========================
 # 재시도 함수
 # =========================
 
-async def retry(coro_factory, retries=3, delay=1):
+async def retry(coro_factory, retries=3, delay=1, label=None):
     """API 호출 실패 시 지정 횟수만큼 재시도한다."""
 
     last_error = None
@@ -220,8 +248,15 @@ async def retry(coro_factory, retries=3, delay=1):
             return await coro_factory()
         except Exception as e:
             last_error = e
-            print(f"재시도 {attempt}/{retries} 실패:", e)
-            await asyncio.sleep(delay * attempt)
+            prefix = f"[{label}] " if label else ""
+            print(
+                f"{prefix}재시도 {attempt}/{retries} 실패:",
+                type(e).__name__,
+                repr(e),
+            )
+
+            if attempt < retries:
+                await asyncio.sleep(delay * attempt)
 
     raise last_error
 
@@ -400,24 +435,34 @@ async def fetch_one_member(
         previous_month = period["previous"]["month"]
 
         try:
+            print(f"[{crew_name}/{user_id}] 멤버 조회 시작")
+
             # BJ 기본 정보 가져오기
+            print(f"[{crew_name}/{user_id}] station API 조회")
             station_data = await retry(
                 lambda: fetch_station(client, user_id),
                 retries=3,
                 delay=1,
+                label=f"{crew_name}/{user_id} station",
             )
 
             await asyncio.sleep(0.5)
 
+            print(f"[{crew_name}/{user_id}] live status API 조회")
             live_status = await retry(
                 lambda: fetch_live_status(client, user_id),
                 retries=3,
                 delay=1,
+                label=f"{crew_name}/{user_id} live status",
             )
 
             await asyncio.sleep(0.5)
 
             # 현재월 별풍 데이터 가져오기
+            print(
+                f"[{crew_name}/{user_id}] 풍투 현재월 조회 "
+                f"{current_year}-{current_month}"
+            )
             current_balloon_data = await retry(
                 lambda: fetch_balloon(
                     client,
@@ -425,13 +470,21 @@ async def fetch_one_member(
                     current_year,
                     current_month,
                 ),
-                retries=3,
-                delay=1,
+                retries=8,
+                delay=2,
+                label=(
+                    f"{crew_name}/{user_id} "
+                    f"balloon {current_year}-{current_month}"
+                ),
             )
 
             await asyncio.sleep(0.5)
 
             # 이전달 별풍 데이터 가져오기
+            print(
+                f"[{crew_name}/{user_id}] 풍투 이전달 조회 "
+                f"{previous_year}-{previous_month}"
+            )
             previous_balloon_data = await retry(
                 lambda: fetch_balloon(
                     client,
@@ -439,8 +492,12 @@ async def fetch_one_member(
                     previous_year,
                     previous_month,
                 ),
-                retries=3,
-                delay=1,
+                retries=8,
+                delay=2,
+                label=(
+                    f"{crew_name}/{user_id} "
+                    f"balloon {previous_year}-{previous_month}"
+                ),
             )
 
             current_month_data = build_month_data(
@@ -456,6 +513,8 @@ async def fetch_one_member(
                 fan_profile_semaphore,
             )
             is_live = resolve_live_status(station_data, live_status)
+
+            print(f"[{crew_name}/{user_id}] 멤버 조회 완료")
 
             return {
                 "crew_name": crew_name,
@@ -530,9 +589,13 @@ def make_output_filename(now):
 # =========================
 
 def get_latest_backup_file():
-    """data 폴더에서 가장 최근 백업 JSON 파일을 찾는다."""
+    """data 폴더에서 가장 최근의 정상 백업 JSON 파일을 찾는다."""
 
-    files = list(OUTPUT_DIR.glob("naksoo_*.json"))
+    files = [
+        file
+        for file in OUTPUT_DIR.glob("naksoo_*.json")
+        if is_successful_backup_file(file)
+    ]
 
     if not files:
         return None
@@ -540,12 +603,30 @@ def get_latest_backup_file():
     return max(files, key=lambda file: file.stat().st_mtime)
 
 
+def is_successful_backup_file(file):
+    """백업 파일에 실패한 멤버가 없는지 확인한다."""
+
+    try:
+        with open(file, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"백업 파일 읽기 실패: {file}", e)
+        return False
+
+    items = data.get("items")
+
+    if not isinstance(items, list):
+        return False
+
+    return all(item.get("success") for item in items)
+
+
 # =========================
 # 실패 시 최신 백업 복구
 # =========================
 
 def restore_latest_backup():
-    """패치 전체 실패 시 최신 백업 파일을 result.json으로 복사한다."""
+    """패치 실패 시 최신 정상 백업 파일을 result.json으로 복사한다."""
 
     latest_backup = get_latest_backup_file()
 
@@ -613,6 +694,47 @@ def save_result_json(output, now):
 
 
 # =========================
+# 저장 전 멤버 누락 검증
+# =========================
+
+def validate_all_members_in_items(members, items):
+    """구글시트 멤버가 결과 JSON에 모두 포함되어 있는지 확인한다."""
+
+    sheet_members = Counter(
+        (member["crew_name"], member["user_id"])
+        for member in members
+    )
+    result_members = Counter(
+        (item["crew_name"], item["user_id"])
+        for item in items
+    )
+
+    missing_members = sheet_members - result_members
+    extra_members = result_members - sheet_members
+
+    if not missing_members and not extra_members:
+        return
+
+    errors = []
+
+    if missing_members:
+        missing_text = ", ".join(
+            f"{crew_name}/{user_id}"
+            for crew_name, user_id in missing_members.elements()
+        )
+        errors.append(f"누락 멤버: {missing_text}")
+
+    if extra_members:
+        extra_text = ", ".join(
+            f"{crew_name}/{user_id}"
+            for crew_name, user_id in extra_members.elements()
+        )
+        errors.append(f"추가 멤버: {extra_text}")
+
+    raise RuntimeError("결과 JSON 멤버 검증 실패 - " + " / ".join(errors))
+
+
+# =========================
 # 백업이 하나도 없을 때 최소 result.json 생성
 # =========================
 
@@ -665,6 +787,8 @@ async def main():
         if not members:
             raise RuntimeError("구글시트에서 멤버를 가져오지 못함")
 
+        print_crawl_targets(members)
+
         # 동시에 너무 많은 요청을 보내지 않도록 제한
         semaphore = asyncio.Semaphore(2)
         fan_profile_cache = {}
@@ -691,11 +815,19 @@ async def main():
 
             items = await asyncio.gather(*tasks)
 
-        # 모든 멤버가 실패했으면 전체 실패로 판단
-        all_failed = all(not item["success"] for item in items)
+        # 실패한 멤버가 하나라도 있으면 불완전한 결과를 저장하지 않는다.
+        failed_items = [item for item in items if not item["success"]]
 
-        if all_failed:
-            raise RuntimeError("풍투 API 전체 실패")
+        if failed_items:
+            failed_members = ", ".join(
+                f"{item['crew_name']}/{item['user_id']}: {item.get('error')}"
+                for item in failed_items
+            )
+            raise RuntimeError(
+                f"멤버 조회 실패 {len(failed_items)}명: {failed_members}"
+            )
+
+        validate_all_members_in_items(members, items)
 
         # 크루명 기준 정렬, 같은 크루 안에서는 현재월 별풍 많은 순 정렬
         items.sort(
