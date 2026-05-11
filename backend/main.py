@@ -778,6 +778,19 @@ def create_empty_result_json(now, error_message):
     print(f"빈 result.json 생성 완료: {result_path}")
 
 
+def keep_existing_result_json():
+    """수집 실패 시 기존 result.json이 있으면 빈 파일로 덮어쓰지 않는다."""
+
+    result_path = OUTPUT_DIR / "result.json"
+
+    if not result_path.exists():
+        return False
+
+    print(f"기존 result.json 유지: {result_path}")
+
+    return True
+
+
 # =========================
 # 메인 실행 함수
 # =========================
@@ -878,7 +891,7 @@ async def main():
 
         restored = restore_latest_backup()
 
-        if not restored:
+        if not restored and not keep_existing_result_json():
             create_empty_result_json(now, str(e))
 
 
