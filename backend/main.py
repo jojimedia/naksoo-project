@@ -846,17 +846,25 @@ async def main():
 
             items = await asyncio.gather(*tasks)
 
-        # 실패한 멤버가 하나라도 있으면 불완전한 결과를 저장하지 않는다.
+        # 실패한 멤버가 있어도 성공한 데이터는 저장한다.
+        # 실패 항목은 success=false로 남기고, 프론트엔드는 성공 항목만 렌더링한다.
         failed_items = [item for item in items if not item["success"]]
+
+        if failed_items and len(failed_items) == len(items):
+            failed_members = ", ".join(
+                f"{item['crew_name']}/{item['user_id']}: {item.get('error')}"
+                for item in failed_items
+            )
+            raise RuntimeError(
+                f"전체 멤버 조회 실패 {len(failed_items)}명: {failed_members}"
+            )
 
         if failed_items:
             failed_members = ", ".join(
                 f"{item['crew_name']}/{item['user_id']}: {item.get('error')}"
                 for item in failed_items
             )
-            raise RuntimeError(
-                f"멤버 조회 실패 {len(failed_items)}명: {failed_members}"
-            )
+            print(f"일부 멤버 조회 실패 {len(failed_items)}명: {failed_members}")
 
         validate_all_members_in_items(members, items)
 
