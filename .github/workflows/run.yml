@@ -34,12 +34,17 @@ jobs:
           cd backend
           python main.py
 
+      - name: 프론트엔드 데이터 복사
+        run: |
+          mkdir -p frontend/public/data
+          cp backend/data/result.json frontend/public/data/result.json
+
       - name: 결과 파일 커밋
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add -A backend/data
+          git add -A backend/data frontend/public/data
 
           git commit -m "auto update result json" || echo "변경 없음"
           git push

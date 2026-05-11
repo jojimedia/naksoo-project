@@ -1,8 +1,9 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import Image from "next/image";
 import CrewCard from "./crew-card";
 
-const DATA_URL =
-  "https://raw.githubusercontent.com/jojimedia/naksoo-project/main/backend/data/result.json";
+const DATA_FILE_PATH = join(process.cwd(), "public", "data", "result.json");
 
 type DailyBalloons = {
   day: number;
@@ -689,23 +690,11 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
 
 async function getCrewCardData() {
   const emptyData = () => makeCrewCardData(normalizeResult({ items: [] }));
-  const url = new URL(DATA_URL);
-  url.searchParams.set("cache_bust", Date.now().toString());
 
   try {
-    const response = await fetch(url.toString(), {
-      cache: "no-store",
-      headers: {
-        "Cache-Control": "no-cache",
-      },
-    });
-
-    if (!response.ok) {
-      return emptyData();
-    }
-
+    const file = await readFile(DATA_FILE_PATH, "utf-8");
     return makeCrewCardData(
-      normalizeResult((await response.json()) as RawNaksooResult),
+      normalizeResult(JSON.parse(file) as RawNaksooResult),
     );
   } catch {
     return emptyData();
