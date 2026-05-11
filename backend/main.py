@@ -694,6 +694,76 @@ def save_result_json(output, now):
 
 
 # =========================
+# 기존 result.json 멤버 데이터 읽기
+# =========================
+
+def load_previous_result_items():
+    """수집 실패 멤버를 직전 result.json 데이터로 보정하기 위해 읽는다."""
+
+    result_path = OUTPUT_DIR / "result.json"
+
+    if not result_path.exists():
+        return {}
+
+    try:
+        with open(result_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"기존 result.json 읽기 실패: {result_path}", e)
+        return {}
+
+    items = data.get("items")
+
+    if not isinstance(items, list):
+        return {}
+
+    return {
+        (item.get("crew_name"), item.get("user_id")): item
+        for item in items
+        if item.get("crew_name") and item.get("user_id")
+    }
+
+
+def restore_failed_items_from_previous_result(items):
+    """이번 수집에 실패한 멤버만 직전 result.json의 해당 멤버 데이터로 대체한다."""
+
+    previous_items = load_previous_result_items()
+
+    if not previous_items:
+        return items
+
+    restored_items = []
+
+    for item in items:
+        if item.get("success"):
+            restored_items.append(item)
+            continue
+
+        key = (item.get("crew_name"), item.get("user_id"))
+        previous_item = previous_items.get(key)
+
+        if previous_item is None:
+            restored_items.append(item)
+            continue
+
+        restored_item = {
+            **previous_item,
+            "success": True,
+            "is_stale": True,
+            "stale_reason": item.get("error"),
+            "stale_source": "previous_result",
+        }
+        restored_items.append(restored_item)
+        print(
+            "이전 result.json 데이터로 멤버 복구:",
+            f"{key[0]}/{key[1]}",
+            item.get("error"),
+        )
+
+    return restored_items
+
+
+# =========================
 # 저장 전 멤버 누락 검증
 # =========================
 
@@ -865,6 +935,7 @@ async def main():
                 for item in failed_items
             )
             print(f"일부 멤버 조회 실패 {len(failed_items)}명: {failed_members}")
+            items = restore_failed_items_from_previous_result(items)
 
         validate_all_members_in_items(members, items)
 
