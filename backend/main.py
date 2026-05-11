@@ -741,6 +741,22 @@ def validate_all_members_in_items(members, items):
 def create_empty_result_json(now, error_message):
     """첫 실행부터 실패해서 백업 파일도 없을 때 최소 result.json을 생성한다."""
 
+    current_period = {
+        "year": now.year,
+        "month": now.month,
+    }
+    previous_period = (
+        {
+            "year": now.year - 1,
+            "month": 12,
+        }
+        if now.month == 1
+        else {
+            "year": now.year,
+            "month": now.month - 1,
+        }
+    )
+
     fallback = {
         "project": "naksoo",
         "created_at": now.isoformat(),
@@ -748,6 +764,8 @@ def create_empty_result_json(now, error_message):
         "created_time": now.strftime("%H:%M:%S"),
         "timezone": "Asia/Seoul",
         "error": error_message,
+        "current_period": current_period,
+        "previous_period": previous_period,
         "count": 0,
         "items": [],
     }

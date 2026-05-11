@@ -92,6 +92,11 @@ type MonthlyStats = {
   fans?: Omit<Fan, "rank">[];
 };
 
+type Period = {
+  year: number;
+  month: number;
+};
+
 type RankingItem = {
   crew_name: string;
   user_id: string;
@@ -108,15 +113,13 @@ type RankingItem = {
 type NaksooResult = {
   created_date: string;
   created_time: string;
-  current_period: {
-    year: number;
-    month: number;
-  };
-  previous_period: {
-    year: number;
-    month: number;
-  };
+  current_period: Period;
+  previous_period: Period;
   items: RankingItem[];
+};
+
+type RawNaksooResult = Partial<Omit<NaksooResult, "items">> & {
+  items?: Partial<RankingItem>[];
 };
 
 function normalizeImageUrl(url: string) {
@@ -163,6 +166,152 @@ function getDisplayDate(now = getKstDateParts()) {
     year: now.year,
     month: now.month,
     day: now.day,
+  };
+}
+
+function getPreviousPeriod(period: Period) {
+  return period.month === 1
+    ? { year: period.year - 1, month: 12 }
+    : { year: period.year, month: period.month - 1 };
+}
+
+function formatDateParts(
+  date: Pick<ReturnType<typeof getKstDateParts>, "year" | "month" | "day">,
+) {
+  return `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function toNumber(value: unknown, fallback = 0) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function isPeriod(value: unknown): value is Period {
+  return (
+    isRecord(value) &&
+    Number.isFinite(Number(value.year)) &&
+    Number.isFinite(Number(value.month))
+  );
+}
+
+function normalizeDailyBalloons(value: unknown): DailyBalloons[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isRecord)
+    .map((daily) => ({
+      day: toNumber(daily.day),
+      balloons: toNumber(daily.balloons),
+    }));
+}
+
+function normalizeFans(value: unknown): Omit<Fan, "rank">[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(isRecord).map((fan) => ({
+    user_id: String(fan.user_id ?? ""),
+    nickname: String(fan.nickname ?? fan.user_id ?? ""),
+    profile_image_url:
+      typeof fan.profile_image_url === "string" ? fan.profile_image_url : null,
+    balloons: toNumber(fan.balloons),
+  }));
+}
+
+function normalizeMonthlyStats(
+  value: unknown,
+  fallbackPeriod: Period,
+): MonthlyStats {
+  const stats = isRecord(value) ? value : {};
+
+  return {
+    year: toNumber(stats.year, fallbackPeriod.year),
+    month: toNumber(stats.month, fallbackPeriod.month),
+    total_balloons: toNumber(stats.total_balloons),
+    daily_balloons: normalizeDailyBalloons(stats.daily_balloons),
+    fans: normalizeFans(stats.fans),
+  };
+}
+
+function normalizeRankingItem(
+  value: Partial<RankingItem>,
+  currentPeriod: Period,
+  previousPeriod: Period,
+): RankingItem | null {
+  if (!value.success) {
+    return null;
+  }
+
+  const userId = String(value.user_id ?? "");
+  const crewName = String(value.crew_name ?? "");
+
+  if (!userId || !crewName) {
+    return null;
+  }
+
+  return {
+    crew_name: crewName,
+    user_id: userId,
+    nickname: String(value.nickname ?? userId),
+    profile_image_url:
+      typeof value.profile_image_url === "string" && value.profile_image_url
+        ? value.profile_image_url
+        : getSoopProfileImageUrl(userId),
+    broadcast_start:
+      typeof value.broadcast_start === "string" ? value.broadcast_start : null,
+    is_live: Boolean(value.is_live),
+    is_password_broadcast: Boolean(value.is_password_broadcast),
+    current_month: normalizeMonthlyStats(value.current_month, currentPeriod),
+    previous_month: normalizeMonthlyStats(value.previous_month, previousPeriod),
+    success: true,
+  };
+}
+
+function normalizeResult(raw: RawNaksooResult): NaksooResult {
+  const now = getKstDateParts();
+  const fallbackCurrentPeriod = { year: now.year, month: now.month };
+  const currentPeriod = isPeriod(raw.current_period)
+    ? {
+        year: toNumber(raw.current_period.year, fallbackCurrentPeriod.year),
+        month: toNumber(raw.current_period.month, fallbackCurrentPeriod.month),
+      }
+    : fallbackCurrentPeriod;
+  const previousPeriod = isPeriod(raw.previous_period)
+    ? {
+        year: toNumber(
+          raw.previous_period.year,
+          getPreviousPeriod(currentPeriod).year,
+        ),
+        month: toNumber(
+          raw.previous_period.month,
+          getPreviousPeriod(currentPeriod).month,
+        ),
+      }
+    : getPreviousPeriod(currentPeriod);
+  const items = Array.isArray(raw.items)
+    ? raw.items
+        .map((item) => normalizeRankingItem(item, currentPeriod, previousPeriod))
+        .filter((item): item is RankingItem => item !== null)
+    : [];
+
+  return {
+    created_date:
+      typeof raw.created_date === "string"
+        ? raw.created_date
+        : formatDateParts(now),
+    created_time:
+      typeof raw.created_time === "string" ? raw.created_time : "00:00:00",
+    current_period: currentPeriod,
+    previous_period: previousPeriod,
+    items,
   };
 }
 
@@ -236,6 +385,14 @@ function getNaksooThresholds(
   successfulItems: RankingItem[],
   result: NaksooResult,
 ) {
+  if (successfulItems.length === 0) {
+    return {
+      correctionRate: 1,
+      totalFloor: 0,
+      perTargetThreshold: 0,
+    };
+  }
+
   const dataDay = Number(result.created_date.slice(8, 10));
   const daysInMonth = new Date(
     result.current_period.year,
@@ -531,21 +688,28 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
 }
 
 async function getCrewCardData() {
+  const emptyData = () => makeCrewCardData(normalizeResult({ items: [] }));
   const url = new URL(DATA_URL);
   url.searchParams.set("cache_bust", Date.now().toString());
 
-  const response = await fetch(url.toString(), {
-    cache: "no-store",
-    headers: {
-      "Cache-Control": "no-cache",
-    },
-  });
+  try {
+    const response = await fetch(url.toString(), {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache",
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error(`데이터를 불러오지 못했습니다. (${response.status})`);
+    if (!response.ok) {
+      return emptyData();
+    }
+
+    return makeCrewCardData(
+      normalizeResult((await response.json()) as RawNaksooResult),
+    );
+  } catch {
+    return emptyData();
   }
-
-  return makeCrewCardData((await response.json()) as NaksooResult);
 }
 
 export default async function Home() {
