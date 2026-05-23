@@ -1,5 +1,4 @@
-import Image from "next/image";
-import CrewCard from "./crew-card";
+import CrewDashboard from "./crew-dashboard";
 
 const DATA_URL =
   "https://api.github.com/repos/jojimedia/naksoo-project/contents/frontend/public/data/result.json?ref=main";
@@ -715,68 +714,5 @@ async function getCrewCardData() {
 export default async function Home() {
   const data = await getCrewCardData();
 
-  return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#1D4ED8_0%,transparent_28%),radial-gradient(circle_at_top_right,#0F766E_0%,transparent_26%),linear-gradient(180deg,#020617_0%,#0F172A_48%,#020617_100%)] text-slate-100">
-      <div className="mx-auto max-w-[1920px] px-5 pt-5 pb-10">
-        <header className="mb-2 text-center">
-          <h1 className="flex items-center justify-center gap-3 text-[25px] font-black leading-none tracking-tight text-white md:gap-4 md:text-[38px]">
-            <Image
-              src="/images/starballoon.png"
-              alt=""
-              width={72}
-              height={72}
-              priority
-              className="h-10 w-auto object-contain md:h-16"
-            />
-            <span>크루별 개인 방송 낙수표</span>
-          </h1>
-
-          <button className="mt-1 text-sm font-medium leading-tight text-slate-400 md:text-lg">
-            {Number(data.created_date.slice(0, 4))}년{" "}
-            {Number(data.created_date.slice(5, 7))}월{" "}
-            {Number(data.created_date.slice(8, 10))}일{" "}
-            {data.created_time.slice(0, 5)} 업데이트 출처: 풍투데이
-          </button>
-
-          <div>
-            <p className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold leading-tight text-slate-500 md:text-sm">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                className="shrink-0 fill-current"
-              >
-                <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
-                <path d="M11 11h2v6h-2zm0-4h2v2h-2z" />
-              </svg>
-              <span>현재 크루 방송 출연자 기준으로 집계됩니다.</span>
-            </p>
-          </div>
-        </header>
-
-        <div className="mx-auto grid max-w-[420px] grid-cols-1 gap-2 md:max-w-[820px] md:grid-cols-2 lg:max-w-[1210px] lg:grid-cols-3 xl:max-w-[1620px] xl:grid-cols-4 2xl:max-w-none 2xl:grid-cols-5">
-          {data.crews.map((crew, index) => (
-            <CrewCard key={crew.crew_name} crew={crew} index={index} />
-          ))}
-        </div>
-
-        <footer className="mx-auto mt-8 max-w-[720px] border-t border-white/10 px-2 pt-6 text-center text-sm font-medium text-slate-400">
-          <section>
-            <h2 className="text-base font-black text-slate-200">문의 / 요청</h2>
-            <p className="mt-2">데이터 수정 및 오류 제보는 오픈카톡으로 보내주세요</p>
-            <a
-              href="https://open.kakao.com/o/gPGWUCsi"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-sm font-black text-amber-200 transition-colors hover:border-amber-300/45 hover:bg-amber-300/15"
-            >
-              카카오톡 오픈채팅 문의하기
-            </a>
-          </section>
-        </footer>
-      </div>
-    </main>
-  );
+  return <CrewDashboard data={data} />;
 }
