@@ -219,63 +219,75 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
 
   return (
     <main className="min-h-screen bg-[#fcf8ff] bg-[radial-gradient(#e4e1ec_1px,transparent_1px)] bg-[length:20px_20px] text-[#1b1b23]">
-      <header className="sticky top-0 z-40 grid min-h-16 w-full grid-cols-1 items-center gap-2 border-b border-[#c7c4d6] bg-[#fcf8ff] px-3 py-2 md:grid-cols-[minmax(240px,1fr)_minmax(420px,720px)_minmax(240px,1fr)] md:px-8">
-        <h1 className="text-center text-[26px] font-semibold leading-none text-[#3f3bbd] md:text-left md:text-[33px]">
-          엑셀 크루 낙수표
-        </h1>
+      <header className="sticky top-0 z-40 w-full border-b border-[#c7c4d6] bg-[#fcf8ff]">
+        <div className="mx-auto grid min-h-16 w-full max-w-[1920px] grid-cols-1 items-center gap-2 px-3 py-2 md:grid-cols-[minmax(240px,1fr)_minmax(420px,720px)_minmax(240px,1fr)] md:px-8">
+          <h1 className="text-center text-[26px] font-semibold leading-none text-[#3f3bbd] md:text-left md:text-[33px]">
+            엑셀 크루 낙수표
+          </h1>
 
-        <div className="flex items-center gap-2">
-          <label className="relative min-w-0 flex-1">
-            <span className="sr-only">
-              {searchMode === "donors" ? "큰손검색" : "멤버검색"}
-            </span>
-            <span
-              className="pointer-events-none absolute top-1/2 left-4 flex -translate-y-1/2 text-[#737686]"
-              aria-hidden="true"
-              dangerouslySetInnerHTML={{
-                __html:
-                  '<box-icon name="search" color="#737686" size="20px"></box-icon>',
-              }}
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={searchMode === "donors" ? "큰손검색" : "멤버검색"}
-              className="h-10 w-full rounded-full border border-[#c7c4d6] bg-white/90 px-11 text-center text-[16px] font-medium text-[#1b1b23] outline-none transition focus:border-[#3f3bbd] focus:ring-2 focus:ring-[#3f3bbd]/20"
-            />
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">
+                {searchMode === "donors" ? "큰손검색" : "멤버검색"}
+              </span>
+              <span
+                className="pointer-events-none absolute top-1/2 left-4 flex -translate-y-1/2 text-[#737686]"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    '<box-icon name="search" color="#737686" size="20px"></box-icon>',
+                }}
+              />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchMode === "donors" ? "큰손검색" : "멤버검색"}
+                className="h-10 w-full rounded-full border border-[#c7c4d6] bg-white/90 pr-10 pl-11 text-center text-[16px] font-medium text-[#1b1b23] outline-none transition focus:border-[#3f3bbd] focus:ring-2 focus:ring-[#3f3bbd]/20"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  className="absolute top-1/2 right-2.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-[#e4e1ec] text-[16px] font-semibold leading-none text-[#464554] transition hover:bg-[#d5d1e2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3f3bbd]"
+                  aria-label="검색어 지우기"
+                  onClick={() => setQuery("")}
+                >
+                  ×
+                </button>
+              ) : null}
+            </label>
 
-          <div className="inline-flex shrink-0 rounded-full border border-[#c7c4d6] bg-white p-1">
-            <button
-              type="button"
-              className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
-                searchMode === "members"
-                  ? "bg-[#3f3bbd] text-white"
-                  : "text-[#464554] hover:text-[#3f3bbd]"
-              }`}
-              onClick={() => setSearchMode("members")}
-            >
-              멤버
-            </button>
-            <button
-              type="button"
-              className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
-                searchMode === "donors"
-                  ? "bg-[#3f3bbd] text-white"
-                  : "text-[#464554] hover:text-[#3f3bbd]"
-              }`}
-              onClick={() => setSearchMode("donors")}
-            >
-              큰손
+            <div className="inline-flex shrink-0 rounded-full border border-[#c7c4d6] bg-white p-1">
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
+                  searchMode === "members"
+                    ? "bg-[#3f3bbd] text-white"
+                    : "text-[#464554] hover:text-[#3f3bbd]"
+                }`}
+                onClick={() => setSearchMode("members")}
+              >
+                멤버
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
+                  searchMode === "donors"
+                    ? "bg-[#3f3bbd] text-white"
+                    : "text-[#464554] hover:text-[#3f3bbd]"
+                }`}
+                onClick={() => setSearchMode("donors")}
+              >
+                큰손
+              </button>
+            </div>
+          </div>
+
+          <div className="hidden justify-end md:flex">
+            <button className="rounded-full border border-[#c7c4d6]/70 bg-[#f5f2fd]/55 px-2.5 py-1.5 text-[11px] font-medium leading-tight text-[#737686]">
+              {formatUpdatedAt(data)}
             </button>
           </div>
-        </div>
-
-        <div className="hidden justify-end md:flex">
-          <button className="rounded-full border border-[#c7c4d6]/70 bg-[#f5f2fd]/55 px-2.5 py-1.5 text-[11px] font-medium leading-tight text-[#737686]">
-            {formatUpdatedAt(data)}
-          </button>
         </div>
       </header>
 
