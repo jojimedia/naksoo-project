@@ -239,7 +239,8 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                 }}
               />
               <input
-                type="search"
+                type="text"
+                inputMode="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={searchMode === "donors" ? "큰손검색" : "멤버검색"}
