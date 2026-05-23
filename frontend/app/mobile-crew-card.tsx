@@ -17,7 +17,7 @@ export default function MobileCrewCard({
   const shouldShowBody = forceOpen || isOpen;
 
   return (
-    <section className="w-full min-w-0 overflow-hidden rounded-xl border border-[#c7c4d6] bg-white shadow-sm [overflow-anchor:none] md:hidden">
+    <section className="w-full min-w-0 overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm [overflow-anchor:none] md:hidden">
       <button
         type="button"
         className="block w-full cursor-pointer text-left [-webkit-tap-highlight-color:transparent]"
@@ -30,7 +30,15 @@ export default function MobileCrewCard({
       >
         {header}
       </button>
-      <div className={shouldShowBody ? "block" : "hidden"}>{body}</div>
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+          shouldShowBody
+            ? "grid-rows-[1fr] opacity-100"
+            : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">{body}</div>
+      </div>
     </section>
   );
 }

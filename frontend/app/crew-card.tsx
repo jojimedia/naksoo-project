@@ -107,7 +107,7 @@ function getScoreColor(value: number) {
     return "text-[#fb923c]";
   }
 
-  return "text-[#111827]";
+  return "text-[#e5e7eb]";
 }
 
 function StatBox({
@@ -122,7 +122,7 @@ function StatBox({
       <p className="text-[9px] font-bold uppercase leading-none opacity-80">
         {label}
       </p>
-      <p className="mt-1 text-[17px] font-semibold leading-none tabular-nums">
+      <p className="mt-1 text-[18px] font-semibold leading-none tabular-nums">
         {formatNumber(value)}
       </p>
     </div>
@@ -141,7 +141,7 @@ function CrewCardHeader({
   return (
     <div className="bg-[var(--crew-header)] p-2.5 text-white" style={style}>
       <div className="mb-1.5 flex items-center justify-between">
-        <h2 className="truncate text-[21px] font-semibold leading-7 text-white">
+        <h2 className="truncate text-[22px] font-semibold leading-7 text-white">
           {crew.crew_name}
         </h2>
         <div className="rounded bg-white/20 px-2 py-0.5 text-[10px] font-semibold leading-4 text-white tabular-nums">
@@ -172,14 +172,14 @@ function PatronRow({ patron }: { patron: NaksooGod | CrewKing }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="border-b border-[#c7c4d6]/30">
-      <div className="grid min-h-[26px] grid-cols-[30px_minmax(0,1fr)_104px] items-center gap-x-1 px-0.5 py-0.5 text-[15px] tracking-tight">
-        <p className="text-[#464554] tabular-nums">
+    <div className="border-b border-[#3a3548]/70">
+      <div className="grid min-h-[27px] grid-cols-[30px_minmax(0,1fr)_112px] items-center gap-x-1 px-0.5 py-0.5 text-[16px] tracking-tight">
+        <p className="text-[#a8a2b8] tabular-nums">
           {patron.rank}
         </p>
         <button
           type="button"
-          className="block min-w-0 cursor-pointer truncate text-left font-normal text-[#1b1b23] hover:text-[#3f3bbd] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3f3bbd]"
+          className="block min-w-0 cursor-pointer truncate text-left font-normal text-[#e5e7eb] hover:text-[#a99cff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff]"
           aria-expanded={isOpen}
           aria-label={`${patron.nickname} 후원 대상 ${isOpen ? "접기" : "열기"}`}
           onClick={() => setIsOpen((current) => !current)}
@@ -198,22 +198,22 @@ function PatronRow({ patron }: { patron: NaksooGod | CrewKing }) {
 
 function NaksooTargetRanking({ targets }: { targets: NaksooGodTarget[] }) {
   return (
-    <div className="mx-1 mb-3 rounded border border-[#c7c4d6] bg-[#f5f2fd] px-2 py-2">
+    <div className="mx-1 mb-3 rounded border border-[#3a3548] bg-[#211e2b] px-2 py-2">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-extrabold text-[#131b2e]">후원 대상</p>
-        <p className="text-xs font-bold text-[#737686]">전체 {targets.length}명</p>
+        <p className="text-sm font-extrabold text-[#e5e7eb]">후원 대상</p>
+        <p className="text-xs font-bold text-[#a8a2b8]">전체 {targets.length}명</p>
       </div>
 
       <div className="tracking-tighter">
         {targets.map((target, index) => (
           <div
             key={`${index + 1}-${target.nickname}`}
-            className="grid min-h-7 grid-cols-[34px_minmax(0,1fr)_96px] items-center gap-1 border-t border-[#c7c4d6]/30 px-0.5 py-0.5 first:border-t-0"
+            className="grid min-h-7 grid-cols-[34px_minmax(0,1fr)_104px] items-center gap-1 border-t border-[#3a3548]/70 px-0.5 py-0.5 first:border-t-0"
           >
-            <p className="text-center text-xs font-extrabold tabular-nums text-[#737686]">
+            <p className="text-center text-xs font-extrabold tabular-nums text-[#a8a2b8]">
               {index + 1}
             </p>
-            <p className="min-w-0 truncate text-sm font-normal text-[#1b1b23]">
+            <p className="min-w-0 truncate text-sm font-normal text-[#e5e7eb]">
               {target.nickname}
             </p>
             <p className={`text-right text-[13px] font-extrabold tabular-nums ${getScoreColor(target.balloons)}`}>
@@ -230,10 +230,12 @@ function CrewCardBody({
   crew,
   membersOnly = false,
   expandMembers = false,
+  searchQuery = "",
 }: {
   crew: CrewCardData;
   membersOnly?: boolean;
   expandMembers?: boolean;
+  searchQuery?: string;
 }) {
   const [mode, setMode] = useState<CrewBodyMode>("members");
   const [showFormula, setShowFormula] = useState(false);
@@ -257,10 +259,11 @@ function CrewCardBody({
           key={member.user_id}
           member={member}
           defaultOpen={expandMembers}
+          searchQuery={searchQuery}
         />
       ));
     },
-    [crew.members, crew.naksoo_gods, crew.crew_kings, expandMembers, mode],
+    [crew.members, crew.naksoo_gods, crew.crew_kings, expandMembers, mode, searchQuery],
   );
   const emptyMessage =
     mode === "kings"
@@ -276,7 +279,7 @@ function CrewCardBody({
         : crew.member_count;
 
   return (
-    <div className="bg-white p-1">
+    <div className="bg-[#17151f] p-1">
       {membersOnly ? null : (
       <div className="relative mb-1 flex items-center justify-between px-0.5">
         <div className="flex items-center gap-1">
@@ -284,8 +287,8 @@ function CrewCardBody({
             type="button"
             className={`rounded border px-2.5 py-1 text-[11px] font-bold transition-colors ${
               mode === "gods"
-                ? "border-[#bc4800]/40 bg-[#fffbeb] text-[#7d2d00]"
-                : "border-[#cbd5e1] bg-white text-[#434655] hover:border-[#bc4800]/40 hover:text-[#7d2d00]"
+                ? "border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#fbbf24]"
+                : "border-[#3a3548] bg-[#17151f] text-[#a8a2b8] hover:border-[#f59e0b]/40 hover:text-[#fbbf24]"
             }`}
             aria-pressed={mode === "gods"}
             onClick={() => {
@@ -300,8 +303,8 @@ function CrewCardBody({
             type="button"
             className={`rounded border px-2.5 py-1 text-[11px] font-bold transition-colors ${
               mode === "kings"
-                ? "border-[#004ac6]/40 bg-[#eef2ff] text-[#003ea8]"
-                : "border-[#cbd5e1] bg-white text-[#434655] hover:border-[#004ac6]/40 hover:text-[#003ea8]"
+                ? "border-[#60a5fa]/40 bg-[#60a5fa]/10 text-[#93c5fd]"
+                : "border-[#3a3548] bg-[#17151f] text-[#a8a2b8] hover:border-[#60a5fa]/40 hover:text-[#93c5fd]"
             }`}
             aria-pressed={mode === "kings"}
             onClick={() => {
@@ -314,14 +317,14 @@ function CrewCardBody({
         </div>
 
         <div className="flex items-center gap-1.5">
-          <p className="text-xs font-bold tabular-nums text-[#737686]">
+          <p className="text-xs font-bold tabular-nums text-[#a8a2b8]">
             {activeCount}명
           </p>
 
           {mode === "gods" ? (
             <button
               type="button"
-              className="flex h-5 w-5 items-center justify-center rounded border border-[#cbd5e1] bg-white text-[10px] font-bold text-[#737686] transition-colors hover:border-[#bc4800]/40 hover:text-[#7d2d00]"
+              className="flex h-5 w-5 items-center justify-center rounded border border-[#3a3548] bg-[#17151f] text-[10px] font-bold text-[#a8a2b8] transition-colors hover:border-[#f59e0b]/40 hover:text-[#fbbf24]"
               aria-label={`낙수의 신 계산식 ${showFormula ? "닫기" : "열기"}`}
               aria-expanded={showFormula}
               onClick={() => setShowFormula((current) => !current)}
@@ -332,12 +335,12 @@ function CrewCardBody({
         </div>
 
         {mode === "gods" && showFormula ? (
-          <div className="absolute top-9 left-1 z-10 w-[min(330px,calc(100vw-56px))] rounded border border-[#cbd5e1] bg-white p-3 text-xs font-bold leading-5 text-[#434655] shadow-lg shadow-slate-200">
+          <div className="absolute top-9 left-1 z-10 w-[min(330px,calc(100vw-56px))] rounded border border-[#3a3548] bg-[#17151f] p-3 text-xs font-bold leading-5 text-[#a8a2b8] shadow-lg shadow-black/30">
             <div className="mb-2 flex items-center justify-between">
-              <p className="font-extrabold text-[#7d2d00]">낙수의 신 계산식</p>
+              <p className="font-extrabold text-[#fbbf24]">낙수의 신 계산식</p>
               <button
                 type="button"
-                className="rounded px-2 text-sm font-extrabold text-[#737686] hover:text-[#131b2e]"
+                className="rounded px-2 text-sm font-extrabold text-[#a8a2b8] hover:text-[#e5e7eb]"
                 aria-label="낙수의 신 계산식 닫기"
                 onClick={() => setShowFormula(false)}
               >
@@ -353,7 +356,7 @@ function CrewCardBody({
       </div>
       )}
 
-      <div className="grid min-h-6 grid-cols-[30px_minmax(0,1fr)_104px] items-center gap-x-1 border-b border-[#c7c4d6] px-0.5 py-0.5 text-[13px] font-semibold tracking-tight text-[#464554]">
+      <div className="grid min-h-6 grid-cols-[30px_minmax(0,1fr)_112px] items-center gap-x-1 border-b border-[#3a3548] px-0.5 py-0.5 text-[14px] font-semibold tracking-tight text-[#a8a2b8]">
         <p>순위</p>
         <p>닉네임</p>
         <p className="text-right">별풍선</p>
@@ -363,7 +366,7 @@ function CrewCardBody({
         {rows.length > 0 ? (
           rows
         ) : (
-          <p className="rounded border border-[#e2e8f0] bg-[#f8fafc] px-3 py-6 text-center text-sm font-bold text-[#737686]">
+          <p className="rounded border border-[#3a3548] bg-[#211e2b] px-3 py-6 text-center text-sm font-bold text-[#a8a2b8]">
             {emptyMessage}
           </p>
         )}
@@ -377,11 +380,13 @@ export default function CrewCard({
   index,
   membersOnly = false,
   expandMembers = false,
+  searchQuery = "",
 }: {
   crew: CrewCardData;
   index: number;
   membersOnly?: boolean;
   expandMembers?: boolean;
+  searchQuery?: string;
 }) {
   const headerColor = getCrewHeaderColor(index);
   const header = <CrewCardHeader crew={crew} headerColor={headerColor} />;
@@ -390,6 +395,7 @@ export default function CrewCard({
       crew={crew}
       membersOnly={membersOnly}
       expandMembers={expandMembers}
+      searchQuery={searchQuery}
     />
   );
 
@@ -397,7 +403,7 @@ export default function CrewCard({
     <>
       <MobileCrewCard header={header} body={body} forceOpen={expandMembers} />
 
-      <section className="hidden overflow-hidden rounded-xl border border-[#c7c4d6] bg-white transition-all duration-300 hover:shadow-xl md:block">
+      <section className="hidden overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] transition-all duration-300 hover:shadow-xl hover:shadow-black/25 md:block">
         {header}
         {body}
       </section>
