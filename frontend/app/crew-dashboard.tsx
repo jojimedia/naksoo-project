@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import CrewCard, { type CrewCardData } from "./crew-card";
+import CrewCard, { getCrewHeaderColor, type CrewCardData } from "./crew-card";
+import StreamerMemberRow from "./streamer-member-row";
 
 type CrewDashboardData = {
   created_date: string;
@@ -23,6 +24,12 @@ type DonorSearchResult = {
       balloons: number;
     }[];
   }[];
+};
+
+type OverallMember = {
+  crewName: string;
+  crewColor: string;
+  member: CrewCardData["members"][number];
 };
 
 type UpdateStatus = {
@@ -47,20 +54,49 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
 
-function getScoreColor(value: number) {
+function getScoreTone(value: number) {
   if (value >= 1_000_000) {
-    return "text-[#dc2626]";
+    return {
+      row: "bg-[#F87171]/72",
+      muted: "text-[#3b1117]",
+      name: "text-[#3b1117]",
+      score: "text-[#3b1117]",
+    };
   }
 
   if (value >= 700_000) {
-    return "text-[#059669]";
+    return {
+      row: "bg-[#FACC15]/72",
+      muted: "text-[#3a2600]",
+      name: "text-[#3a2600]",
+      score: "text-[#3a2600]",
+    };
   }
 
   if (value >= 500_000) {
-    return "text-[#fb923c]";
+    return {
+      row: "bg-[#22D3EE]/72",
+      muted: "text-[#062f36]",
+      name: "text-[#062f36]",
+      score: "text-[#062f36]",
+    };
   }
 
-  return "text-[#e5e7eb]";
+  if (value >= 200_000) {
+    return {
+      row: "bg-[#C4B5FD]/72",
+      muted: "text-[#211247]",
+      name: "text-[#211247]",
+      score: "text-[#211247]",
+    };
+  }
+
+  return {
+    row: "",
+    muted: "text-[#a8a2b8]",
+    name: "text-[#e5e7eb]",
+    score: "text-[#e5e7eb]",
+  };
 }
 
 function HighlightText({ text, query }: { text: string; query: string }) {
@@ -126,6 +162,8 @@ function DonorResultCard({
   donor: DonorSearchResult;
   query: string;
 }) {
+  const donorTone = getScoreTone(donor.totalBalloons);
+
   return (
     <section className="w-full max-w-[520px] overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm">
       <div className="bg-[#5b4bdb] p-3 text-white">
@@ -137,7 +175,7 @@ function DonorResultCard({
             <p className="text-[10px] font-bold leading-none opacity-80">
               전체 별풍선
             </p>
-            <p className="mt-1 text-[19px] font-semibold leading-none tabular-nums">
+            <p className={`mt-1 text-[19px] font-bold leading-none tabular-nums ${donorTone.score}`}>
               {formatNumber(donor.totalBalloons)}
             </p>
           </div>
@@ -145,50 +183,108 @@ function DonorResultCard({
       </div>
 
       <div className="p-2">
-        <div className="grid min-h-6 grid-cols-[92px_minmax(0,1fr)_112px] items-center gap-x-1 border-b border-[#3a3548] px-1 py-0.5 text-[14px] font-semibold tracking-tight text-[#a8a2b8]">
-            <p>후원크루</p>
-            <p>스트리머</p>
-            <p className="text-right">별풍선</p>
+        <div className="grid min-h-6 grid-cols-[92px_minmax(0,1fr)_112px] items-center gap-x-0.5 border-b border-[#3a3548] px-1 py-0.5 text-[14px] font-semibold tracking-tight text-[#a8a2b8]">
+          <p>후원크루</p>
+          <p>스트리머</p>
+          <p className="text-right">별풍선</p>
         </div>
 
         {donor.crews.map((crew) => (
-          <div key={crew.crewName} className="border-b border-[#3a3548]/70 py-1">
-            <div className="grid grid-cols-[92px_minmax(0,1fr)_112px] items-center gap-x-1 px-1 text-[16px]">
-              <p className="truncate font-semibold text-[#a99cff]">
-                {crew.crewName}
-              </p>
-              <p className="truncate text-[#a8a2b8]">
-                {crew.streamers.length}명
-              </p>
-              <p
-                className={`text-right font-semibold tabular-nums ${getScoreColor(
-                  crew.balloons,
-                )}`}
-              >
-                {formatNumber(crew.balloons)}
-              </p>
-            </div>
-            <div className="mt-1 space-y-0.5">
-              {crew.streamers.map((streamer) => (
-                <div
-                  key={`${crew.crewName}-${streamer.nickname}`}
-                  className="grid min-h-[25px] grid-cols-[92px_minmax(0,1fr)_112px] items-center gap-x-1 px-1 text-[15px]"
-                >
-                  <span />
-                  <p className="truncate text-[#e5e7eb]">
-                    <HighlightText text={streamer.nickname} query={query} />
-                  </p>
-                  <p
-                    className={`text-right font-semibold tabular-nums ${getScoreColor(
-                      streamer.balloons,
-                    )}`}
-                  >
-                    {formatNumber(streamer.balloons)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <DonorCrewRow key={crew.crewName} crew={crew} query={query} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DonorCrewRow({
+  crew,
+  query,
+}: {
+  crew: DonorSearchResult["crews"][number];
+  query: string;
+}) {
+  const tone = getScoreTone(crew.balloons);
+
+  return (
+    <div className="border-b border-[#3a3548]/70 py-1">
+      <div
+        className={`grid grid-cols-[92px_minmax(0,1fr)_112px] items-center gap-x-1 rounded px-1 text-[16px] ${tone.row}`}
+      >
+        <p className={`truncate font-semibold ${tone.name}`}>{crew.crewName}</p>
+        <p className={`truncate font-semibold ${tone.muted}`}>
+          {crew.streamers.length}명
+        </p>
+        <p className={`text-right font-bold tabular-nums ${tone.score}`}>
+          {formatNumber(crew.balloons)}
+        </p>
+      </div>
+      <div className="mt-1 space-y-0.5">
+        {crew.streamers.map((streamer) => (
+          <DonorStreamerRow
+            key={`${crew.crewName}-${streamer.nickname}`}
+            streamer={streamer}
+            query={query}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DonorStreamerRow({
+  streamer,
+  query,
+}: {
+  streamer: DonorSearchResult["crews"][number]["streamers"][number];
+  query: string;
+}) {
+  const tone = getScoreTone(streamer.balloons);
+
+  return (
+    <div
+      className={`grid min-h-[25px] grid-cols-[92px_minmax(0,1fr)_112px] items-center gap-x-1 rounded px-1 text-[15px] ${tone.row}`}
+    >
+      <span />
+      <p className={`truncate font-semibold ${tone.name}`}>
+        <HighlightText text={streamer.nickname} query={query} />
+      </p>
+      <p className={`text-right font-bold tabular-nums ${tone.score}`}>
+        {formatNumber(streamer.balloons)}
+      </p>
+    </div>
+  );
+}
+
+function OverallRankingCard({ rows }: { rows: OverallMember[] }) {
+  return (
+    <section className="w-full max-w-[520px] overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm">
+      <div className="bg-[#5b4bdb] p-3 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[23px] font-semibold leading-7">전체순위</h2>
+          <p className="rounded bg-black/10 px-2.5 py-1.5 text-[12px] font-bold">
+            {rows.length}명
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-[#17151f] p-1">
+        <div className="grid min-h-6 grid-cols-[34px_92px_minmax(0,1fr)_78px] items-center gap-x-3 border-b border-[#3a3548] px-0.5 py-0.5 text-[14px] font-semibold tracking-tight text-[#a8a2b8]">
+          <p>순위</p>
+          <p>소속크루</p>
+          <p>닉네임</p>
+          <p className="text-right">별풍선</p>
+        </div>
+
+        {rows.map((row) => (
+          <StreamerMemberRow
+            key={`${row.crewName}-${row.member.user_id}`}
+            member={row.member}
+            showCrew
+            crewName={row.crewName}
+            crewColor={row.crewColor}
+            disableScoreTone
+          />
         ))}
       </div>
     </section>
@@ -198,6 +294,7 @@ function DonorResultCard({
 export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("members");
+  const [showOverall, setShowOverall] = useState(false);
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const crews = useMemo(() => {
@@ -259,7 +356,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
 
     for (const crew of data.crews) {
       for (const member of crew.members) {
-        for (const fan of member.monthly_top_fans) {
+        for (const fan of member.monthly_fans) {
           const nickname = normalizeSearch(fan.nickname);
           const userId = normalizeSearch(fan.user_id);
 
@@ -312,10 +409,34 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       .sort((a, b) => b.totalBalloons - a.totalBalloons);
   }, [data.crews, isSearching, search, searchMode]);
   const hasResults =
-    searchMode === "donors" && isSearching
+    showOverall && !isSearching
+      ? true
+      : searchMode === "donors" && isSearching
       ? donorResults.length > 0
       : crews.length > 0;
   const updateStatus = getUpdateStatus(data);
+  const overallRows = useMemo(
+    () =>
+      data.crews
+        .flatMap((crew, crewIndex) =>
+          crew.members.map((member) => ({
+            crewName: crew.crew_name,
+            crewColor: getCrewHeaderColor(crewIndex),
+            member,
+          })),
+        )
+        .sort(
+          (a, b) => b.member.current_balloons - a.member.current_balloons,
+        )
+        .map((row, index) => ({
+          ...row,
+          member: {
+            ...row.member,
+            rank: index + 1,
+          },
+        })),
+    [data.crews],
+  );
 
   return (
     <main className="min-h-screen bg-[#111018] bg-[radial-gradient(#2b2836_1px,transparent_1px)] bg-[length:20px_20px] text-[#e5e7eb]">
@@ -362,24 +483,45 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               <button
                 type="button"
                 className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
-                  searchMode === "members"
+                  !showOverall && searchMode === "members"
                     ? "bg-[#5b4bdb] text-white"
                     : "text-[#a8a2b8] hover:text-[#d8d4ff]"
                 }`}
-                onClick={() => setSearchMode("members")}
+                onClick={() => {
+                  setShowOverall(false);
+                  setSearchMode("members");
+                }}
               >
                 멤버
               </button>
               <button
                 type="button"
                 className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
-                  searchMode === "donors"
+                  !showOverall && searchMode === "donors"
                     ? "bg-[#5b4bdb] text-white"
                     : "text-[#a8a2b8] hover:text-[#d8d4ff]"
                 }`}
-                onClick={() => setSearchMode("donors")}
+                onClick={() => {
+                  setShowOverall(false);
+                  setSearchMode("donors");
+                }}
               >
                 큰손
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
+                  showOverall
+                    ? "bg-[#5b4bdb] text-white"
+                    : "text-[#a8a2b8] hover:text-[#d8d4ff]"
+                }`}
+                aria-pressed={showOverall}
+                onClick={() => {
+                  setQuery("");
+                  setShowOverall((current) => !current);
+                }}
+              >
+                전체
               </button>
             </div>
           </div>
@@ -406,12 +548,14 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         {hasResults ? (
           <div
             className={`mx-auto gap-3 ${
-              isSearching
+              isSearching || showOverall
                 ? "flex max-w-[520px] flex-col items-center"
                 : "grid max-w-[420px] grid-cols-1 md:max-w-[820px] md:grid-cols-2 lg:max-w-none lg:grid-cols-4"
             }`}
           >
-            {searchMode === "donors" && isSearching
+            {showOverall && !isSearching ? (
+              <OverallRankingCard rows={overallRows} />
+            ) : searchMode === "donors" && isSearching
               ? donorResults.map((donor) => (
                   <DonorResultCard
                     key={donor.key}

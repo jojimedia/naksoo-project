@@ -30,6 +30,7 @@ type CrewMember = {
   display_day_balloons: number;
   current_daily_balloons: DailyBalloons[];
   previous_daily_balloons: DailyBalloons[];
+  monthly_fans: Fan[];
   monthly_top_fans: Fan[];
 };
 
@@ -80,7 +81,7 @@ const crewHeaderColors = [
   "#BE123C",
 ];
 
-function getCrewHeaderColor(index: number) {
+export function getCrewHeaderColor(index: number) {
   if (index < crewHeaderColors.length) {
     return crewHeaderColors[index];
   }
@@ -94,20 +95,49 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
 
-function getScoreColor(value: number) {
+function getScoreTone(value: number) {
   if (value >= 1_000_000) {
-    return "text-[#dc2626]";
+    return {
+      row: "bg-[#F87171]/72",
+      muted: "text-[#3b1117]",
+      name: "text-[#3b1117]",
+      score: "text-[#3b1117]",
+    };
   }
 
   if (value >= 700_000) {
-    return "text-[#059669]";
+    return {
+      row: "bg-[#FACC15]/72",
+      muted: "text-[#3a2600]",
+      name: "text-[#3a2600]",
+      score: "text-[#3a2600]",
+    };
   }
 
   if (value >= 500_000) {
-    return "text-[#fb923c]";
+    return {
+      row: "bg-[#22D3EE]/72",
+      muted: "text-[#062f36]",
+      name: "text-[#062f36]",
+      score: "text-[#062f36]",
+    };
   }
 
-  return "text-[#e5e7eb]";
+  if (value >= 200_000) {
+    return {
+      row: "bg-[#C4B5FD]/72",
+      muted: "text-[#211247]",
+      name: "text-[#211247]",
+      score: "text-[#211247]",
+    };
+  }
+
+  return {
+    row: "",
+    muted: "text-[#a8a2b8]",
+    name: "text-[#e5e7eb]",
+    score: "text-[#e5e7eb]",
+  };
 }
 
 function StatBox({
@@ -170,23 +200,26 @@ function CrewCardHeader({
 
 function PatronRow({ patron }: { patron: NaksooGod | CrewKing }) {
   const [isOpen, setIsOpen] = useState(false);
+  const tone = getScoreTone(patron.total_balloons);
 
   return (
     <div className="border-b border-[#3a3548]/70">
-      <div className="grid min-h-[27px] grid-cols-[30px_minmax(0,1fr)_112px] items-center gap-x-1 px-0.5 py-0.5 text-[16px] tracking-tight">
-        <p className="text-[#a8a2b8] tabular-nums">
+      <div
+        className={`grid min-h-[27px] grid-cols-[30px_minmax(0,1fr)_112px] items-center gap-x-1 rounded px-0.5 py-0.5 text-[16px] tracking-tight transition hover:ring-1 hover:ring-white/35 ${tone.row}`}
+      >
+        <p className={`font-semibold tabular-nums ${tone.muted}`}>
           {patron.rank}
         </p>
         <button
           type="button"
-          className="block min-w-0 cursor-pointer truncate text-left font-normal text-[#e5e7eb] hover:text-[#a99cff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff]"
+          className={`block min-w-0 cursor-pointer truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff] ${tone.name}`}
           aria-expanded={isOpen}
           aria-label={`${patron.nickname} 후원 대상 ${isOpen ? "접기" : "열기"}`}
           onClick={() => setIsOpen((current) => !current)}
         >
           {patron.nickname}
         </button>
-        <p className={`text-right font-semibold whitespace-nowrap tabular-nums ${getScoreColor(patron.total_balloons)}`}>
+        <p className={`text-right font-bold whitespace-nowrap tabular-nums ${tone.score}`}>
           {formatNumber(patron.total_balloons)}
         </p>
       </div>
@@ -206,22 +239,39 @@ function NaksooTargetRanking({ targets }: { targets: NaksooGodTarget[] }) {
 
       <div className="tracking-tighter">
         {targets.map((target, index) => (
-          <div
+          <NaksooTargetRow
             key={`${index + 1}-${target.nickname}`}
-            className="grid min-h-7 grid-cols-[34px_minmax(0,1fr)_104px] items-center gap-1 border-t border-[#3a3548]/70 px-0.5 py-0.5 first:border-t-0"
-          >
-            <p className="text-center text-xs font-extrabold tabular-nums text-[#a8a2b8]">
-              {index + 1}
-            </p>
-            <p className="min-w-0 truncate text-sm font-normal text-[#e5e7eb]">
-              {target.nickname}
-            </p>
-            <p className={`text-right text-[13px] font-extrabold tabular-nums ${getScoreColor(target.balloons)}`}>
-              {formatNumber(target.balloons)}
-            </p>
-          </div>
+            target={target}
+            rank={index + 1}
+          />
         ))}
       </div>
+    </div>
+  );
+}
+
+function NaksooTargetRow({
+  target,
+  rank,
+}: {
+  target: NaksooGodTarget;
+  rank: number;
+}) {
+  const tone = getScoreTone(target.balloons);
+
+  return (
+    <div
+      className={`grid min-h-7 grid-cols-[34px_minmax(0,1fr)_104px] items-center gap-1 border-t border-[#3a3548]/70 px-0.5 py-0.5 first:border-t-0 ${tone.row}`}
+    >
+      <p className={`text-center text-xs font-extrabold tabular-nums ${tone.muted}`}>
+        {rank}
+      </p>
+      <p className={`min-w-0 truncate text-sm font-semibold ${tone.name}`}>
+        {target.nickname}
+      </p>
+      <p className={`text-right text-[13px] font-extrabold tabular-nums ${tone.score}`}>
+        {formatNumber(target.balloons)}
+      </p>
     </div>
   );
 }

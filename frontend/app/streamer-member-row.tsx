@@ -20,6 +20,7 @@ type CrewMember = {
   change_balloons: number;
   change_rate: number;
   display_day_balloons: number;
+  monthly_fans: Fan[];
   monthly_top_fans: Fan[];
 };
 
@@ -56,20 +57,69 @@ function HighlightText({ text, query }: { text: string; query: string }) {
   );
 }
 
-function getScoreColor(value: number) {
+function getScoreTone(value: number) {
   if (value >= 1_000_000) {
-    return "text-[#dc2626]";
+    return {
+      row: "bg-[#F87171]/72",
+      muted: "text-[#3b1117]",
+      name: "text-[#3b1117]",
+      score: "text-[#3b1117]",
+    };
   }
 
   if (value >= 700_000) {
-    return "text-[#059669]";
+    return {
+      row: "bg-[#FACC15]/72",
+      muted: "text-[#3a2600]",
+      name: "text-[#3a2600]",
+      score: "text-[#3a2600]",
+    };
   }
 
   if (value >= 500_000) {
-    return "text-[#fb923c]";
+    return {
+      row: "bg-[#22D3EE]/72",
+      muted: "text-[#062f36]",
+      name: "text-[#062f36]",
+      score: "text-[#062f36]",
+    };
   }
 
-  return "text-[#e5e7eb]";
+  if (value >= 200_000) {
+    return {
+      row: "bg-[#C4B5FD]/72",
+      muted: "text-[#211247]",
+      name: "text-[#211247]",
+      score: "text-[#211247]",
+    };
+  }
+
+  return {
+    row: "",
+    muted: "text-[#a8a2b8]",
+    name: "text-[#e5e7eb]",
+    score: "text-[#e5e7eb]",
+  };
+}
+
+function FanRow({ fan }: { fan: Fan }) {
+  const tone = getScoreTone(fan.balloons);
+
+  return (
+    <div
+      className={`grid min-h-[27px] grid-cols-[30px_minmax(0,1fr)_104px] items-center gap-1 rounded border-t border-[#3a3548]/70 px-0.5 py-0.5 text-[15px] first:border-t-0 ${tone.row}`}
+    >
+      <p className={`text-center text-xs font-extrabold tabular-nums ${tone.muted}`}>
+        {fan.rank}
+      </p>
+      <p className={`min-w-0 truncate text-sm font-semibold ${tone.name}`}>
+        {fan.nickname}
+      </p>
+      <p className={`text-right text-[13px] font-bold tabular-nums ${tone.score}`}>
+        {formatNumber(fan.balloons)}
+      </p>
+    </div>
+  );
 }
 
 function FanRanking({
@@ -91,18 +141,20 @@ function FanRanking({
   return (
     <div className="mx-1 mb-3 rounded border border-[#3a3548] bg-[#211e2b] px-2 py-2">
       <div className="mb-2 grid grid-cols-[0.9fr_1.35fr_0.9fr] gap-1">
-        <div className="rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
-          <p className="text-[10px] font-semibold text-[#a8a2b8]">전월 별풍</p>
-          <p className="mt-0.5 text-xs font-semibold tabular-nums text-[#e5e7eb]">
+        <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
+          <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
+            전월 별풍
+          </p>
+          <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
             {formatNumber(previousBalloons)}
           </p>
         </div>
-        <div className="min-w-0 rounded border border-[#3a3548] bg-[#17151f] px-1.5 py-1">
-          <p className="text-[10px] font-semibold text-[#a8a2b8]">
+        <div className="flex min-h-[44px] min-w-0 flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-1.5 py-1">
+          <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
             증감(증감률)
           </p>
           <p
-            className={`mt-0.5 whitespace-nowrap text-[11px] font-semibold tabular-nums leading-none ${changeColor}`}
+            className={`h-4 whitespace-nowrap text-[11px] font-semibold leading-4 tabular-nums ${changeColor}`}
           >
             {formatSignedNumber(changeBalloons)}{" "}
             <span className="text-[9px]">
@@ -110,11 +162,11 @@ function FanRanking({
             </span>
           </p>
         </div>
-        <div className="rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
-          <p className="text-[10px] font-semibold text-[#a8a2b8]">
+        <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
+          <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
             오늘 별풍선
           </p>
-          <p className="mt-0.5 text-xs font-semibold tabular-nums text-[#e5e7eb]">
+          <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
             {formatNumber(todayBalloons)}
           </p>
         </div>
@@ -127,20 +179,7 @@ function FanRanking({
       {fans.length > 0 ? (
         <div className="tracking-tighter">
           {fans.map((fan) => (
-            <div
-              key={`${fan.rank}-${fan.user_id}`}
-              className="grid min-h-[27px] grid-cols-[30px_minmax(0,1fr)_104px] items-center gap-1 border-t border-[#3a3548]/70 px-0.5 py-0.5 text-[15px] first:border-t-0"
-            >
-              <p className="text-center text-xs font-extrabold tabular-nums text-[#a8a2b8]">
-                {fan.rank}
-              </p>
-              <p className="min-w-0 truncate text-sm font-normal text-[#e5e7eb]">
-                {fan.nickname}
-              </p>
-              <p className={`text-right text-[13px] font-semibold tabular-nums ${getScoreColor(fan.balloons)}`}>
-                {formatNumber(fan.balloons)}
-              </p>
-            </div>
+            <FanRow key={`${fan.rank}-${fan.user_id}`} fan={fan} />
           ))}
         </div>
       ) : (
@@ -156,31 +195,63 @@ export default function StreamerMemberRow({
   member,
   defaultOpen = false,
   searchQuery = "",
+  showCrew = false,
+  crewName,
+  crewColor,
+  disableScoreTone = false,
 }: {
   member: CrewMember;
   defaultOpen?: boolean;
   searchQuery?: string;
+  showCrew?: boolean;
+  crewName?: string;
+  crewColor?: string;
+  disableScoreTone?: boolean;
 }) {
   const [isManuallyOpen, setIsManuallyOpen] = useState(false);
   const isOpen = defaultOpen || isManuallyOpen;
+  const tone = disableScoreTone
+    ? {
+        row: "",
+        muted: "text-[#a8a2b8]",
+        name: "text-[#e5e7eb]",
+        score: "text-[#e5e7eb]",
+      }
+    : getScoreTone(member.current_balloons);
+  const rowColumns = showCrew
+    ? "grid-cols-[34px_92px_minmax(0,1fr)_78px]"
+    : "grid-cols-[30px_minmax(0,1fr)_112px]";
+  const rowGap = showCrew ? "gap-x-3" : "gap-x-0.5";
 
   return (
     <div className="border-b border-[#3a3548]/70">
-      <div className="grid min-h-[27px] grid-cols-[30px_minmax(0,1fr)_112px] items-center gap-x-1 px-0.5 py-0.5 text-[16px] tracking-tight">
-        <p className="text-[#a8a2b8] tabular-nums">
+      <div
+        className={`grid min-h-[27px] ${rowColumns} ${rowGap} items-center rounded px-0.5 py-0.5 text-[16px] tracking-tight transition hover:ring-1 hover:ring-white/35 ${tone.row}`}
+      >
+        <p className={`font-semibold tabular-nums ${tone.muted}`}>
           {member.rank}
         </p>
 
+        {showCrew ? (
+          <p
+            className="min-w-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-bold leading-4 text-white"
+            style={{ backgroundColor: crewColor ?? "#5b4bdb" }}
+            title={crewName}
+          >
+            {crewName}
+          </p>
+        ) : null}
+
         <button
           type="button"
-          className="block min-w-0 cursor-pointer truncate text-left font-normal text-[#e5e7eb] hover:text-[#a99cff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff]"
+          className={`block min-w-0 cursor-pointer truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff] ${tone.name}`}
           aria-expanded={isOpen}
           aria-label={`${member.nickname} 이달의 후원자 ${isOpen ? "접기" : "열기"}`}
           onClick={() => setIsManuallyOpen((current) => !current)}
         >
           <HighlightText text={member.nickname} query={searchQuery} />
         </button>
-        <p className={`text-right font-semibold whitespace-nowrap tabular-nums ${getScoreColor(member.current_balloons)}`}>
+        <p className={`text-right font-bold whitespace-nowrap tabular-nums ${tone.score}`}>
           {formatNumber(member.current_balloons)}
         </p>
       </div>

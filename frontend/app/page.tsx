@@ -32,6 +32,7 @@ type CrewMember = {
   display_day_balloons: number;
   current_daily_balloons: DailyBalloons[];
   previous_daily_balloons: DailyBalloons[];
+  monthly_fans: Fan[];
   monthly_top_fans: Fan[];
 };
 
@@ -656,6 +657,13 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             ),
             current_daily_balloons: item.current_month.daily_balloons,
             previous_daily_balloons: item.previous_month.daily_balloons,
+            monthly_fans: (item.current_month.fans ?? []).map((fan, fanIndex) => ({
+              rank: fanIndex + 1,
+              user_id: fan.user_id,
+              nickname: fan.nickname,
+              profile_image_url: fan.profile_image_url,
+              balloons: fan.balloons,
+            })),
             monthly_top_fans: getMonthlyTopFans(item),
           };
         });
