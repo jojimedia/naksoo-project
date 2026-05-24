@@ -58,36 +58,36 @@ function getScoreTone(value: number) {
   if (value >= 1_000_000) {
     return {
       row: "bg-[#F87171]/72",
-      muted: "text-[#3b1117]",
-      name: "text-[#3b1117]",
-      score: "text-[#3b1117]",
+      muted: "text-[#fecdd3]",
+      name: "text-[#fff7f8]",
+      score: "text-[#fff7f8]",
     };
   }
 
   if (value >= 700_000) {
     return {
       row: "bg-[#FACC15]/72",
-      muted: "text-[#3a2600]",
-      name: "text-[#3a2600]",
-      score: "text-[#3a2600]",
+      muted: "text-[#fde68a]",
+      name: "text-[#fffbeb]",
+      score: "text-[#fffbeb]",
     };
   }
 
   if (value >= 500_000) {
     return {
       row: "bg-[#22D3EE]/72",
-      muted: "text-[#062f36]",
-      name: "text-[#062f36]",
-      score: "text-[#062f36]",
+      muted: "text-[#a5f3fc]",
+      name: "text-[#ecfeff]",
+      score: "text-[#ecfeff]",
     };
   }
 
   if (value >= 200_000) {
     return {
       row: "bg-[#C4B5FD]/72",
-      muted: "text-[#211247]",
-      name: "text-[#211247]",
-      score: "text-[#211247]",
+      muted: "text-[#ddd6fe]",
+      name: "text-[#f5f3ff]",
+      score: "text-[#f5f3ff]",
     };
   }
 
