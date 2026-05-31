@@ -1,7 +1,8 @@
 import CrewDashboard from "./crew-dashboard";
 
-const DATA_URL =
-  "https://api.github.com/repos/jojimedia/naksoo-project/contents/frontend/public/data/result.json?ref=main";
+const GITHUB_REPO = "jojimedia/naksoo-project";
+const GITHUB_DATA_REF = process.env.GITHUB_DATA_REF ?? "main";
+const REMOTE_DATA_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_DATA_REF}/backend/data/result.json`;
 
 export const dynamic = "force-dynamic";
 
@@ -700,10 +701,13 @@ async function getCrewCardData() {
   const emptyData = () => makeCrewCardData(normalizeResult({ items: [] }));
 
   try {
-    const response = await fetch(DATA_URL, {
+    const response = await fetch(REMOTE_DATA_URL, {
       cache: "no-store",
+      next: { revalidate: 0 },
       headers: {
-        Accept: "application/vnd.github.raw",
+        Accept: "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
       },
     });
 
