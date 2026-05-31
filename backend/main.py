@@ -3,7 +3,7 @@
 import asyncio
 import csv
 import json
-import shutil
+import os
 from collections import Counter
 from io import StringIO
 from datetime import datetime
@@ -22,6 +22,11 @@ SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1w-hCArIqriowgLawxlAwZ1x
 
 # 결과 JSON 저장 폴더
 OUTPUT_DIR = Path("data")
+
+# GitHub result.json (백업 = 커밋 이력)
+GITHUB_REPO = "jojimedia/naksoo-project"
+GITHUB_RESULT_PATH = "backend/data/result.json"
+GITHUB_DATA_REF = os.environ.get("GITHUB_DATA_REF", "main")
 
 # 한국 시간 기준
 TIMEZONE = ZoneInfo("Asia/Seoul")
@@ -44,28 +49,27 @@ POONG_HEADERS = {
     "Pragma": "no-cache",
 }
 
-
 # =========================
 # 현재월 / 이전달 계산
 # =========================
 
-def get_current_and_previous_month():
-    """현재 날짜 기준으로 현재월과 이전달을 계산한다."""
+def get_previous_period(year, month):
+    """특정 월의 바로 이전 달을 계산한다."""
 
-    now = datetime.now(TIMEZONE)
+    if month == 1:
+        return year - 1, 12
+
+    return year, month - 1
+
+
+def get_calendar_period(now):
+    """오늘 날짜 기준 달력상 현재월과 이전달을 계산한다."""
 
     current_year = now.year
     current_month = now.month
-
-    if current_month == 1:
-        previous_year = current_year - 1
-        previous_month = 12
-    else:
-        previous_year = current_year
-        previous_month = current_month - 1
+    previous_year, previous_month = get_previous_period(current_year, current_month)
 
     return {
-        "now": now,
         "current": {
             "year": current_year,
             "month": current_month,
@@ -75,6 +79,47 @@ def get_current_and_previous_month():
             "month": previous_month,
         },
     }
+
+
+def is_month_data_available(balloon_data):
+    """
+    풍투 API에 해당 월 데이터가 올라왔는지 확인한다.
+    새 달 초반에는 d 배열 자체가 비어 있는 경우가 많다.
+    """
+
+    if not isinstance(balloon_data, dict):
+        return False
+
+    daily = balloon_data.get("d")
+
+    return isinstance(daily, list) and len(daily) > 0
+
+
+def is_poong_not_found_response(balloon_data):
+    """풍투가 아직 해당 월 데이터를 만들지 않았을 때 내려주는 응답인지 확인한다."""
+
+    if not isinstance(balloon_data, dict):
+        return False
+
+    return balloon_data.get("error") == "not found"
+
+
+def is_suspicious_month_data(month_data, calendar_year, calendar_month, now):
+    """
+    풍투가 비정상 데이터를 내려줄 때 감지한다.
+    예: 6월 1일인데 6월 daily 데이터가 오늘 이후 날짜까지 채워져 있음
+    """
+
+    if month_data.get("year") != calendar_year:
+        return False
+
+    if month_data.get("month") != calendar_month:
+        return False
+
+    daily = month_data.get("daily_balloons") or []
+    max_day = max((entry.get("day") or 0 for entry in daily), default=0)
+
+    return max_day > now.day
 
 
 # =========================
@@ -282,7 +327,7 @@ def extract_daily_balloons(balloon_data):
 
     result = []
 
-    for item in balloon_data.get("d", []):
+    for item in balloon_data.get("d") or []:
         result.append({
             "day": int(item.get("d") or 0),
             "balloons": int(item.get("b") or 0),
@@ -307,7 +352,7 @@ def extract_fans(balloon_data, limit=50):
 
     result = []
 
-    for fan in balloon_data.get("f", [])[:limit]:
+    for fan in (balloon_data.get("f") or [])[:limit]:
         balloons = int(fan.get("b") or 0)
         count = int(fan.get("c") or 0)
 
@@ -403,6 +448,81 @@ def build_month_data(balloon_data, year, month):
     }
 
 
+async def fetch_current_month_data(client, user_id, crew_name, calendar_current):
+    """
+    달력상 현재월 데이터를 먼저 조회한다.
+    에러/미준비 응답이면 전월 데이터로 current_month를 채운다.
+    """
+
+    current_year = calendar_current["year"]
+    current_month = calendar_current["month"]
+
+    print(
+        f"[{crew_name}/{user_id}] 풍투 현재월 조회 "
+        f"{current_year}-{current_month}"
+    )
+    current_balloon_data = await retry(
+        lambda: fetch_balloon(
+            client,
+            user_id,
+            current_year,
+            current_month,
+        ),
+        retries=8,
+        delay=2,
+        label=(
+            f"{crew_name}/{user_id} "
+            f"balloon {current_year}-{current_month}"
+        ),
+    )
+
+    if (
+        not is_poong_not_found_response(current_balloon_data)
+        and is_month_data_available(current_balloon_data)
+    ):
+        return (
+            build_month_data(
+                current_balloon_data,
+                current_year,
+                current_month,
+            ),
+            False,
+        )
+
+    fallback_year, fallback_month = get_previous_period(
+        current_year,
+        current_month,
+    )
+
+    print(
+        f"[{crew_name}/{user_id}] 현재월 에러/미준비 → "
+        f"전월 {fallback_year}-{fallback_month} 조회"
+    )
+    fallback_balloon_data = await retry(
+        lambda: fetch_balloon(
+            client,
+            user_id,
+            fallback_year,
+            fallback_month,
+        ),
+        retries=8,
+        delay=2,
+        label=(
+            f"{crew_name}/{user_id} "
+            f"balloon {fallback_year}-{fallback_month}"
+        ),
+    )
+
+    return (
+        build_month_data(
+            fallback_balloon_data,
+            fallback_year,
+            fallback_month,
+        ),
+        True,
+    )
+
+
 # =========================
 # 멤버 1명 데이터 가져오기
 # =========================
@@ -458,24 +578,11 @@ async def fetch_one_member(
 
             await asyncio.sleep(0.5)
 
-            # 현재월 별풍 데이터 가져오기
-            print(
-                f"[{crew_name}/{user_id}] 풍투 현재월 조회 "
-                f"{current_year}-{current_month}"
-            )
-            current_balloon_data = await retry(
-                lambda: fetch_balloon(
-                    client,
-                    user_id,
-                    current_year,
-                    current_month,
-                ),
-                retries=8,
-                delay=2,
-                label=(
-                    f"{crew_name}/{user_id} "
-                    f"balloon {current_year}-{current_month}"
-                ),
+            current_month_data, used_month_fallback = await fetch_current_month_data(
+                client,
+                user_id,
+                crew_name,
+                period["calendar_current"],
             )
 
             await asyncio.sleep(0.5)
@@ -500,11 +607,6 @@ async def fetch_one_member(
                 ),
             )
 
-            current_month_data = build_month_data(
-                current_balloon_data,
-                current_year,
-                current_month,
-            )
             current_month_data["fans"] = await enrich_fans_with_profiles(
                 client,
                 current_month_data["fans"],
@@ -528,6 +630,7 @@ async def fetch_one_member(
                 ),
                 "is_live": is_live,
                 "is_password_broadcast": live_status["is_password"],
+                "current_month_used_fallback": used_month_fallback,
 
                 "current_month": current_month_data,
 
@@ -575,43 +678,55 @@ async def fetch_one_member(
 
 
 # =========================
-# 백업 파일 이름 생성
+# GitHub result.json / 백업
 # =========================
 
-def make_output_filename(now):
-    """백업용 JSON 파일명을 만든다."""
+def github_result_raw_url(ref=None):
+    """GitHub raw URL for result.json at a ref or commit sha."""
 
-    return now.strftime("naksoo_%Y-%m-%d_%H-%M-%S.json")
-
-
-# =========================
-# 최신 백업 찾기
-# =========================
-
-def get_latest_backup_file():
-    """data 폴더에서 가장 최근의 정상 백업 JSON 파일을 찾는다."""
-
-    files = [
-        file
-        for file in OUTPUT_DIR.glob("naksoo_*.json")
-        if is_successful_backup_file(file)
-    ]
-
-    if not files:
-        return None
-
-    return max(files, key=lambda file: file.stat().st_mtime)
+    return (
+        f"https://raw.githubusercontent.com/{GITHUB_REPO}/"
+        f"{ref or GITHUB_DATA_REF}/{GITHUB_RESULT_PATH}"
+    )
 
 
-def is_successful_backup_file(file):
-    """백업 파일에 실패한 멤버가 없는지 확인한다."""
+async def fetch_github_result_json(ref=None):
+    """GitHub에 올라간 result.json을 가져온다."""
 
-    try:
-        with open(file, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"백업 파일 읽기 실패: {file}", e)
-        return False
+    url = github_result_raw_url(ref)
+
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=30,
+        headers=HEADERS,
+    ) as client:
+        res = await client.get(url)
+        res.raise_for_status()
+        return res.json()
+
+
+async def fetch_github_result_commits(limit=20):
+    """result.json 변경 GitHub 커밋 목록을 최신순으로 가져온다."""
+
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/commits"
+    params = {
+        "path": GITHUB_RESULT_PATH,
+        "sha": "main",
+        "per_page": limit,
+    }
+
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=30,
+        headers=HEADERS,
+    ) as client:
+        res = await client.get(url, params=params)
+        res.raise_for_status()
+        return res.json()
+
+
+def is_successful_backup_data(data):
+    """백업 JSON에 실패한 멤버가 없는지 확인한다."""
 
     items = data.get("items")
 
@@ -621,96 +736,8 @@ def is_successful_backup_file(file):
     return all(item.get("success") for item in items)
 
 
-# =========================
-# 실패 시 최신 백업 복구
-# =========================
-
-def restore_latest_backup():
-    """패치 실패 시 최신 정상 백업 파일을 result.json으로 복사한다."""
-
-    latest_backup = get_latest_backup_file()
-
-    if latest_backup is None:
-        print("백업 파일 없음")
-        return False
-
-    result_path = OUTPUT_DIR / "result.json"
-
-    shutil.copyfile(latest_backup, result_path)
-
-    print(f"최신 백업 복구 완료: {latest_backup} → {result_path}")
-
-    return True
-
-
-# =========================
-# 지난 날짜 백업 삭제
-# =========================
-
-def cleanup_old_backup_files(today_date):
-    """
-    오늘 날짜 백업만 남기고 지난 날짜 백업 JSON을 삭제한다.
-
-    예:
-    오늘이 2026-04-29라면
-    naksoo_2026-04-29_*.json 파일만 유지한다.
-    """
-
-    today_prefix = f"naksoo_{today_date}"
-
-    for file in OUTPUT_DIR.glob("naksoo_*.json"):
-        if not file.name.startswith(today_prefix):
-            file.unlink()
-            print(f"지난 날짜 백업 삭제: {file}")
-
-
-# =========================
-# 결과 JSON 저장
-# =========================
-
-def save_result_json(output, now):
-    """
-    패치 성공 시:
-    1. 날짜/시간이 들어간 백업 JSON 생성
-    2. Next.js가 읽을 고정 파일 result.json 생성
-    3. 오늘 날짜가 아닌 백업 JSON 삭제
-    """
-
-    filename = make_output_filename(now)
-
-    backup_path = OUTPUT_DIR / filename
-    result_path = OUTPUT_DIR / "result.json"
-
-    with open(backup_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-
-    with open(result_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-
-    print(f"백업 저장 완료: {backup_path}")
-    print(f"result.json 저장 완료: {result_path}")
-
-    cleanup_old_backup_files(now.strftime("%Y-%m-%d"))
-
-
-# =========================
-# 기존 result.json 멤버 데이터 읽기
-# =========================
-
-def load_previous_result_items():
-    """수집 실패 멤버를 직전 result.json 데이터로 보정하기 위해 읽는다."""
-
-    result_path = OUTPUT_DIR / "result.json"
-
-    if not result_path.exists():
-        return {}
-
-    try:
-        with open(result_path, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"기존 result.json 읽기 실패: {result_path}", e)
-        return {}
+def items_map_from_result(data):
+    """result.json items를 (crew_name, user_id) 맵으로 변환한다."""
 
     items = data.get("items")
 
@@ -724,10 +751,92 @@ def load_previous_result_items():
     }
 
 
-def restore_failed_items_from_previous_result(items):
-    """이번 수집에 실패한 멤버만 직전 result.json의 해당 멤버 데이터로 대체한다."""
+async def load_previous_result_items():
+    """GitHub main의 result.json에서 직전 데이터를 읽는다."""
 
-    previous_items = load_previous_result_items()
+    try:
+        data = await fetch_github_result_json()
+    except Exception as e:
+        print(f"GitHub result.json 읽기 실패: {e}")
+        return {}
+
+    return items_map_from_result(data)
+
+
+async def find_github_backup_data(skip=1, limit=20):
+    """
+    GitHub result.json 커밋 이력에서 정상 백업을 찾는다.
+    skip=0 최신, skip=1 바로 이전 커밋 ...
+    """
+
+    commits = await fetch_github_result_commits(limit=skip + 10)
+
+    for commit in commits[skip:]:
+        sha = commit["sha"]
+
+        try:
+            data = await fetch_github_result_json(sha)
+        except Exception as e:
+            print(f"GitHub 백업 읽기 실패: {sha[:8]}", e)
+            continue
+
+        if is_successful_backup_data(data):
+            return data, sha
+
+    return None, None
+
+
+def write_result_json(data):
+    """패치/복구 결과를 result.json으로 저장한다."""
+
+    result_path = OUTPUT_DIR / "result.json"
+
+    with open(result_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"result.json 저장 완료: {result_path}")
+
+
+# =========================
+# 실패 시 GitHub 백업 복구
+# =========================
+
+async def restore_latest_backup():
+    """패치 실패 시 GitHub result.json 직전 커밋으로 복구한다."""
+
+    data, sha = await find_github_backup_data(skip=1)
+
+    if data is None:
+        print("GitHub 백업 없음")
+        return False
+
+    write_result_json(data)
+    print(f"GitHub 백업 복구 완료: {sha[:8]}")
+
+    return True
+
+
+# =========================
+# 결과 JSON 저장
+# =========================
+
+def save_result_json(output, now):
+    """
+    패치 성공 시 result.json 저장.
+    백업은 GitHub Actions가 커밋하는 result.json 이력을 사용한다.
+    """
+
+    write_result_json(output)
+
+
+# =========================
+# 기존 result.json 멤버 데이터 읽기
+# =========================
+
+async def restore_failed_items_from_previous_result(items):
+    """이번 수집에 실패한 멤버만 GitHub result.json의 해당 멤버 데이터로 대체한다."""
+
+    previous_items = await load_previous_result_items()
 
     if not previous_items:
         return items
@@ -751,13 +860,100 @@ def restore_failed_items_from_previous_result(items):
             "success": True,
             "is_stale": True,
             "stale_reason": item.get("error"),
-            "stale_source": "previous_result",
+            "stale_source": "github_result",
         }
         restored_items.append(restored_item)
         print(
-            "이전 result.json 데이터로 멤버 복구:",
+            "GitHub result.json 데이터로 멤버 복구:",
             f"{key[0]}/{key[1]}",
             item.get("error"),
+        )
+
+    return restored_items
+
+
+async def restore_suspicious_month_items_from_previous_result(items, period):
+    """
+    전월 fallback 또는 의심스러운 풍투 응답이
+    GitHub result.json보다 작거나 비정상이면 기존 데이터를 유지한다.
+    """
+
+    previous_items = await load_previous_result_items()
+
+    if not previous_items:
+        return items
+
+    calendar_current = period["calendar_current"]
+    now = period["now"]
+    restored_items = []
+
+    for item in items:
+        key = (item.get("crew_name"), item.get("user_id"))
+        previous_item = previous_items.get(key)
+
+        if previous_item is None:
+            restored_items.append(item)
+            continue
+
+        item_current = item.get("current_month") or {}
+        previous_current = previous_item.get("current_month") or {}
+        item_total = int(item_current.get("total_balloons") or 0)
+        previous_total = int(previous_current.get("total_balloons") or 0)
+        used_fallback = item.get("current_month_used_fallback", False)
+
+        suspicious = is_suspicious_month_data(
+            item_current,
+            calendar_current["year"],
+            calendar_current["month"],
+            now,
+        )
+
+        compare_period = (
+            item_current.get("year"),
+            item_current.get("month"),
+        )
+        backup_period = (
+            previous_current.get("year"),
+            previous_current.get("month"),
+        )
+        is_same_period = compare_period == backup_period
+        regressed = is_same_period and previous_total > item_total
+
+        should_restore = (
+            suspicious
+            or regressed
+            or (used_fallback and item_total == 0)
+        )
+
+        if not should_restore:
+            restored_items.append(item)
+            continue
+
+        if suspicious:
+            reason = "poong current month suspicious"
+        elif regressed:
+            reason = f"poong month regressed {previous_total}->{item_total}"
+        else:
+            reason = "poong fallback empty"
+
+        restored_item = {
+            **previous_item,
+            "broadcast_start": item.get("broadcast_start"),
+            "is_live": item.get("is_live", False),
+            "is_password_broadcast": item.get(
+                "is_password_broadcast",
+                False,
+            ),
+            "success": True,
+            "is_stale": True,
+            "stale_reason": reason,
+            "stale_source": "github_result",
+        }
+        restored_items.append(restored_item)
+        print(
+            "풍투 데이터 이상으로 GitHub 데이터 유지:",
+            f"{key[0]}/{key[1]}",
+            reason,
         )
 
     return restored_items
@@ -876,8 +1072,7 @@ async def main():
     6. 전체 실패하면 최신 백업을 result.json으로 복구
     """
 
-    period = get_current_and_previous_month()
-    now = period["now"]
+    now = datetime.now(TIMEZONE)
 
     OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -901,6 +1096,13 @@ async def main():
             timeout=15,
             headers=HEADERS,
         ) as client:
+            calendar = get_calendar_period(now)
+            period = {
+                "now": now,
+                **calendar,
+                "calendar_current": calendar["current"],
+            }
+
             tasks = [
                 fetch_one_member(
                     client,
@@ -935,9 +1137,18 @@ async def main():
                 for item in failed_items
             )
             print(f"일부 멤버 조회 실패 {len(failed_items)}명: {failed_members}")
-            items = restore_failed_items_from_previous_result(items)
+            items = await restore_failed_items_from_previous_result(items)
+
+        items = await restore_suspicious_month_items_from_previous_result(
+            items,
+            period,
+        )
 
         validate_all_members_in_items(members, items)
+
+        used_month_fallback = any(
+            item.get("current_month_used_fallback") for item in items
+        )
 
         # 크루명 기준 정렬, 같은 크루 안에서는 현재월 별풍 많은 순 정렬
         items.sort(
@@ -956,6 +1167,8 @@ async def main():
 
             "current_period": period["current"],
             "previous_period": period["previous"],
+            "calendar_current_period": period["calendar_current"],
+            "used_month_fallback": used_month_fallback,
 
             "count": len(items),
             "items": items,
@@ -968,7 +1181,7 @@ async def main():
         print("에러:", e)
         print("최신 백업으로 result.json 복구 시도")
 
-        restored = restore_latest_backup()
+        restored = await restore_latest_backup()
 
         if not restored and not keep_existing_result_json():
             create_empty_result_json(now, str(e))
