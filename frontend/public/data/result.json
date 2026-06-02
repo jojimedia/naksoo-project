@@ -1,8 +1,8 @@
 {
   "project": "naksoo",
-  "created_at": "2026-06-02T20:42:45.707179+09:00",
-  "created_date": "2026-06-02",
-  "created_time": "20:42:45",
+  "created_at": "2026-06-03T01:55:37.654900+09:00",
+  "created_date": "2026-06-03",
+  "created_time": "01:55:37",
   "timezone": "Asia/Seoul",
   "current_period": {
     "year": 2026,
@@ -24,7 +24,7 @@
       "user_id": "haniiya1004",
       "nickname": "하니야♡",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ha/haniiya1004/haniiya1004.jpg",
-      "broadcast_start": "2026-06-01 23:24:23",
+      "broadcast_start": "2026-06-03 01:52:15",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -366,7 +366,7 @@
       "user_id": "dbswn2312",
       "nickname": "쥬브리",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/db/dbswn2312/dbswn2312.jpg",
-      "broadcast_start": "2026-06-02 20:07:52",
+      "broadcast_start": "2026-06-03 00:23:24",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -1145,7 +1145,7 @@
       "user_id": "pinepine0",
       "nickname": "은아린!!",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/pi/pinepine0/pinepine0.jpg",
-      "broadcast_start": "2026-06-02 18:51:12",
+      "broadcast_start": "2026-06-03 01:23:17",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -1297,9 +1297,9 @@
       "user_id": "jssisabel",
       "nickname": "E윤아♡",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/js/jssisabel/jssisabel.jpg",
-      "broadcast_start": null,
-      "is_live": false,
-      "is_password_broadcast": true,
+      "broadcast_start": "2026-06-02 20:17:39",
+      "is_live": true,
+      "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
@@ -1449,7 +1449,7 @@
       "user_id": "kyhkyh825",
       "nickname": "♥유현♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ky/kyhkyh825/kyhkyh825.jpg",
-      "broadcast_start": "2026-06-02 16:45:37",
+      "broadcast_start": "2026-06-03 01:41:42",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -2006,7 +2006,7 @@
       "user_id": "s2uling",
       "nickname": "슬잉♡",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/s2/s2uling/s2uling.jpg",
-      "broadcast_start": "2026-06-02 12:03:40",
+      "broadcast_start": "2026-06-03 01:28:30",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -2198,158 +2198,6 @@
     },
     {
       "crew_name": "YXL",
-      "user_id": "fhwm0602",
-      "nickname": "미로。",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/fh/fhwm0602/fhwm0602.jpg",
-      "broadcast_start": "2026-06-02 14:11:03",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 131310,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "YXL",
       "user_id": "jaeha010",
       "nickname": "후잉♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ja/jaeha010/jaeha010.jpg",
@@ -2360,7 +2208,7 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 111573,
+        "total_balloons": 158304,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -2510,6 +2358,158 @@
     },
     {
       "crew_name": "YXL",
+      "user_id": "fhwm0602",
+      "nickname": "미로。",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/fh/fhwm0602/fhwm0602.jpg",
+      "broadcast_start": "2026-06-02 14:11:03",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 155552,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "YXL",
       "user_id": "tkek55",
       "nickname": "김유정S2",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/tk/tkek55/tkek55.jpg",
@@ -2520,7 +2520,7 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 89598,
+        "total_balloons": 101144,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -2974,6 +2974,158 @@
     },
     {
       "crew_name": "YXL",
+      "user_id": "smkim82372",
+      "nickname": "류서하♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/sm/smkim82372/smkim82372.jpg",
+      "broadcast_start": "2026-06-02 22:15:10",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 57833,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "YXL",
       "user_id": "iluvpp",
       "nickname": "서니_♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/il/iluvpp/iluvpp.jpg",
@@ -3134,158 +3286,6 @@
     },
     {
       "crew_name": "YXL",
-      "user_id": "smkim82372",
-      "nickname": "류서하♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/sm/smkim82372/smkim82372.jpg",
-      "broadcast_start": "2026-06-02 08:59:52",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 53615,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "YXL",
       "user_id": "ahrum0912",
       "nickname": "아름[♥]",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ah/ahrum0912/ahrum0912.jpg",
@@ -3296,7 +3296,7 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 42778,
+        "total_balloons": 43000,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -3905,14 +3905,14 @@
       "user_id": "rox0x0x",
       "nickname": "함지아♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ro/rox0x0x/rox0x0x.jpg",
-      "broadcast_start": "2026-06-01 21:06:36",
+      "broadcast_start": "2026-06-03 01:22:41",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 112814,
+        "total_balloons": 114600,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -4072,14 +4072,14 @@
       "user_id": "ektnrnrgml",
       "nickname": "임주연♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ek/ektnrnrgml/ektnrnrgml.jpg",
-      "broadcast_start": "2026-06-02 03:12:40",
+      "broadcast_start": "2026-06-03 01:04:13",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 109483,
+        "total_balloons": 112263,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -4224,7 +4224,7 @@
       "user_id": "fall1128",
       "nickname": "가을이♡",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/fa/fall1128/fall1128.jpg",
-      "broadcast_start": "2026-06-02 18:12:56",
+      "broadcast_start": "2026-06-02 23:17:43",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -4232,6 +4232,161 @@
         "year": 2026,
         "month": 6,
         "total_balloons": 106336,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true,
+      "is_stale": true,
+      "stale_reason": "poong month regressed 106336->0",
+      "stale_source": "github_result"
+    },
+    {
+      "crew_name": "광우상사",
+      "user_id": "qor0919",
+      "nickname": "이온♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/qo/qor0919/qor0919.jpg",
+      "broadcast_start": "2026-06-03 00:55:14",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 100317,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -4525,321 +4680,17 @@
     },
     {
       "crew_name": "광우상사",
-      "user_id": "iluvbin",
-      "nickname": "아이빈♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/il/iluvbin/iluvbin.jpg",
-      "broadcast_start": "2026-06-02 17:26:38",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 96907,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "광우상사",
-      "user_id": "qor0919",
-      "nickname": "이온♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/qo/qor0919/qor0919.jpg",
-      "broadcast_start": null,
-      "is_live": false,
-      "is_password_broadcast": true,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 91201,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "광우상사",
       "user_id": "andoong0227",
       "nickname": "안둥♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/an/andoong0227/andoong0227.jpg",
-      "broadcast_start": "2026-06-02 18:00:22",
+      "broadcast_start": "2026-06-03 00:45:37",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 77930,
+        "total_balloons": 97010,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -4989,17 +4840,172 @@
     },
     {
       "crew_name": "광우상사",
-      "user_id": "dbstmf3497",
-      "nickname": "서윤슬@",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/db/dbstmf3497/dbstmf3497.jpg",
-      "broadcast_start": "2026-06-02 17:14:42",
+      "user_id": "iluvbin",
+      "nickname": "아이빈♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/il/iluvbin/iluvbin.jpg",
+      "broadcast_start": "2026-06-03 01:05:56",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 28712,
+        "total_balloons": 96907,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true,
+      "is_stale": true,
+      "stale_reason": "poong month regressed 96907->0",
+      "stale_source": "github_result"
+    },
+    {
+      "crew_name": "광우상사",
+      "user_id": "dbstmf3497",
+      "nickname": "서윤슬@",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/db/dbstmf3497/dbstmf3497.jpg",
+      "broadcast_start": "2026-06-03 00:58:53",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 32576,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -5144,14 +5150,14 @@
       "user_id": "yui0902",
       "nickname": "원영님♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/yu/yui0902/yui0902.jpg",
-      "broadcast_start": "2026-06-02 18:58:51",
+      "broadcast_start": "2026-06-03 01:20:48",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 26980,
+        "total_balloons": 32112,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -5296,9 +5302,9 @@
       "user_id": "kkok7816",
       "nickname": "미디♡",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/kk/kkok7816/kkok7816.jpg",
-      "broadcast_start": null,
-      "is_live": false,
-      "is_password_broadcast": true,
+      "broadcast_start": "2026-06-03 01:24:04",
+      "is_live": true,
+      "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
@@ -5441,21 +5447,24 @@
         "fans": [],
         "data_source": "detail"
       },
-      "success": true
+      "success": true,
+      "is_stale": true,
+      "stale_reason": "poong month regressed 12040->0",
+      "stale_source": "github_result"
     },
     {
       "crew_name": "광우상사",
       "user_id": "bel0204",
       "nickname": "숨댕♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/be/bel0204/bel0204.jpg",
-      "broadcast_start": null,
-      "is_live": false,
-      "is_password_broadcast": true,
+      "broadcast_start": "2026-06-03 00:08:23",
+      "is_live": true,
+      "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 1635,
+        "total_balloons": 1647,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -5752,14 +5761,14 @@
       "user_id": "pu1030",
       "nickname": "푸린♡",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/pu/pu1030/pu1030.jpg",
-      "broadcast_start": "2026-06-02 00:51:04",
+      "broadcast_start": "2026-06-02 23:01:22",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 46408,
+        "total_balloons": 68664,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -6053,6 +6062,158 @@
     },
     {
       "crew_name": "더케이",
+      "user_id": "vvkk80",
+      "nickname": "강한빛♡",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/vv/vvkk80/vvkk80.jpg",
+      "broadcast_start": "2026-06-02 22:33:53",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 26571,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "더케이",
       "user_id": "yhm777",
       "nickname": "[BJ]에디양",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/yh/yhm777/yhm777.jpg",
@@ -6205,17 +6366,17 @@
     },
     {
       "crew_name": "더케이",
-      "user_id": "kerin0308",
-      "nickname": "포카린",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ke/kerin0308/kerin0308.jpg",
-      "broadcast_start": "2026-06-02 14:06:40",
+      "user_id": "damikim",
+      "nickname": "퀸다미♧",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/da/damikim/damikim.jpg",
+      "broadcast_start": "2026-06-02 21:03:15",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 7708,
+        "total_balloons": 14073,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -6357,17 +6518,473 @@
     },
     {
       "crew_name": "더케이",
-      "user_id": "vvkk80",
-      "nickname": "강한빛♡",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/vv/vvkk80/vvkk80.jpg",
-      "broadcast_start": "2026-06-01 22:55:56",
+      "user_id": "0310blue",
+      "nickname": "단하나♡",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/03/0310blue/0310blue.jpg",
+      "broadcast_start": "2026-06-02 21:33:39",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
+        "total_balloons": 10955,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
         "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "더케이",
+      "user_id": "kerin0308",
+      "nickname": "포카린",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ke/kerin0308/kerin0308.jpg",
+      "broadcast_start": "2026-06-02 14:06:40",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 10469,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "더케이",
+      "user_id": "dreamch77",
+      "nickname": "！채채",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/dr/dreamch77/dreamch77.jpg",
+      "broadcast_start": "2026-06-02 23:35:33",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 4519,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "더케이",
+      "user_id": "sisterssu",
+      "nickname": "쑤♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/si/sisterssu/sisterssu.jpg",
+      "broadcast_start": "2026-06-02 23:57:41",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 3001,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -6813,618 +7430,10 @@
     },
     {
       "crew_name": "더케이",
-      "user_id": "0310blue",
-      "nickname": "단하나♡",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/03/0310blue/0310blue.jpg",
-      "broadcast_start": "2026-05-31 17:00:34",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "더케이",
-      "user_id": "damikim",
-      "nickname": "퀸다미♧",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/da/damikim/damikim.jpg",
-      "broadcast_start": "2026-06-01 02:16:37",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "더케이",
       "user_id": "eeseuu",
       "nickname": "한슬댕",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ee/eeseuu/eeseuu.jpg",
       "broadcast_start": "2026-06-01 02:04:30",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "더케이",
-      "user_id": "dreamch77",
-      "nickname": "！채채",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/dr/dreamch77/dreamch77.jpg",
-      "broadcast_start": "2026-06-01 02:15:14",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "더케이",
-      "user_id": "sisterssu",
-      "nickname": "쑤♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/si/sisterssu/sisterssu.jpg",
-      "broadcast_start": "2026-06-01 02:23:30",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -7583,7 +7592,7 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 277056,
+        "total_balloons": 298900,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -7725,6 +7734,166 @@
             "balloons": 1220,
             "count": 1,
             "avg_balloons": 1220
+          }
+        ],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "씨나인",
+      "user_id": "0929kelly",
+      "nickname": "이다니♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/09/0929kelly/0929kelly.jpg",
+      "broadcast_start": "2026-06-02 20:53:30",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 280186,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 12442,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 12442
+          }
+        ],
+        "fans": [
+          {
+            "user_id": "rlgus1630",
+            "nickname": "구르는다니",
+            "balloons": 12442,
+            "count": 1,
+            "avg_balloons": 12442
           }
         ],
         "data_source": "detail"
@@ -7885,177 +8054,17 @@
     },
     {
       "crew_name": "씨나인",
-      "user_id": "0929kelly",
-      "nickname": "이다니♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/09/0929kelly/0929kelly.jpg",
-      "broadcast_start": "2026-06-01 21:02:08",
+      "user_id": "kaja0011",
+      "nickname": "여을♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ka/kaja0011/kaja0011.jpg",
+      "broadcast_start": "2026-06-02 20:26:09",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 173944,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 12442,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 12442
-          }
-        ],
-        "fans": [
-          {
-            "user_id": "rlgus1630",
-            "nickname": "구르는다니",
-            "balloons": 12442,
-            "count": 1,
-            "avg_balloons": 12442
-          }
-        ],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "씨나인",
-      "user_id": "dlswldus107",
-      "nickname": "인지연JYEON",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/dl/dlswldus107/dlswldus107.jpg",
-      "broadcast_start": "2026-06-01 20:00:51",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 91286,
+        "total_balloons": 113687,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -8197,17 +8206,169 @@
     },
     {
       "crew_name": "씨나인",
-      "user_id": "kaja0011",
-      "nickname": "여을♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ka/kaja0011/kaja0011.jpg",
-      "broadcast_start": "2026-06-02 20:26:09",
+      "user_id": "dlswldus107",
+      "nickname": "인지연JYEON",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/dl/dlswldus107/dlswldus107.jpg",
+      "broadcast_start": "2026-06-02 20:57:51",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 84976,
+        "total_balloons": 106516,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "씨나인",
+      "user_id": "jkmjkm1236",
+      "nickname": "하이희야♡",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/jk/jkmjkm1236/jkmjkm1236.jpg",
+      "broadcast_start": "2026-06-02 21:01:26",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 86780,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -8352,14 +8513,14 @@
       "user_id": "alwl1047",
       "nickname": "노쁠리입니두",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/al/alwl1047/alwl1047.jpg",
-      "broadcast_start": "2026-05-31 21:33:45",
+      "broadcast_start": "2026-06-02 21:42:35",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 36016,
+        "total_balloons": 50051,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -8526,7 +8687,7 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 32551,
+        "total_balloons": 34197,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -8678,7 +8839,311 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 20240,
+        "total_balloons": 30068,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "씨나인",
+      "user_id": "epsthddus",
+      "nickname": "혜루찡",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ep/epsthddus/epsthddus.jpg",
+      "broadcast_start": "2026-06-02 21:30:13",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 29202,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "씨나인",
+      "user_id": "ksdd7856",
+      "nickname": "리하♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ks/ksdd7856/ksdd7856.jpg",
+      "broadcast_start": "2026-06-02 19:54:12",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 24472,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -8972,17 +9437,17 @@
     },
     {
       "crew_name": "씨나인",
-      "user_id": "ksdd7856",
-      "nickname": "리하♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ks/ksdd7856/ksdd7856.jpg",
-      "broadcast_start": "2026-06-02 19:54:12",
+      "user_id": "ayoona",
+      "nickname": "아윤♡",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ay/ayoona/ayoona.jpg",
+      "broadcast_start": "2026-06-02 20:58:00",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 9791,
+        "total_balloons": 15701,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -9134,7 +9599,159 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 7099,
+        "total_balloons": 12335,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "씨나인",
+      "user_id": "leeso0403",
+      "nickname": "체온_♡",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/le/leeso0403/leeso0403.jpg",
+      "broadcast_start": "2026-06-02 23:02:19",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 11841,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -9286,615 +9903,7 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 1045,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "씨나인",
-      "user_id": "ayoona",
-      "nickname": "아윤♡",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ay/ayoona/ayoona.jpg",
-      "broadcast_start": "2026-05-31 04:08:55",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "씨나인",
-      "user_id": "leeso0403",
-      "nickname": "체온_♡",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/le/leeso0403/leeso0403.jpg",
-      "broadcast_start": "2026-05-27 20:05:22",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "씨나인",
-      "user_id": "jkmjkm1236",
-      "nickname": "하이희야♡",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/jk/jkmjkm1236/jkmjkm1236.jpg",
-      "broadcast_start": "2026-05-31 03:49:46",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "씨나인",
-      "user_id": "epsthddus",
-      "nickname": "혜루찡",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ep/epsthddus/epsthddus.jpg",
-      "broadcast_start": "2026-05-31 04:00:11",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
+        "total_balloons": 4350,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -10198,7 +10207,7 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 7277,
+        "total_balloons": 172805,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -10355,6 +10364,318 @@
     },
     {
       "crew_name": "이노레이블",
+      "user_id": "bc3yu2fl",
+      "nickname": "이월♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/bc/bc3yu2fl/bc3yu2fl.jpg",
+      "broadcast_start": "2026-06-02 20:09:47",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 47083,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "이노레이블",
+      "user_id": "zzam2da",
+      "nickname": "남민아♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/zz/zzam2da/zzam2da.jpg",
+      "broadcast_start": "2026-06-02 22:57:04",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 15789,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 20,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 20
+          }
+        ],
+        "fans": [
+          {
+            "user_id": "wlsryqka",
+            "nickname": "hqhbck",
+            "balloons": 20,
+            "count": 2,
+            "avg_balloons": 10
+          }
+        ],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "이노레이블",
       "user_id": "nooree",
       "nickname": "#누리-",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/no/nooree/nooree.jpg",
@@ -10501,166 +10822,6 @@
           }
         ],
         "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "이노레이블",
-      "user_id": "zzam2da",
-      "nickname": "남민아♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/zz/zzam2da/zzam2da.jpg",
-      "broadcast_start": "2026-06-02 07:16:19",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 6315,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 20,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 20
-          }
-        ],
-        "fans": [
-          {
-            "user_id": "wlsryqka",
-            "nickname": "hqhbck",
-            "balloons": 20,
-            "count": 2,
-            "avg_balloons": 10
-          }
-        ],
         "data_source": "detail"
       },
       "success": true
@@ -10981,7 +11142,311 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 3654,
+        "total_balloons": 4159,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "이노레이블",
+      "user_id": "baek224983",
+      "nickname": "설탱♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ba/baek224983/baek224983.jpg",
+      "broadcast_start": "2026-06-02 22:28:18",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 2515,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 0,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 0
+          }
+        ],
+        "fans": [],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "이노레이블",
+      "user_id": "qkrrkgml1231",
+      "nickname": "히냥이♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/qk/qkrrkgml1231/qkrrkgml1231.jpg",
+      "broadcast_start": "2026-06-02 23:39:42",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 1790,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -11275,158 +11740,6 @@
     },
     {
       "crew_name": "이노레이블",
-      "user_id": "bc3yu2fl",
-      "nickname": "이월♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/bc/bc3yu2fl/bc3yu2fl.jpg",
-      "broadcast_start": "2026-06-02 20:09:47",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 300,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "이노레이블",
       "user_id": "ss2312",
       "nickname": "소연♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ss/ss2312/ss2312.jpg",
@@ -11579,314 +11892,10 @@
     },
     {
       "crew_name": "이노레이블",
-      "user_id": "baek224983",
-      "nickname": "설탱♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ba/baek224983/baek224983.jpg",
-      "broadcast_start": "2026-06-02 06:52:38",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "이노레이블",
       "user_id": "duzzangg",
       "nickname": "연보민",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/du/duzzangg/duzzangg.jpg",
       "broadcast_start": "2026-06-01 15:18:08",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "이노레이블",
-      "user_id": "qkrrkgml1231",
-      "nickname": "히냥이♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/qk/qkrrkgml1231/qkrrkgml1231.jpg",
-      "broadcast_start": "2026-06-02 06:05:29",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -12507,6 +12516,486 @@
     },
     {
       "crew_name": "정선컴퍼니",
+      "user_id": "whdbstn7",
+      "nickname": "윤수♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/wh/whdbstn7/whdbstn7.jpg",
+      "broadcast_start": "2026-06-02 22:31:51",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 51709,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 100,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 100
+          }
+        ],
+        "fans": [
+          {
+            "user_id": "nanwjrdirn12",
+            "nickname": "윤수네뭉이",
+            "balloons": 100,
+            "count": 1,
+            "avg_balloons": 100
+          }
+        ],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "정선컴퍼니",
+      "user_id": "lllloq",
+      "nickname": "서이안",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ll/lllloq/lllloq.jpg",
+      "broadcast_start": "2026-06-02 20:39:42",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 49422,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 10,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 10
+          }
+        ],
+        "fans": [
+          {
+            "user_id": "zxas0610",
+            "nickname": "빛나는솔로",
+            "balloons": 10,
+            "count": 1,
+            "avg_balloons": 10
+          }
+        ],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "정선컴퍼니",
+      "user_id": "yuyu0929",
+      "nickname": "윤세빈♥",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/yu/yuyu0929/yuyu0929.jpg",
+      "broadcast_start": "2026-06-02 21:23:42",
+      "is_live": true,
+      "is_password_broadcast": false,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 6,
+        "total_balloons": 49015,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking"
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 5,
+        "total_balloons": 1519,
+        "daily_balloons": [
+          {
+            "day": 1,
+            "balloons": 0
+          },
+          {
+            "day": 2,
+            "balloons": 0
+          },
+          {
+            "day": 3,
+            "balloons": 0
+          },
+          {
+            "day": 4,
+            "balloons": 0
+          },
+          {
+            "day": 5,
+            "balloons": 0
+          },
+          {
+            "day": 6,
+            "balloons": 0
+          },
+          {
+            "day": 7,
+            "balloons": 0
+          },
+          {
+            "day": 8,
+            "balloons": 0
+          },
+          {
+            "day": 9,
+            "balloons": 0
+          },
+          {
+            "day": 10,
+            "balloons": 0
+          },
+          {
+            "day": 11,
+            "balloons": 0
+          },
+          {
+            "day": 12,
+            "balloons": 0
+          },
+          {
+            "day": 13,
+            "balloons": 0
+          },
+          {
+            "day": 14,
+            "balloons": 0
+          },
+          {
+            "day": 15,
+            "balloons": 0
+          },
+          {
+            "day": 16,
+            "balloons": 0
+          },
+          {
+            "day": 17,
+            "balloons": 0
+          },
+          {
+            "day": 18,
+            "balloons": 0
+          },
+          {
+            "day": 19,
+            "balloons": 0
+          },
+          {
+            "day": 20,
+            "balloons": 0
+          },
+          {
+            "day": 21,
+            "balloons": 0
+          },
+          {
+            "day": 22,
+            "balloons": 0
+          },
+          {
+            "day": 23,
+            "balloons": 0
+          },
+          {
+            "day": 24,
+            "balloons": 0
+          },
+          {
+            "day": 25,
+            "balloons": 0
+          },
+          {
+            "day": 26,
+            "balloons": 0
+          },
+          {
+            "day": 27,
+            "balloons": 0
+          },
+          {
+            "day": 28,
+            "balloons": 0
+          },
+          {
+            "day": 29,
+            "balloons": 0
+          },
+          {
+            "day": 30,
+            "balloons": 0
+          },
+          {
+            "day": 31,
+            "balloons": 1519
+          }
+        ],
+        "fans": [
+          {
+            "user_id": "hanakajiura",
+            "nickname": "윤세빈의Frey",
+            "balloons": 1519,
+            "count": 2,
+            "avg_balloons": 759
+          }
+        ],
+        "data_source": "detail"
+      },
+      "success": true
+    },
+    {
+      "crew_name": "정선컴퍼니",
       "user_id": "yin3745",
       "nickname": "♥백설♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/yi/yin3745/yin3745.jpg",
@@ -12659,17 +13148,17 @@
     },
     {
       "crew_name": "정선컴퍼니",
-      "user_id": "lllloq",
-      "nickname": "서이안",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/ll/lllloq/lllloq.jpg",
-      "broadcast_start": "2026-06-02 20:39:42",
+      "user_id": "coqhal1992",
+      "nickname": "채보미=3=",
+      "profile_image_url": "https://profile.img.sooplive.com/LOGO/co/coqhal1992/coqhal1992.jpg",
+      "broadcast_start": "2026-06-02 22:16:43",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 37368,
+        "total_balloons": 38767,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -12677,7 +13166,7 @@
       "previous_month": {
         "year": 2026,
         "month": 5,
-        "total_balloons": 10,
+        "total_balloons": 0,
         "daily_balloons": [
           {
             "day": 1,
@@ -12801,338 +13290,10 @@
           },
           {
             "day": 31,
-            "balloons": 10
+            "balloons": 0
           }
         ],
-        "fans": [
-          {
-            "user_id": "zxas0610",
-            "nickname": "빛나는솔로",
-            "balloons": 10,
-            "count": 1,
-            "avg_balloons": 10
-          }
-        ],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "정선컴퍼니",
-      "user_id": "whdbstn7",
-      "nickname": "윤수♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/wh/whdbstn7/whdbstn7.jpg",
-      "broadcast_start": "2026-06-01 23:50:19",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 34970,
-        "daily_balloons": [],
         "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 100,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 100
-          }
-        ],
-        "fans": [
-          {
-            "user_id": "nanwjrdirn12",
-            "nickname": "윤수네뭉이",
-            "balloons": 100,
-            "count": 1,
-            "avg_balloons": 100
-          }
-        ],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "정선컴퍼니",
-      "user_id": "yuyu0929",
-      "nickname": "윤세빈♥",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/yu/yuyu0929/yuyu0929.jpg",
-      "broadcast_start": "2026-06-01 08:00:44",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 24490,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 1519,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 1519
-          }
-        ],
-        "fans": [
-          {
-            "user_id": "hanakajiura",
-            "nickname": "윤세빈의Frey",
-            "balloons": 1519,
-            "count": 2,
-            "avg_balloons": 759
-          }
-        ],
         "data_source": "detail"
       },
       "success": true
@@ -13301,7 +13462,7 @@
       "current_month": {
         "year": 2026,
         "month": 6,
-        "total_balloons": 4036,
+        "total_balloons": 10079,
         "daily_balloons": [],
         "fans": [],
         "data_source": "chart_ranking"
@@ -13751,158 +13912,6 @@
       "nickname": "율비♡",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/yu/yulbee/yulbee.jpg",
       "broadcast_start": "2026-05-23 02:22:24",
-      "is_live": true,
-      "is_password_broadcast": false,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 6,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": [],
-        "data_source": "chart_ranking"
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 5,
-        "total_balloons": 0,
-        "daily_balloons": [
-          {
-            "day": 1,
-            "balloons": 0
-          },
-          {
-            "day": 2,
-            "balloons": 0
-          },
-          {
-            "day": 3,
-            "balloons": 0
-          },
-          {
-            "day": 4,
-            "balloons": 0
-          },
-          {
-            "day": 5,
-            "balloons": 0
-          },
-          {
-            "day": 6,
-            "balloons": 0
-          },
-          {
-            "day": 7,
-            "balloons": 0
-          },
-          {
-            "day": 8,
-            "balloons": 0
-          },
-          {
-            "day": 9,
-            "balloons": 0
-          },
-          {
-            "day": 10,
-            "balloons": 0
-          },
-          {
-            "day": 11,
-            "balloons": 0
-          },
-          {
-            "day": 12,
-            "balloons": 0
-          },
-          {
-            "day": 13,
-            "balloons": 0
-          },
-          {
-            "day": 14,
-            "balloons": 0
-          },
-          {
-            "day": 15,
-            "balloons": 0
-          },
-          {
-            "day": 16,
-            "balloons": 0
-          },
-          {
-            "day": 17,
-            "balloons": 0
-          },
-          {
-            "day": 18,
-            "balloons": 0
-          },
-          {
-            "day": 19,
-            "balloons": 0
-          },
-          {
-            "day": 20,
-            "balloons": 0
-          },
-          {
-            "day": 21,
-            "balloons": 0
-          },
-          {
-            "day": 22,
-            "balloons": 0
-          },
-          {
-            "day": 23,
-            "balloons": 0
-          },
-          {
-            "day": 24,
-            "balloons": 0
-          },
-          {
-            "day": 25,
-            "balloons": 0
-          },
-          {
-            "day": 26,
-            "balloons": 0
-          },
-          {
-            "day": 27,
-            "balloons": 0
-          },
-          {
-            "day": 28,
-            "balloons": 0
-          },
-          {
-            "day": 29,
-            "balloons": 0
-          },
-          {
-            "day": 30,
-            "balloons": 0
-          },
-          {
-            "day": 31,
-            "balloons": 0
-          }
-        ],
-        "fans": [],
-        "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "정선컴퍼니",
-      "user_id": "coqhal1992",
-      "nickname": "채보미=3=",
-      "profile_image_url": "https://profile.img.sooplive.com/LOGO/co/coqhal1992/coqhal1992.jpg",
-      "broadcast_start": "2026-05-28 17:25:37",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -14841,9 +14850,9 @@
       "user_id": "kangjikk",
       "nickname": "만다♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ka/kangjikk/kangjikk.jpg",
-      "broadcast_start": null,
-      "is_live": false,
-      "is_password_broadcast": true,
+      "broadcast_start": "2026-06-02 19:44:19",
+      "is_live": true,
+      "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
@@ -14993,7 +15002,7 @@
       "user_id": "dbwlsqwe",
       "nickname": "파닥♥",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/db/dbwlsqwe/dbwlsqwe.jpg",
-      "broadcast_start": "2026-06-02 16:47:13",
+      "broadcast_start": "2026-06-02 20:58:57",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -16408,7 +16417,7 @@
       "user_id": "kmoodandj",
       "nickname": "김그루♡",
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/km/kmoodandj/kmoodandj.jpg",
-      "broadcast_start": "2026-06-02 20:35:49",
+      "broadcast_start": "2026-06-03 01:26:29",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
