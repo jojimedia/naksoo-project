@@ -279,6 +279,146 @@ async def fetch_balloon(client, user_id, year, month):
         ) from e
 
 
+async def fetch_month_ranking(client, year, month):
+    """풍투 숲 전체 월간 랭킹(chart/get)을 가져온다."""
+
+    url = (
+        "https://static.poong.today/chart/get"
+        f"?ctype=month&ks=false&year={year}&month={month}&day=undefined"
+    )
+
+    res = await client.get(url, headers=POONG_HEADERS)
+
+    if res.status_code != 200:
+        body_preview = res.text[:200].replace("\n", " ")
+        raise RuntimeError(
+            f"chart/get 실패: {year}-{month} "
+            f"{res.status_code} body={body_preview!r}"
+        )
+
+    try:
+        data = res.json()
+    except ValueError as e:
+        body_preview = res.text[:200].replace("\n", " ")
+        raise RuntimeError(
+            f"chart/get JSON 파싱 실패: {year}-{month} "
+            f"body={body_preview!r}"
+        ) from e
+
+    if not isinstance(data, dict) or data.get("error"):
+        return []
+
+    ranking = data.get("b")
+
+    if not isinstance(ranking, list):
+        return []
+
+    return ranking
+
+
+async def get_month_ranking_cached(client, year, month, ranking_cache):
+    """월간 랭킹을 (year, month) 단위로 한 번만 조회한다."""
+
+    key = (year, month)
+
+    if key not in ranking_cache:
+        ranking_cache[key] = await fetch_month_ranking(client, year, month)
+
+    return ranking_cache[key]
+
+
+def find_ranking_entry(ranking, user_id):
+    """월간 랭킹 배열에서 BJ user_id에 해당하는 항목을 찾는다."""
+
+    for entry in ranking:
+        if entry.get("i") == user_id:
+            return entry
+
+    return None
+
+
+def build_month_data_from_chart(entry, year, month):
+    """chart/get 랭킹 한 줄에서 월합만 채운 month_data를 만든다."""
+
+    return {
+        "year": year,
+        "month": month,
+        "total_balloons": int(entry.get("b") or 0),
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "chart_ranking",
+    }
+
+
+async def resolve_month_balloon_data(
+    client,
+    user_id,
+    year,
+    month,
+    ranking_cache,
+    crew_name="",
+):
+    """
+    detail/get 우선, 실패 시 chart/get 월간 랭킹에서 월합만 가져온다.
+    후원자·일별은 detail이 없으면 비운다.
+    """
+
+    label = f"{crew_name}/{user_id} balloon {year}-{month}"
+    balloon_data = None
+
+    try:
+        balloon_data = await retry(
+            lambda: fetch_balloon(client, user_id, year, month),
+            retries=8,
+            delay=2,
+            label=label,
+        )
+    except Exception as e:
+        print(f"[{crew_name}/{user_id}] detail/get 실패 {year}-{month}: {e}")
+
+    if (
+        balloon_data is not None
+        and not is_poong_not_found_response(balloon_data)
+        and is_month_data_available(balloon_data)
+    ):
+        month_data = build_month_data(balloon_data, year, month)
+        month_data["data_source"] = "detail"
+        return month_data
+
+    try:
+        ranking = await get_month_ranking_cached(
+            client,
+            year,
+            month,
+            ranking_cache,
+        )
+    except Exception as e:
+        print(f"[{crew_name}/{user_id}] chart/get 실패 {year}-{month}: {e}")
+        return None
+
+    entry = find_ranking_entry(ranking, user_id)
+
+    if entry is None:
+        print(
+            f"[{crew_name}/{user_id}] chart/get 미등록 {year}-{month} → 월합 0"
+        )
+        return {
+            "year": year,
+            "month": month,
+            "total_balloons": 0,
+            "daily_balloons": [],
+            "fans": [],
+            "data_source": "chart_ranking",
+        }
+
+    print(
+        f"[{crew_name}/{user_id}] chart/get fallback {year}-{month} "
+        f"total={entry.get('b')}"
+    )
+
+    return build_month_data_from_chart(entry, year, month)
+
+
 # =========================
 # 재시도 함수
 # =========================
@@ -448,10 +588,16 @@ def build_month_data(balloon_data, year, month):
     }
 
 
-async def fetch_current_month_data(client, user_id, crew_name, calendar_current):
+async def fetch_current_month_data(
+    client,
+    user_id,
+    crew_name,
+    calendar_current,
+    ranking_cache,
+):
     """
-    달력상 현재월 데이터를 먼저 조회한다.
-    에러/미준비 응답이면 전월 데이터로 current_month를 채운다.
+    달력상 현재월 데이터를 조회한다.
+    detail/get 실패 시 chart/get 월합을 쓰고, 둘 다 없으면 전월로 fallback한다.
     """
 
     current_year = calendar_current["year"]
@@ -461,66 +607,32 @@ async def fetch_current_month_data(client, user_id, crew_name, calendar_current)
         f"[{crew_name}/{user_id}] 풍투 현재월 조회 "
         f"{current_year}-{current_month}"
     )
-    current_balloon_data = await retry(
-        lambda: fetch_balloon(
-            client,
-            user_id,
-            current_year,
-            current_month,
-        ),
-        retries=8,
-        delay=2,
-        label=(
-            f"{crew_name}/{user_id} "
-            f"balloon {current_year}-{current_month}"
-        ),
-    )
 
-    if (
-        not is_poong_not_found_response(current_balloon_data)
-        and is_month_data_available(current_balloon_data)
-    ):
-        return (
-            build_month_data(
-                current_balloon_data,
-                current_year,
-                current_month,
-            ),
-            False,
-        )
-
-    fallback_year, fallback_month = get_previous_period(
+    current_month_data = await resolve_month_balloon_data(
+        client,
+        user_id,
         current_year,
         current_month,
+        ranking_cache,
+        crew_name,
     )
+
+    if current_month_data is not None:
+        return current_month_data, False
 
     print(
-        f"[{crew_name}/{user_id}] 현재월 에러/미준비 → "
-        f"전월 {fallback_year}-{fallback_month} 조회"
-    )
-    fallback_balloon_data = await retry(
-        lambda: fetch_balloon(
-            client,
-            user_id,
-            fallback_year,
-            fallback_month,
-        ),
-        retries=8,
-        delay=2,
-        label=(
-            f"{crew_name}/{user_id} "
-            f"balloon {fallback_year}-{fallback_month}"
-        ),
+        f"[{crew_name}/{user_id}] 현재월 detail/chart 없음 → "
+        f"{current_year}-{current_month} 월합 0"
     )
 
-    return (
-        build_month_data(
-            fallback_balloon_data,
-            fallback_year,
-            fallback_month,
-        ),
-        True,
-    )
+    return {
+        "year": current_year,
+        "month": current_month,
+        "total_balloons": 0,
+        "daily_balloons": [],
+        "fans": [],
+        "data_source": "unavailable",
+    }, True
 
 
 # =========================
@@ -531,6 +643,7 @@ async def fetch_one_member(
     client,
     member,
     period,
+    ranking_cache,
     semaphore,
     fan_profile_cache,
     fan_profile_lock,
@@ -583,6 +696,7 @@ async def fetch_one_member(
                 user_id,
                 crew_name,
                 period["calendar_current"],
+                ranking_cache,
             )
 
             await asyncio.sleep(0.5)
@@ -592,20 +706,23 @@ async def fetch_one_member(
                 f"[{crew_name}/{user_id}] 풍투 이전달 조회 "
                 f"{previous_year}-{previous_month}"
             )
-            previous_balloon_data = await retry(
-                lambda: fetch_balloon(
-                    client,
-                    user_id,
-                    previous_year,
-                    previous_month,
-                ),
-                retries=8,
-                delay=2,
-                label=(
-                    f"{crew_name}/{user_id} "
-                    f"balloon {previous_year}-{previous_month}"
-                ),
+            previous_month_data = await resolve_month_balloon_data(
+                client,
+                user_id,
+                previous_year,
+                previous_month,
+                ranking_cache,
+                crew_name,
             )
+
+            if previous_month_data is None:
+                previous_month_data = {
+                    "year": previous_year,
+                    "month": previous_month,
+                    "total_balloons": 0,
+                    "daily_balloons": [],
+                    "fans": [],
+                }
 
             current_month_data["fans"] = await enrich_fans_with_profiles(
                 client,
@@ -634,11 +751,7 @@ async def fetch_one_member(
 
                 "current_month": current_month_data,
 
-                "previous_month": build_month_data(
-                    previous_balloon_data,
-                    previous_year,
-                    previous_month,
-                ),
+                "previous_month": previous_month_data,
 
                 "success": True,
             }
@@ -833,7 +946,7 @@ def save_result_json(output, now):
 # 기존 result.json 멤버 데이터 읽기
 # =========================
 
-async def restore_failed_items_from_previous_result(items):
+async def restore_failed_items_from_previous_result(items, period):
     """이번 수집에 실패한 멤버만 GitHub result.json의 해당 멤버 데이터로 대체한다."""
 
     previous_items = await load_previous_result_items()
@@ -841,6 +954,10 @@ async def restore_failed_items_from_previous_result(items):
     if not previous_items:
         return items
 
+    calendar_period = (
+        period["calendar_current"]["year"],
+        period["calendar_current"]["month"],
+    )
     restored_items = []
 
     for item in items:
@@ -852,6 +969,16 @@ async def restore_failed_items_from_previous_result(items):
         previous_item = previous_items.get(key)
 
         if previous_item is None:
+            restored_items.append(item)
+            continue
+
+        previous_current = previous_item.get("current_month") or {}
+        backup_period = (
+            previous_current.get("year"),
+            previous_current.get("month"),
+        )
+
+        if backup_period != calendar_period:
             restored_items.append(item)
             continue
 
@@ -884,6 +1011,10 @@ async def restore_suspicious_month_items_from_previous_result(items, period):
         return items
 
     calendar_current = period["calendar_current"]
+    calendar_period = (
+        calendar_current["year"],
+        calendar_current["month"],
+    )
     now = period["now"]
     restored_items = []
 
@@ -897,6 +1028,25 @@ async def restore_suspicious_month_items_from_previous_result(items, period):
 
         item_current = item.get("current_month") or {}
         previous_current = previous_item.get("current_month") or {}
+        item_period = (
+            item_current.get("year"),
+            item_current.get("month"),
+        )
+        backup_period = (
+            previous_current.get("year"),
+            previous_current.get("month"),
+        )
+
+        # GitHub에 5월이 current_month에 남은 등 달력 현재월과 맞지 않는 백업은 쓰지 않는다.
+        if backup_period != calendar_period:
+            restored_items.append(item)
+            continue
+
+        # 전월 fallback으로 current_month에 전월이 들어간 경우도 GitHub와 비교·복구하지 않는다.
+        if item_period != calendar_period:
+            restored_items.append(item)
+            continue
+
         item_total = int(item_current.get("total_balloons") or 0)
         previous_total = int(previous_current.get("total_balloons") or 0)
         used_fallback = item.get("current_month_used_fallback", False)
@@ -908,16 +1058,13 @@ async def restore_suspicious_month_items_from_previous_result(items, period):
             now,
         )
 
-        compare_period = (
-            item_current.get("year"),
-            item_current.get("month"),
-        )
-        backup_period = (
-            previous_current.get("year"),
-            previous_current.get("month"),
-        )
-        is_same_period = compare_period == backup_period
+        is_same_period = item_period == backup_period
         regressed = is_same_period and previous_total > item_total
+
+        # chart/get fallback은 detail이 없을 때 의도한 값이므로 GitHub 회귀 보정으로 덮지 않는다.
+        if item_current.get("data_source") == "chart_ranking" and regressed:
+            restored_items.append(item)
+            continue
 
         should_restore = (
             suspicious
@@ -1102,12 +1249,29 @@ async def main():
                 **calendar,
                 "calendar_current": calendar["current"],
             }
+            ranking_cache = {}
+
+            for year, month in (
+                (calendar["current"]["year"], calendar["current"]["month"]),
+                (calendar["previous"]["year"], calendar["previous"]["month"]),
+            ):
+                try:
+                    await get_month_ranking_cached(
+                        client,
+                        year,
+                        month,
+                        ranking_cache,
+                    )
+                    print(f"월간 랭킹 캐시 로드: {year}-{month}")
+                except Exception as e:
+                    print(f"월간 랭킹 캐시 로드 실패: {year}-{month}", e)
 
             tasks = [
                 fetch_one_member(
                     client,
                     member,
                     period,
+                    ranking_cache,
                     semaphore,
                     fan_profile_cache,
                     fan_profile_lock,
@@ -1137,7 +1301,7 @@ async def main():
                 for item in failed_items
             )
             print(f"일부 멤버 조회 실패 {len(failed_items)}명: {failed_members}")
-            items = await restore_failed_items_from_previous_result(items)
+            items = await restore_failed_items_from_previous_result(items, period)
 
         items = await restore_suspicious_month_items_from_previous_result(
             items,
