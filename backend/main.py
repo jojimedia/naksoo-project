@@ -6,7 +6,7 @@ import json
 import os
 from collections import Counter
 from io import StringIO
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
@@ -23,7 +23,18 @@ SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1w-hCArIqriowgLawxlAwZ1x
 # 결과 JSON 저장 폴더
 OUTPUT_DIR = Path("data")
 
-# GitHub result.json (백업 = 커밋 이력)
+# 타임스탬프 스냅샷 백업 (보관 기간·개수 초과 시 파일 삭제)
+BACKUP_DIR = Path(__file__).resolve().parent / "backups"
+BACKUP_RETENTION_DAYS = max(
+    1,
+    int(os.environ.get("NAKSOO_BACKUP_RETENTION_DAYS", "3")),
+)
+BACKUP_MAX_COUNT = max(
+    1,
+    int(os.environ.get("NAKSOO_BACKUP_MAX_COUNT", "100")),
+)
+
+# GitHub result.json (패치 실패 시 추가 복구 소스)
 GITHUB_REPO = "jojimedia/naksoo-project"
 GITHUB_RESULT_PATH = "backend/data/result.json"
 GITHUB_DATA_REF = os.environ.get("GITHUB_DATA_REF", "main")
@@ -910,17 +921,193 @@ def write_result_json(data):
     print(f"result.json 저장 완료: {result_path}")
 
 
+def list_local_backup_paths():
+    """백업 스냅샷 경로를 최신순으로 반환한다."""
+
+    if not BACKUP_DIR.exists():
+        return []
+
+    return sorted(
+        BACKUP_DIR.glob("*.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def load_local_backup_data(skip=0):
+    """
+    로컬 백업 스냅샷을 읽는다.
+    skip=0 최신, skip=1 그 이전 ...
+  """
+
+    paths = list_local_backup_paths()
+
+    if len(paths) <= skip:
+        return None, None
+
+    path = paths[skip]
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"로컬 백업 읽기 실패: {path.name}", e)
+        return None, None
+
+    if not is_successful_backup_data(data):
+        return None, None
+
+    return data, path
+
+
+def save_backup_snapshot(data, now):
+    """패치 성공 시 타임스탬프 백업 파일을 만든다."""
+
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup_path = BACKUP_DIR / f"{now.strftime('%Y-%m-%d_%H%M%S')}.json"
+
+    with open(backup_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"백업 스냅샷 저장: {backup_path.name}")
+
+
+def parse_backup_timestamp(backup_path):
+    """백업 파일명(YYYY-MM-DD_HHMMSS.json)에서 시각을 파싱한다."""
+
+    stem = backup_path.stem
+
+    try:
+        parsed = datetime.strptime(stem, "%Y-%m-%d_%H%M%S")
+    except ValueError:
+        return None
+
+    return parsed.replace(tzinfo=TIMEZONE)
+
+
+def backup_file_timestamp(backup_path, now):
+    """파일명 시각을 우선하고, 없으면 수정 시각을 쓴다."""
+
+    parsed = parse_backup_timestamp(backup_path)
+
+    if parsed is not None:
+        return parsed
+
+    return datetime.fromtimestamp(backup_path.stat().st_mtime, tz=TIMEZONE)
+
+
+def delete_backup_file(backup_path, reason):
+    """백업 스냅샷 파일을 디스크에서 삭제한다."""
+
+    try:
+        backup_path.unlink()
+    except OSError as e:
+        print(f"백업 파일 삭제 실패: {backup_path.name} ({e})")
+        return False
+
+    print(f"백업 파일 삭제 ({reason}): {backup_path.name}")
+    return True
+
+
+def prune_invalid_backup_files():
+    """손상되었거나 실패 데이터인 백업 파일을 삭제한다."""
+
+    removed = 0
+
+    for backup_path in list(BACKUP_DIR.glob("*.json")):
+        try:
+            with open(backup_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            if delete_backup_file(backup_path, "읽기 실패"):
+                removed += 1
+            continue
+
+        if not is_successful_backup_data(data):
+            if delete_backup_file(backup_path, "유효하지 않은 데이터"):
+                removed += 1
+
+    return removed
+
+
+def prune_old_backups(now):
+    """보관 기간(N일)을 넘긴 백업 스냅샷 파일을 삭제한다."""
+
+    if not BACKUP_DIR.exists():
+        return 0
+
+    cutoff = now - timedelta(days=BACKUP_RETENTION_DAYS)
+    removed = 0
+
+    for backup_path in list_local_backup_paths()[::-1]:
+        if backup_file_timestamp(backup_path, now) >= cutoff:
+            continue
+
+        if delete_backup_file(backup_path, f"보관 {BACKUP_RETENTION_DAYS}일 초과"):
+            removed += 1
+
+    return removed
+
+
+def prune_excess_backup_count():
+    """최대 보관 개수를 넘는 오래된 백업 파일을 삭제한다."""
+
+    paths = list_local_backup_paths()
+    removed = 0
+
+    for backup_path in paths[BACKUP_MAX_COUNT:]:
+        if delete_backup_file(backup_path, f"개수 상한 {BACKUP_MAX_COUNT}개 초과"):
+            removed += 1
+
+    return removed
+
+
+def cleanup_backup_files(now):
+    """백업 폴더 정리: 손상 파일·보관 일수·개수 상한 기준으로 삭제."""
+
+    if not BACKUP_DIR.exists():
+        return {
+            "invalid": 0,
+            "expired": 0,
+            "excess": 0,
+        }
+
+    invalid = prune_invalid_backup_files()
+    expired = prune_old_backups(now)
+    excess = prune_excess_backup_count()
+    total = invalid + expired + excess
+
+    if total:
+        print(
+            f"백업 정리 완료: 삭제 {total}개 "
+            f"(손상 {invalid}, 기간 {expired}, 개수 {excess})"
+        )
+
+    return {
+        "invalid": invalid,
+        "expired": expired,
+        "excess": excess,
+    }
+
+
 # =========================
-# 실패 시 GitHub 백업 복구
+# 실패 시 백업 복구
 # =========================
 
 async def restore_latest_backup():
-    """패치 실패 시 GitHub result.json 직전 커밋으로 복구한다."""
+    """패치 실패 시 최신 로컬 스냅샷 또는 GitHub 직전 커밋으로 복구한다."""
+
+    data, backup_path = load_local_backup_data(skip=0)
+
+    if data is not None:
+        write_result_json(data)
+        print(f"로컬 백업 복구 완료: {backup_path.name}")
+        return True
 
     data, sha = await find_github_backup_data(skip=1)
 
     if data is None:
-        print("GitHub 백업 없음")
+        print("복구 가능한 백업 없음")
         return False
 
     write_result_json(data)
@@ -934,12 +1121,11 @@ async def restore_latest_backup():
 # =========================
 
 def save_result_json(output, now):
-    """
-    패치 성공 시 result.json 저장.
-    백업은 GitHub Actions가 커밋하는 result.json 이력을 사용한다.
-    """
+    """패치 성공 시 result.json 저장 + 스냅샷 백업 + 오래된 백업 파일 삭제."""
 
     write_result_json(output)
+    save_backup_snapshot(output, now)
+    cleanup_backup_files(now)
 
 
 # =========================
@@ -1222,6 +1408,7 @@ async def main():
     now = datetime.now(TIMEZONE)
 
     OUTPUT_DIR.mkdir(exist_ok=True)
+    cleanup_backup_files(now)
 
     try:
         members = await fetch_google_sheet_members()
@@ -1356,4 +1543,9 @@ async def main():
 # =========================
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--prune-backups":
+        cleanup_backup_files(datetime.now(TIMEZONE))
+    else:
+        asyncio.run(main())

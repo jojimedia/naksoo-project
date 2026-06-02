@@ -14,6 +14,8 @@ jobs:
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      NAKSOO_BACKUP_RETENTION_DAYS: "3"
+      NAKSOO_BACKUP_MAX_COUNT: "100"
 
     steps:
       - name: 코드 가져오기
@@ -28,6 +30,11 @@ jobs:
         run: |
           cd backend
           pip install -r requirements.txt
+
+      - name: 오래된 백업 파일 삭제
+        run: |
+          cd backend
+          python main.py --prune-backups
 
       - name: Python 실행
         run: |
@@ -44,7 +51,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add -A backend/data frontend/public/data
+          git add -A backend/data frontend/public/data backend/backups
 
           git commit -m "auto update result json" || echo "변경 없음"
           git push
