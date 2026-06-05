@@ -4,7 +4,9 @@ import asyncio
 import csv
 import json
 import os
+import re
 from collections import Counter
+from html import unescape
 from io import StringIO
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -59,6 +61,19 @@ POONG_HEADERS = {
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
 }
+
+POONGGO_HEADERS = {
+    **HEADERS,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Referer": "https://poonggo.com/",
+    "Origin": "https://poonggo.com",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+}
+
+ENABLE_POONGTODAY_FALLBACK = (
+    os.environ.get("NAKSOO_ENABLE_POONGTODAY_FALLBACK", "0") == "1"
+)
 
 # =========================
 # 현재월 / 이전달 계산
@@ -261,9 +276,12 @@ def resolve_live_status(station_data, live_status):
 async def fetch_balloon(client, user_id, year, month):
     """
     풍투 detail/get API에서 월간 별풍선 데이터를 가져온다.
-    - b: 월 전체 별풍선
-    - d: 날짜별 별풍선
-    - f: 팬 / 큰손 목록
+
+    응답 필드 요약 (자세한 매핑: docs/bj-detail-get.md):
+    - b: 월 누적 별풍선 → total_balloons
+    - d[]: 일별 (d=day, b=balloons) → daily_balloons
+    - f[]: 후원자 (i, n, b, c) → fans (상위 50)
+    - error: "not found" 시 chart/get fallback
     """
 
     url = (
@@ -361,6 +379,130 @@ def build_month_data_from_chart(entry, year, month):
     }
 
 
+def parse_int_text(value):
+    """쉼표/기호가 섞인 텍스트에서 정수만 추출한다."""
+
+    text = str(value or "")
+    digits = re.sub(r"[^\d]", "", text)
+
+    return int(digits) if digits else 0
+
+
+def strip_html(value):
+    """좁은 범위의 HTML 조각을 사람이 읽는 텍스트로 바꾼다."""
+
+    text = re.sub(r"<[^>]+>", " ", value or "")
+    text = unescape(text)
+
+    return " ".join(text.split())
+
+
+def parse_poonggo_total(html):
+    """poonggo 월간/일별 페이지의 '별풍선 합계' 값을 읽는다."""
+
+    match = re.search(
+        r"<span>\s*별풍선 합계\s*</span>.*?<h3[^>]*>(.*?)</h3>",
+        html,
+        flags=re.DOTALL,
+    )
+
+    if not match:
+        return None
+
+    return parse_int_text(strip_html(match.group(1)))
+
+
+def parse_poonggo_fan_rows(html, limit=50):
+    """poonggo 팬랭킹 HTML을 기존 result.json fans 배열로 변환한다."""
+
+    fans = []
+
+    for chunk in re.findall(r"<li>(.*?)</li>", html, flags=re.DOTALL):
+        href_match = re.search(
+            r'href="https://www\.sooplive\.co\.kr/station/([^"]+)"',
+            chunk,
+        )
+
+        if not href_match:
+            continue
+
+        user_id = href_match.group(1).strip()
+        anchor_match = re.search(
+            r"<a\b[^>]*>(.*?)</a>",
+            chunk,
+            flags=re.DOTALL,
+        )
+        anchor_text = strip_html(anchor_match.group(1)) if anchor_match else ""
+        nickname = re.sub(r"^(👑|🥈|🥉|\d+)\s*", "", anchor_text).strip()
+
+        values = [
+            parse_int_text(strip_html(match))
+            for match in re.findall(
+                r'<div[^>]*class="[^"]*\bflx\b[^"]*\bjc\b[^"]*"[^>]*>'
+                r"(.*?)</div>",
+                chunk,
+                flags=re.DOTALL,
+            )
+        ]
+
+        if not values:
+            continue
+
+        balloons = values[0]
+        count = values[1] if len(values) > 1 else 0
+
+        fans.append({
+            "user_id": user_id,
+            "nickname": nickname or user_id,
+            "balloons": balloons,
+            "count": count,
+            "avg_balloons": int(balloons / count) if count else 0,
+        })
+
+        if len(fans) >= limit:
+            break
+
+    return fans
+
+
+def parse_poonggo_month_data(html, year, month):
+    """poonggo station 월간 HTML을 기존 month_data 형태로 변환한다."""
+
+    total_balloons = parse_poonggo_total(html)
+
+    if total_balloons is None:
+        raise RuntimeError("poonggo total 파싱 실패")
+
+    return {
+        "year": year,
+        "month": month,
+        "total_balloons": total_balloons,
+        "daily_balloons": [],
+        "fans": parse_poonggo_fan_rows(html),
+        "data_source": "poonggo_monthly",
+    }
+
+
+async def fetch_poonggo_month_data(client, user_id, year, month):
+    """poonggo station 월간 통계 HTML에서 월합과 팬랭킹을 가져온다."""
+
+    url = (
+        f"https://poonggo.com/station/{user_id}"
+        f"?c=monthly&date={year}-{month:02d}-01&page=1&tab=1"
+    )
+
+    res = await client.get(url, headers=POONGGO_HEADERS)
+
+    if res.status_code != 200:
+        body_preview = res.text[:200].replace("\n", " ")
+        raise RuntimeError(
+            f"poonggo 월간 실패: {user_id} {year}-{month} "
+            f"{res.status_code} body={body_preview!r}"
+        )
+
+    return parse_poonggo_month_data(res.text, year, month)
+
+
 async def resolve_month_balloon_data(
     client,
     user_id,
@@ -370,9 +512,32 @@ async def resolve_month_balloon_data(
     crew_name="",
 ):
     """
-    detail/get 우선, 실패 시 chart/get 월간 랭킹에서 월합만 가져온다.
-    후원자·일별은 detail이 없으면 비운다.
+    poonggo 월간 HTML을 우선 사용한다.
+    기존 풍투 API는 NAKSOO_ENABLE_POONGTODAY_FALLBACK=1일 때만 연결한다.
+    poonggo는 월합·팬랭킹을 채우고 일별은 비운다.
     """
+
+    try:
+        month_data = await retry(
+            lambda: fetch_poonggo_month_data(client, user_id, year, month),
+            retries=3,
+            delay=1,
+            label=f"{crew_name}/{user_id} poonggo {year}-{month}",
+        )
+        print(
+            f"[{crew_name}/{user_id}] poonggo 월간 성공 {year}-{month} "
+            f"total={month_data.get('total_balloons')}"
+        )
+        return month_data
+    except Exception as e:
+        print(f"[{crew_name}/{user_id}] poonggo 월간 실패 {year}-{month}: {e}")
+
+    if not ENABLE_POONGTODAY_FALLBACK:
+        print(
+            f"[{crew_name}/{user_id}] 풍투 fallback 비활성화 "
+            f"{year}-{month}"
+        )
+        return None
 
     label = f"{crew_name}/{user_id} balloon {year}-{month}"
     balloon_data = None
@@ -615,7 +780,7 @@ async def fetch_current_month_data(
     current_month = calendar_current["month"]
 
     print(
-        f"[{crew_name}/{user_id}] 풍투 현재월 조회 "
+        f"[{crew_name}/{user_id}] 별풍 현재월 조회 "
         f"{current_year}-{current_month}"
     )
 
@@ -714,7 +879,7 @@ async def fetch_one_member(
 
             # 이전달 별풍 데이터 가져오기
             print(
-                f"[{crew_name}/{user_id}] 풍투 이전달 조회 "
+                f"[{crew_name}/{user_id}] 별풍 이전달 조회 "
                 f"{previous_year}-{previous_month}"
             )
             previous_month_data = await resolve_month_balloon_data(
@@ -1247,8 +1412,12 @@ async def restore_suspicious_month_items_from_previous_result(items, period):
         is_same_period = item_period == backup_period
         regressed = is_same_period and previous_total > item_total
 
-        # chart/get fallback은 detail이 없을 때 의도한 값이므로 GitHub 회귀 보정으로 덮지 않는다.
-        if item_current.get("data_source") == "chart_ranking" and regressed:
+        # 의도적으로 선택한 월합 소스는 GitHub 회귀 보정으로 덮지 않는다.
+        # poonggo 전환 후에는 이전 풍투 값보다 작아도 최신 기준값으로 본다.
+        if item_current.get("data_source") in (
+            "chart_ranking",
+            "poonggo_monthly",
+        ) and regressed:
             restored_items.append(item)
             continue
 
@@ -1399,7 +1568,7 @@ async def main():
     전체 실행 흐름:
     1. 현재월 / 이전달 계산
     2. 구글시트에서 멤버 목록 가져오기
-    3. 풍투 API에서 멤버별 정보 가져오기
+    3. 풍고 기준으로 멤버별 별풍선 정보 가져오기
     4. JSON 구조로 정리
     5. 성공하면 백업 JSON + result.json 저장
     6. 전체 실패하면 최신 백업을 result.json으로 복구
@@ -1438,20 +1607,23 @@ async def main():
             }
             ranking_cache = {}
 
-            for year, month in (
-                (calendar["current"]["year"], calendar["current"]["month"]),
-                (calendar["previous"]["year"], calendar["previous"]["month"]),
-            ):
-                try:
-                    await get_month_ranking_cached(
-                        client,
-                        year,
-                        month,
-                        ranking_cache,
-                    )
-                    print(f"월간 랭킹 캐시 로드: {year}-{month}")
-                except Exception as e:
-                    print(f"월간 랭킹 캐시 로드 실패: {year}-{month}", e)
+            if ENABLE_POONGTODAY_FALLBACK:
+                for year, month in (
+                    (calendar["current"]["year"], calendar["current"]["month"]),
+                    (calendar["previous"]["year"], calendar["previous"]["month"]),
+                ):
+                    try:
+                        await get_month_ranking_cached(
+                            client,
+                            year,
+                            month,
+                            ranking_cache,
+                        )
+                        print(f"풍투 월간 랭킹 캐시 로드: {year}-{month}")
+                    except Exception as e:
+                        print(f"풍투 월간 랭킹 캐시 로드 실패: {year}-{month}", e)
+            else:
+                print("풍투 fallback 비활성화: 풍고 기준으로만 수집")
 
             tasks = [
                 fetch_one_member(

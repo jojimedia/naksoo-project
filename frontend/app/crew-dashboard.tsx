@@ -43,7 +43,7 @@ function formatUpdatedAt(data: CrewDashboardData) {
   )}월 ${Number(data.created_date.slice(8, 10))}일 ${data.created_time.slice(
     0,
     5,
-  )} 업데이트 출처: 풍투데이`;
+  )} 업데이트 출처: 풍고`;
 }
 
 function normalizeSearch(value: string) {

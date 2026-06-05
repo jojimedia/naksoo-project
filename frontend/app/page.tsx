@@ -8,10 +8,11 @@ const GITHUB_DATA_REF = process.env.GITHUB_DATA_REF ?? "main";
 const REMOTE_DATA_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_DATA_REF}/backend/data/result.json`;
 const LOCAL_DATA_PATHS = [
   path.join(process.cwd(), "..", "backend", "data", "result.json"),
+  path.join(process.cwd(), "backend", "data", "result.json"),
   path.join(process.cwd(), "public", "data", "result.json"),
 ];
 
-function useLocalDataInDev(): boolean {
+function shouldUseLocalDataInDev(): boolean {
   if (process.env.NAKSOO_USE_LOCAL_DATA === "1") return true;
   if (process.env.NAKSOO_USE_LOCAL_DATA === "0") return false;
   return process.env.NODE_ENV === "development";
@@ -725,7 +726,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
 async function getCrewCardData() {
   const emptyData = () => makeCrewCardData(normalizeResult({ items: [] }));
 
-  if (useLocalDataInDev()) {
+  if (shouldUseLocalDataInDev()) {
     const local = await loadLocalResult();
     if (local) {
       return makeCrewCardData(normalizeResult(local));
