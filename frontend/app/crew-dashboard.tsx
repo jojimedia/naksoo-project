@@ -550,7 +550,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             className={`mx-auto gap-3 ${
               isSearching || showOverall
                 ? "flex max-w-[520px] flex-col items-center"
-                : "grid max-w-[420px] grid-cols-1 md:max-w-[820px] md:grid-cols-2 lg:max-w-none lg:grid-cols-4"
+                : "grid max-w-[420px] grid-cols-1 md:max-w-[820px] md:grid-cols-3 lg:max-w-none lg:grid-cols-5"
             }`}
           >
             {showOverall && !isSearching ? (
