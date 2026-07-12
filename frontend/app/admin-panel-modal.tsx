@@ -42,6 +42,7 @@ export default function AdminPanelModal({
   const [isLoading, setIsLoading] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [isTriggeringUpdate, setIsTriggeringUpdate] = useState(false);
+  const [isUpdateRunning, setIsUpdateRunning] = useState(false);
 
   const loadMembers = useCallback(
     async (
@@ -109,6 +110,34 @@ export default function AdminPanelModal({
 
     return () => window.clearInterval(intervalId);
   }, [loadMembers, selectedCrew]);
+
+  const refreshUpdateStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/trigger-update");
+      const data = (await response.json()) as {
+        error?: string;
+        running?: boolean;
+      };
+
+      if (!response.ok) {
+        return;
+      }
+
+      setIsUpdateRunning(Boolean(data.running));
+    } catch {
+      // Ignore polling errors.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshUpdateStatus();
+
+    const intervalId = window.setInterval(() => {
+      void refreshUpdateStatus();
+    }, 15_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [refreshUpdateStatus]);
 
   async function handleMemberConflict() {
     await loadMembers(selectedCrew);
@@ -336,6 +365,11 @@ export default function AdminPanelModal({
   }
 
   async function handleTriggerUpdate() {
+    if (isUpdateRunning) {
+      setError("이미 데이터 갱신이 진행 중입니다.");
+      return;
+    }
+
     if (
       !window.confirm(
         "데이터 갱신을 요청할까요?\n크롤이 시작되며 5~15분 후 대시보드에 반영됩니다.",
@@ -355,12 +389,20 @@ export default function AdminPanelModal({
       const data = (await response.json()) as {
         error?: string;
         message?: string;
+        running?: boolean;
       };
+
+      if (response.status === 409) {
+        setIsUpdateRunning(true);
+        setError(data.error ?? "이미 데이터 갱신이 진행 중입니다.");
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.error ?? "데이터 갱신 요청에 실패했습니다.");
       }
 
+      setIsUpdateRunning(true);
       setMessage(data.message ?? "데이터 갱신을 요청했습니다.");
     } catch (triggerError) {
       setError(
@@ -370,6 +412,7 @@ export default function AdminPanelModal({
       );
     } finally {
       setIsTriggeringUpdate(false);
+      void refreshUpdateStatus();
     }
   }
 
@@ -396,9 +439,13 @@ export default function AdminPanelModal({
               type="button"
               className="rounded-lg border border-[#5b4bdb]/50 px-3 py-1.5 text-sm font-medium text-[#d8d4ff] hover:border-[#a99cff] disabled:opacity-60"
               onClick={() => void handleTriggerUpdate()}
-              disabled={isTriggeringUpdate}
+              disabled={isTriggeringUpdate || isUpdateRunning}
             >
-              {isTriggeringUpdate ? "요청 중..." : "데이터 갱신"}
+              {isTriggeringUpdate
+                ? "요청 중..."
+                : isUpdateRunning
+                  ? "갱신 중..."
+                  : "데이터 갱신"}
             </button>
             <button
               type="button"
@@ -556,8 +603,8 @@ export default function AdminPanelModal({
           ) : null}
 
           <p className="text-xs leading-5 text-[#8d879c]">
-            다른 기기에서 변경되면 자동으로 목록이 갱신되며, 충돌 시 수정이
-            차단됩니다. 시트 반영 후 「데이터 갱신」을 눌러주세요.
+            다른 기기·다른 관리자가 갱신 중이면 버튼이 비활성화됩니다. 시트
+            변경 후 「데이터 갱신」을 눌러주세요.
           </p>
         </div>
       </div>
