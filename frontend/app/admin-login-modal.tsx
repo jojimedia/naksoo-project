@@ -172,12 +172,12 @@ export default function AdminLoginModal({
             />
           </label>
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-[#a8a2b8]">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[#3a3548] bg-[#111018] px-3 py-2.5 text-sm text-[#d8d4ff]">
             <input
               type="checkbox"
               checked={rememberLogin}
               onChange={(event) => setRememberLogin(event.target.checked)}
-              className="h-4 w-4 rounded border-[#3a3548] bg-[#111018] accent-[#5b4bdb]"
+              className="h-4 w-4 shrink-0 cursor-pointer rounded border-2 border-[#8b83ff] bg-[#17151f] accent-[#5b4bdb]"
             />
             아이디·비밀번호 저장
           </label>
