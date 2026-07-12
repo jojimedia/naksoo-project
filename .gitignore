@@ -8,3 +8,7 @@ backend/data/*
 !backend/data/result.json
 !frontend/public/data/
 !frontend/public/data/result.json
+
+# Google service account keys (never commit)
+naksoo-*.json
+*-credentials.json

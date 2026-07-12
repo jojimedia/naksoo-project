@@ -153,7 +153,7 @@ def is_suspicious_month_data(month_data, calendar_year, calendar_month, now):
 # =========================
 
 async def fetch_google_sheet_members():
-    """구글시트 CSV에서 crew_name, user_id 목록을 가져온다."""
+    """구글시트 CSV에서 crew_name, user_id, note 목록을 가져온다."""
 
     async with httpx.AsyncClient(
         follow_redirects=True,
@@ -170,6 +170,8 @@ async def fetch_google_sheet_members():
     for row in reader:
         crew_name = row.get("crew_name", "").strip()
         user_id = row.get("user_id", "").strip()
+        note = row.get("note", "").strip()
+        nickname = row.get("nickname", "").strip()
 
         # 빈 행은 무시
         if not crew_name or not user_id:
@@ -178,6 +180,9 @@ async def fetch_google_sheet_members():
         members.append({
             "crew_name": crew_name,
             "user_id": user_id,
+            "nickname": nickname,
+            "note": note,
+            "is_on_leave": note.lower() == "휴직",
         })
 
     return members
@@ -916,6 +921,8 @@ async def fetch_one_member(
                 "user_id": station_data.get("user_id") or user_id,
                 "nickname": station_data.get("nickname"),
                 "profile_image_url": station_data.get("profile_image_url"),
+                "note": member.get("note", ""),
+                "is_on_leave": member.get("is_on_leave", False),
                 "broadcast_start": (
                     station_data.get("broadcast_start")
                     if is_live
@@ -1465,16 +1472,84 @@ async def restore_suspicious_month_items_from_previous_result(items, period):
 # 저장 전 멤버 누락 검증
 # =========================
 
+def build_on_leave_item(member, period):
+    """휴직 멤버용 result.json 항목을 만든다."""
+
+    current_year = period["current"]["year"]
+    current_month = period["current"]["month"]
+    previous_year = period["previous"]["year"]
+    previous_month = period["previous"]["month"]
+
+    empty_month = lambda year, month: {
+        "year": year,
+        "month": month,
+        "total_balloons": 0,
+        "daily_balloons": [],
+        "fans": [],
+    }
+
+    return {
+        "crew_name": member["crew_name"],
+        "user_id": member["user_id"],
+        "nickname": member.get("nickname") or member["user_id"],
+        "profile_image_url": None,
+        "broadcast_start": None,
+        "is_live": False,
+        "is_password_broadcast": False,
+        "note": member.get("note", "휴직"),
+        "is_on_leave": True,
+        "current_month_used_fallback": False,
+        "current_month": empty_month(current_year, current_month),
+        "previous_month": empty_month(previous_year, previous_month),
+        "success": True,
+    }
+
+
+def apply_member_sheet_metadata(items, members, period):
+    """시트의 note/휴직 정보를 result.json에 반영한다."""
+
+    member_map = {
+        (member["crew_name"], member["user_id"]): member
+        for member in members
+    }
+    item_keys = {(item["crew_name"], item["user_id"]) for item in items}
+
+    for item in items:
+        member = member_map.get((item["crew_name"], item["user_id"]))
+        if not member:
+            continue
+
+        item["note"] = member.get("note", "")
+        item["is_on_leave"] = member.get("is_on_leave", False)
+
+    for member in members:
+        if not member.get("is_on_leave"):
+            continue
+
+        key = (member["crew_name"], member["user_id"])
+        if key in item_keys:
+            continue
+
+        items.append(build_on_leave_item(member, period))
+
+    return items
+
+
 def validate_all_members_in_items(members, items):
-    """구글시트 멤버가 결과 JSON에 모두 포함되어 있는지 확인한다."""
+    """구글시트 활성 멤버가 결과 JSON에 모두 포함되어 있는지 확인한다."""
+
+    active_members = [
+        member for member in members if not member.get("is_on_leave")
+    ]
 
     sheet_members = Counter(
         (member["crew_name"], member["user_id"])
-        for member in members
+        for member in active_members
     )
     result_members = Counter(
         (item["crew_name"], item["user_id"])
         for item in items
+        if not item.get("is_on_leave")
     )
 
     missing_members = sheet_members - result_members
@@ -1586,7 +1661,15 @@ async def main():
         if not members:
             raise RuntimeError("구글시트에서 멤버를 가져오지 못함")
 
-        print_crawl_targets(members)
+        active_members = [
+            member for member in members if not member.get("is_on_leave")
+        ]
+        on_leave_count = len(members) - len(active_members)
+
+        if on_leave_count:
+            print(f"휴직 멤버 {on_leave_count}명은 크롤 대상에서 제외")
+
+        print_crawl_targets(active_members)
 
         # 동시에 너무 많은 요청을 보내지 않도록 제한
         semaphore = asyncio.Semaphore(2)
@@ -1636,7 +1719,7 @@ async def main():
                     fan_profile_lock,
                     fan_profile_semaphore,
                 )
-                for member in members
+                for member in active_members
             ]
 
             items = await asyncio.gather(*tasks)
@@ -1666,6 +1749,8 @@ async def main():
             items,
             period,
         )
+
+        items = apply_member_sheet_metadata(items, members, period)
 
         validate_all_members_in_items(members, items)
 

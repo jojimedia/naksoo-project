@@ -13,9 +13,7 @@ const LOCAL_DATA_PATHS = [
 ];
 
 function shouldUseLocalDataInDev(): boolean {
-  if (process.env.NAKSOO_USE_LOCAL_DATA === "1") return true;
-  if (process.env.NAKSOO_USE_LOCAL_DATA === "0") return false;
-  return process.env.NODE_ENV === "development";
+  return process.env.NAKSOO_USE_LOCAL_DATA === "1";
 }
 
 async function loadLocalResult(): Promise<RawNaksooResult | null> {
@@ -61,6 +59,7 @@ type CrewMember = {
   previous_daily_balloons: DailyBalloons[];
   monthly_fans: Fan[];
   monthly_top_fans: Fan[];
+  is_on_leave?: boolean;
 };
 
 type NaksooGodTarget = {
@@ -134,6 +133,8 @@ type RankingItem = {
   broadcast_start?: string | null;
   is_live?: boolean;
   is_password_broadcast?: boolean;
+  note?: string;
+  is_on_leave?: boolean;
   current_month: MonthlyStats;
   previous_month: MonthlyStats;
   success: boolean;
@@ -270,6 +271,42 @@ function normalizeMonthlyStats(
   };
 }
 
+function isActiveForStats(item: Pick<RankingItem, "success" | "note" | "is_on_leave">) {
+  return (
+    item.success &&
+    !item.is_on_leave &&
+    String(item.note ?? "").toLowerCase() !== "휴직"
+  );
+}
+
+function dedupeCrewItems(items: RankingItem[]) {
+  const map = new Map<string, RankingItem>();
+
+  for (const item of items) {
+    const key = `${item.crew_name}:${item.user_id.toLowerCase()}`;
+    const existing = map.get(key);
+
+    if (!existing) {
+      map.set(key, item);
+      continue;
+    }
+
+    if (isActiveForStats(item) && !isActiveForStats(existing)) {
+      map.set(key, item);
+      continue;
+    }
+
+    if (
+      item.current_month.total_balloons >
+      existing.current_month.total_balloons
+    ) {
+      map.set(key, item);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 function normalizeRankingItem(
   value: Partial<RankingItem>,
   currentPeriod: Period,
@@ -298,6 +335,10 @@ function normalizeRankingItem(
       typeof value.broadcast_start === "string" ? value.broadcast_start : null,
     is_live: Boolean(value.is_live),
     is_password_broadcast: Boolean(value.is_password_broadcast),
+    note: String(value.note ?? ""),
+    is_on_leave:
+      Boolean(value.is_on_leave) ||
+      String(value.note ?? "").toLowerCase() === "휴직",
     current_month: normalizeMonthlyStats(value.current_month, currentPeriod),
     previous_month: normalizeMonthlyStats(value.previous_month, previousPeriod),
     success: true,
@@ -649,16 +690,18 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
   const now = getKstDateParts();
   const displayDate = getDisplayDate(now);
   const successfulItems = result.items.filter((item) => item.success);
-  const naksooThresholds = getNaksooThresholds(successfulItems, result);
+  const activeItems = successfulItems.filter(isActiveForStats);
+  const naksooThresholds = getNaksooThresholds(activeItems, result);
   const crewNames = Array.from(
     new Set(successfulItems.map((item) => item.crew_name)),
   );
   const crews = crewNames
     .map((crewName) => {
-      const crewItems = successfulItems.filter(
-        (item) => item.crew_name === crewName,
+      const crewItems = dedupeCrewItems(
+        successfulItems.filter((item) => item.crew_name === crewName),
       );
-      const members = crewItems
+      const activeCrewItems = crewItems.filter(isActiveForStats);
+      const activeMembers = activeCrewItems
         .sort(
           (a, b) =>
             b.current_month.total_balloons - a.current_month.total_balloons,
@@ -692,22 +735,52 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
               balloons: fan.balloons,
             })),
             monthly_top_fans: getMonthlyTopFans(item),
+            is_on_leave: false,
           };
         });
-      const currentTotal = members.reduce(
+      const leaveMembers = crewItems
+        .filter((item) => !isActiveForStats(item))
+        .sort((a, b) => a.nickname.localeCompare(b.nickname, "ko"))
+        .map((item) => {
+          const current = item.current_month.total_balloons;
+          const previous = item.previous_month.total_balloons;
+
+          return {
+            rank: 0,
+            user_id: item.user_id,
+            nickname: item.nickname,
+            profile_image_url: normalizeImageUrl(item.profile_image_url),
+            broadcast_start: item.broadcast_start ?? null,
+            is_live: false,
+            current_balloons: current,
+            previous_balloons: previous,
+            change_balloons: current - previous,
+            change_rate: Number(getChangeRate(current, previous).toFixed(1)),
+            display_day_balloons: 0,
+            current_daily_balloons: item.current_month.daily_balloons,
+            previous_daily_balloons: item.previous_month.daily_balloons,
+            monthly_fans: [],
+            monthly_top_fans: [],
+            is_on_leave: true,
+          };
+        });
+      const members = [...activeMembers, ...leaveMembers];
+      const currentTotal = activeMembers.reduce(
         (sum, member) => sum + member.current_balloons,
         0,
       );
+      const activeCount = activeMembers.length;
 
       return {
         rank: 0,
         crew_name: crewName,
-        member_count: members.length,
+        member_count: activeCount,
         current_total_balloons: currentTotal,
-        average_current_balloons: Math.round(currentTotal / members.length),
+        average_current_balloons:
+          activeCount > 0 ? Math.round(currentTotal / activeCount) : 0,
         members,
-        naksoo_gods: getNaksooGods(crewItems, naksooThresholds),
-        crew_kings: getCrewKings(crewItems),
+        naksoo_gods: getNaksooGods(activeCrewItems, naksooThresholds),
+        crew_kings: getCrewKings(activeCrewItems),
       };
     })
     .sort((a, b) => b.average_current_balloons - a.average_current_balloons)

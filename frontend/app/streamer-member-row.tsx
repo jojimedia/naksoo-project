@@ -22,6 +22,7 @@ type CrewMember = {
   display_day_balloons: number;
   monthly_fans: Fan[];
   monthly_top_fans: Fan[];
+  is_on_leave?: boolean;
 };
 
 function formatNumber(value: number) {
@@ -209,15 +210,17 @@ export default function StreamerMemberRow({
   disableScoreTone?: boolean;
 }) {
   const [isManuallyOpen, setIsManuallyOpen] = useState(false);
-  const isOpen = defaultOpen || isManuallyOpen;
-  const tone = disableScoreTone
-    ? {
-        row: "",
-        muted: "text-[#a8a2b8]",
-        name: "text-[#e5e7eb]",
-        score: "text-[#e5e7eb]",
-      }
-    : getScoreTone(member.current_balloons);
+  const isOnLeave = member.is_on_leave === true;
+  const isOpen = !isOnLeave && (defaultOpen || isManuallyOpen);
+  const tone =
+    disableScoreTone || isOnLeave
+      ? {
+          row: isOnLeave ? "opacity-60" : "",
+          muted: "text-[#a8a2b8]",
+          name: isOnLeave ? "text-[#fbbf24]" : "text-[#e5e7eb]",
+          score: "text-[#a8a2b8]",
+        }
+      : getScoreTone(member.current_balloons);
   const rowColumns = showCrew
     ? "grid-cols-[34px_92px_minmax(0,1fr)_78px]"
     : "grid-cols-[30px_minmax(0,1fr)_112px]";
@@ -229,7 +232,7 @@ export default function StreamerMemberRow({
         className={`grid min-h-[27px] ${rowColumns} ${rowGap} items-center rounded px-0.5 py-0.5 text-[16px] tracking-tight transition hover:ring-1 hover:ring-white/35 ${tone.row}`}
       >
         <p className={`font-semibold tabular-nums ${tone.muted}`}>
-          {member.rank}
+          {isOnLeave ? "—" : member.rank}
         </p>
 
         {showCrew ? (
@@ -242,20 +245,28 @@ export default function StreamerMemberRow({
           </p>
         ) : null}
 
-        <button
-          type="button"
-          className={`block min-w-0 cursor-pointer truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff] ${tone.name}`}
-          aria-expanded={isOpen}
-          aria-label={`${member.nickname} 이달의 후원자 ${isOpen ? "접기" : "열기"}`}
-          onClick={() => setIsManuallyOpen((current) => !current)}
-        >
-          <HighlightText text={member.nickname} query={searchQuery} />
-        </button>
+        {isOnLeave ? (
+          <p className={`min-w-0 truncate font-semibold ${tone.name}`}>
+            <HighlightText text={member.nickname} query={searchQuery} />
+            <span className="ml-1 text-[11px] text-[#fbbf24]">휴직</span>
+          </p>
+        ) : (
+          <button
+            type="button"
+            className={`block min-w-0 cursor-pointer truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff] ${tone.name}`}
+            aria-expanded={isOpen}
+            aria-label={`${member.nickname} 이달의 후원자 ${isOpen ? "접기" : "열기"}`}
+            onClick={() => setIsManuallyOpen((current) => !current)}
+          >
+            <HighlightText text={member.nickname} query={searchQuery} />
+          </button>
+        )}
         <p className={`text-right font-bold whitespace-nowrap tabular-nums ${tone.score}`}>
-          {formatNumber(member.current_balloons)}
+          {isOnLeave ? "—" : formatNumber(member.current_balloons)}
         </p>
       </div>
 
+      {!isOnLeave ? (
       <div
         className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
           isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
@@ -271,6 +282,7 @@ export default function StreamerMemberRow({
           />
         </div>
       </div>
+      ) : null}
     </div>
   );
 }

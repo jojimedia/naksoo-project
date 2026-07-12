@@ -32,6 +32,7 @@ type CrewMember = {
   previous_daily_balloons: DailyBalloons[];
   monthly_fans: Fan[];
   monthly_top_fans: Fan[];
+  is_on_leave?: boolean;
 };
 
 type NaksooGodTarget = {
@@ -304,16 +305,16 @@ function CrewCardBody({
         ));
       }
 
-      return crew.members.map((member) => (
+      return crew.members.map((member, memberIndex) => (
         <StreamerMemberRow
-          key={member.user_id}
+          key={`${crew.crew_name}-${member.user_id}-${memberIndex}`}
           member={member}
           defaultOpen={expandMembers}
           searchQuery={searchQuery}
         />
       ));
     },
-    [crew.members, crew.naksoo_gods, crew.crew_kings, expandMembers, mode, searchQuery],
+    [crew.crew_name, crew.members, crew.naksoo_gods, crew.crew_kings, expandMembers, mode, searchQuery],
   );
   const emptyMessage =
     mode === "kings"

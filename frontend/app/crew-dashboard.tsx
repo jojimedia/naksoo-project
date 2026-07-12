@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import AdminLoginModal from "./admin-login-modal";
+import AdminPanelModal from "./admin-panel-modal";
 import CrewCard, { getCrewHeaderColor, type CrewCardData } from "./crew-card";
 import StreamerMemberRow from "./streamer-member-row";
 
@@ -37,6 +39,11 @@ type UpdateStatus = {
   className: string;
 };
 
+type AdminSession = {
+  login_id: string;
+  crews: string[];
+};
+
 function formatUpdatedAt(data: CrewDashboardData) {
   return `${Number(data.created_date.slice(0, 4))}년 ${Number(
     data.created_date.slice(5, 7),
@@ -48,6 +55,10 @@ function formatUpdatedAt(data: CrewDashboardData) {
 
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function normalizeDonorKey(userId: string, nickname: string) {
+  return (userId || nickname).trim().toLowerCase();
 }
 
 function formatNumber(value: number) {
@@ -295,6 +306,9 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("members");
   const [showOverall, setShowOverall] = useState(false);
+  const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const crews = useMemo(() => {
@@ -310,17 +324,20 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
 
           return nickname.includes(search) || userId.includes(search);
         });
-        const currentTotal = members.reduce(
+        const activeMembers = members.filter((member) => !member.is_on_leave);
+        const currentTotal = activeMembers.reduce(
           (sum, member) => sum + member.current_balloons,
           0,
         );
 
         return {
           ...crew,
-          member_count: members.length,
+          member_count: activeMembers.length,
           current_total_balloons: currentTotal,
           average_current_balloons:
-            members.length > 0 ? Math.round(currentTotal / members.length) : 0,
+            activeMembers.length > 0
+              ? Math.round(currentTotal / activeMembers.length)
+              : 0,
           members,
         };
       })
@@ -364,7 +381,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             continue;
           }
 
-          const key = fan.user_id || fan.nickname;
+          const key = normalizeDonorKey(fan.user_id, fan.nickname);
           const current = donors.get(key) ?? {
             key,
             nickname: fan.nickname,
@@ -419,7 +436,9 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     () =>
       data.crews
         .flatMap((crew, crewIndex) =>
-          crew.members.map((member) => ({
+          crew.members
+            .filter((member) => !member.is_on_leave)
+            .map((member) => ({
             crewName: crew.crew_name,
             crewColor: getCrewHeaderColor(crewIndex),
             member,
@@ -437,6 +456,39 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         })),
     [data.crews],
   );
+
+  useEffect(() => {
+    async function loadSession() {
+      try {
+        const response = await fetch("/api/admin/session");
+        const sessionData = (await response.json()) as {
+          authenticated?: boolean;
+          login_id?: string;
+          crews?: string[];
+        };
+
+        if (sessionData.authenticated && sessionData.login_id && sessionData.crews) {
+          setAdminSession({
+            login_id: sessionData.login_id,
+            crews: sessionData.crews,
+          });
+        }
+      } catch {
+        setAdminSession(null);
+      }
+    }
+
+    void loadSession();
+  }, []);
+
+  function handleAdminButtonClick() {
+    if (adminSession) {
+      setShowAdminPanel(true);
+      return;
+    }
+
+    setShowLoginModal(true);
+  }
 
   return (
     <main className="min-h-screen bg-[#111018] bg-[radial-gradient(#2b2836_1px,transparent_1px)] bg-[length:20px_20px] text-[#e5e7eb]">
@@ -526,7 +578,26 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             </div>
           </div>
 
-          <div className="hidden justify-end md:flex">
+          <div className="hidden items-center justify-end gap-2 md:flex">
+            <button
+              type="button"
+              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border p-0 leading-none transition ${
+                adminSession
+                  ? "border-[#a99cff]/50 bg-[#5b4bdb]/20 text-[#d8d4ff]"
+                  : "border-[#3a3548] bg-[#17151f] text-[#a8a2b8] hover:border-[#a99cff]/40 hover:text-[#d8d4ff]"
+              }`}
+              aria-label={adminSession ? "크루 관리 열기" : "관리자 로그인"}
+              onClick={handleAdminButtonClick}
+            >
+              <span
+                className="flex items-center justify-center [&_box-icon]:block [&_box-icon]:leading-none"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    '<box-icon name="key" color="currentColor" size="14px"></box-icon>',
+                }}
+              />
+            </button>
             <button
               className={`rounded-full border px-2.5 py-1.5 text-[11px] font-medium leading-tight ${updateStatus.className}`}
             >
@@ -537,7 +608,26 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       </header>
 
       <div className="mx-auto max-w-[1920px] px-3 pt-3 pb-8 md:px-8">
-        <div className="mb-3 text-center md:hidden">
+        <div className="mb-3 flex items-center justify-center gap-2 md:hidden">
+          <button
+            type="button"
+            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border p-0 leading-none transition ${
+              adminSession
+                ? "border-[#a99cff]/50 bg-[#5b4bdb]/20 text-[#d8d4ff]"
+                : "border-[#3a3548] bg-[#17151f] text-[#a8a2b8]"
+            }`}
+            aria-label={adminSession ? "크루 관리 열기" : "관리자 로그인"}
+            onClick={handleAdminButtonClick}
+          >
+            <span
+              className="flex items-center justify-center [&_box-icon]:block [&_box-icon]:leading-none"
+              aria-hidden="true"
+              dangerouslySetInnerHTML={{
+                __html:
+                  '<box-icon name="key" color="currentColor" size="14px"></box-icon>',
+              }}
+            />
+          </button>
           <button
             className={`rounded-full border px-2.5 py-1.5 text-[11px] font-medium leading-tight ${updateStatus.className}`}
           >
@@ -556,9 +646,9 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             {showOverall && !isSearching ? (
               <OverallRankingCard rows={overallRows} />
             ) : searchMode === "donors" && isSearching
-              ? donorResults.map((donor) => (
+              ? donorResults.map((donor, donorIndex) => (
                   <DonorResultCard
-                    key={donor.key}
+                    key={`${donor.key}-${donorIndex}`}
                     donor={donor}
                     query={query}
                   />
@@ -600,6 +690,28 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           </section>
         </footer>
       </div>
+
+      {showLoginModal ? (
+        <AdminLoginModal
+          onClose={() => setShowLoginModal(false)}
+          onSuccess={(session) => {
+            setAdminSession(session);
+            setShowLoginModal(false);
+            setShowAdminPanel(true);
+          }}
+        />
+      ) : null}
+
+      {showAdminPanel && adminSession ? (
+        <AdminPanelModal
+          session={adminSession}
+          onClose={() => setShowAdminPanel(false)}
+          onLogout={() => {
+            setAdminSession(null);
+            setShowAdminPanel(false);
+          }}
+        />
+      ) : null}
     </main>
   );
 }
