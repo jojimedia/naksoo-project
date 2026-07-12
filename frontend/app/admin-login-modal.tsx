@@ -1,11 +1,52 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 type AdminLoginModalProps = {
   onClose: () => void;
   onSuccess: (session: { login_id: string; crews: string[] }) => void;
 };
+
+const SAVED_LOGIN_KEY = "naksoo_admin_saved_login";
+
+function loadSavedLogin() {
+  try {
+    const raw = localStorage.getItem(SAVED_LOGIN_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as {
+      login_id?: string;
+      password?: string;
+    };
+
+    if (!parsed.login_id || !parsed.password) {
+      localStorage.removeItem(SAVED_LOGIN_KEY);
+      return null;
+    }
+
+    return {
+      login_id: parsed.login_id,
+      password: parsed.password,
+    };
+  } catch {
+    localStorage.removeItem(SAVED_LOGIN_KEY);
+    return null;
+  }
+}
+
+function saveLogin(loginId: string, password: string) {
+  localStorage.setItem(
+    SAVED_LOGIN_KEY,
+    JSON.stringify({ login_id: loginId, password }),
+  );
+}
+
+function clearSavedLogin() {
+  localStorage.removeItem(SAVED_LOGIN_KEY);
+}
 
 export default function AdminLoginModal({
   onClose,
@@ -13,8 +54,21 @@ export default function AdminLoginModal({
 }: AdminLoginModalProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberLogin, setRememberLogin] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const saved = loadSavedLogin();
+
+    if (!saved) {
+      return;
+    }
+
+    setLoginId(saved.login_id);
+    setPassword(saved.password);
+    setRememberLogin(true);
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,6 +95,12 @@ export default function AdminLoginModal({
 
       if (!response.ok) {
         throw new Error(data.error ?? "로그인에 실패했습니다.");
+      }
+
+      if (rememberLogin) {
+        saveLogin(loginId, password);
+      } else {
+        clearSavedLogin();
       }
 
       onSuccess({
@@ -110,6 +170,16 @@ export default function AdminLoginModal({
               autoComplete="current-password"
               required
             />
+          </label>
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-[#a8a2b8]">
+            <input
+              type="checkbox"
+              checked={rememberLogin}
+              onChange={(event) => setRememberLogin(event.target.checked)}
+              className="h-4 w-4 rounded border-[#3a3548] bg-[#111018] accent-[#5b4bdb]"
+            />
+            아이디·비밀번호 저장
           </label>
 
           {error ? (

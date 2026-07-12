@@ -8,8 +8,9 @@ import {
 import { jsonError } from "@/lib/api-utils";
 import {
   addMember,
+  CrewVersionConflictError,
   deleteMember,
-  listMembers,
+  getCrewMembersState,
   updateMemberNote,
 } from "@/lib/google-sheets";
 
@@ -37,10 +38,11 @@ export async function GET(request: Request) {
 
     assertCrewAccess(session, crewName);
 
-    const members = await listMembers(crewName);
+    const { members, version } = await getCrewMembersState(crewName);
 
     return NextResponse.json({
       crew_name: crewName,
+      version,
       members: members.map((member) => ({
         crew_name: member.crew_name,
         user_id: member.user_id,
@@ -66,10 +68,12 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       crew_name?: string;
       user_id?: string;
+      expected_version?: string;
     };
 
     const crewName = body.crew_name?.trim() ?? "";
     const userId = body.user_id?.trim() ?? "";
+    const expectedVersion = body.expected_version?.trim() ?? "";
 
     if (!crewName || !userId) {
       return jsonError("crew_name과 user_id가 필요합니다.");
@@ -83,10 +87,18 @@ export async function POST(request: Request) {
       return jsonError("유효하지 않은 SOOP ID입니다.");
     }
 
-    await addMember(crewName, validated.user_id, validated.nickname);
+    await addMember(
+      crewName,
+      validated.user_id,
+      validated.nickname,
+      expectedVersion || undefined,
+    );
+
+    const { version } = await getCrewMembersState(crewName);
 
     return NextResponse.json({
       ok: true,
+      version,
       member: {
         crew_name: crewName,
         user_id: validated.user_id,
@@ -96,6 +108,10 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return jsonError("로그인이 필요합니다.", 401);
+    }
+
+    if (error instanceof CrewVersionConflictError) {
+      return jsonError(error.message, 409);
     }
 
     const message =
@@ -110,22 +126,30 @@ export async function DELETE(request: Request) {
     const body = (await request.json()) as {
       crew_name?: string;
       user_id?: string;
+      expected_version?: string;
     };
 
     const crewName = body.crew_name?.trim() ?? "";
     const userId = body.user_id?.trim() ?? "";
+    const expectedVersion = body.expected_version?.trim() ?? "";
 
     if (!crewName || !userId) {
       return jsonError("crew_name과 user_id가 필요합니다.");
     }
 
     assertCrewAccess(session, crewName);
-    await deleteMember(crewName, userId);
+    await deleteMember(crewName, userId, expectedVersion || undefined);
 
-    return NextResponse.json({ ok: true });
+    const { version } = await getCrewMembersState(crewName);
+
+    return NextResponse.json({ ok: true, version });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return jsonError("로그인이 필요합니다.", 401);
+    }
+
+    if (error instanceof CrewVersionConflictError) {
+      return jsonError(error.message, 409);
     }
 
     const message =
@@ -141,11 +165,13 @@ export async function PATCH(request: Request) {
       crew_name?: string;
       user_id?: string;
       note?: string;
+      expected_version?: string;
     };
 
     const crewName = body.crew_name?.trim() ?? "";
     const userId = body.user_id?.trim() ?? "";
     const note = body.note ?? "";
+    const expectedVersion = body.expected_version?.trim() ?? "";
 
     if (!crewName || !userId) {
       return jsonError("crew_name과 user_id가 필요합니다.");
@@ -156,16 +182,28 @@ export async function PATCH(request: Request) {
     }
 
     assertCrewAccess(session, crewName);
-    await updateMemberNote(crewName, userId, note);
+    await updateMemberNote(
+      crewName,
+      userId,
+      note,
+      expectedVersion || undefined,
+    );
+
+    const { version } = await getCrewMembersState(crewName);
 
     return NextResponse.json({
       ok: true,
+      version,
       note,
       is_on_leave: note.toLowerCase() === "휴직",
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return jsonError("로그인이 필요합니다.", 401);
+    }
+
+    if (error instanceof CrewVersionConflictError) {
+      return jsonError(error.message, 409);
     }
 
     const message =

@@ -33,6 +33,7 @@ export default function AdminPanelModal({
 }: AdminPanelModalProps) {
   const [selectedCrew, setSelectedCrew] = useState(session.crews[0] ?? "");
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [membersVersion, setMembersVersion] = useState("");
   const [searchUserId, setSearchUserId] = useState("");
   const [validatedStreamer, setValidatedStreamer] =
     useState<ValidatedStreamer | null>(null);
@@ -42,43 +43,77 @@ export default function AdminPanelModal({
   const [isValidating, setIsValidating] = useState(false);
   const [isTriggeringUpdate, setIsTriggeringUpdate] = useState(false);
 
-  const loadMembers = useCallback(async (crewName: string) => {
-    if (!crewName) {
-      setMembers([]);
-      return;
-    }
-
-    setIsLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch(
-        `/api/admin/members?crew=${encodeURIComponent(crewName)}`,
-      );
-      const data = (await response.json()) as {
-        error?: string;
-        members?: MemberRow[];
-      };
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "멤버 목록을 불러오지 못했습니다.");
+  const loadMembers = useCallback(
+    async (
+      crewName: string,
+      options?: {
+        silent?: boolean;
+      },
+    ) => {
+      if (!crewName) {
+        setMembers([]);
+        setMembersVersion("");
+        return;
       }
 
-      setMembers(data.members ?? []);
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "멤버 목록을 불러오지 못했습니다.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+      if (!options?.silent) {
+        setIsLoading(true);
+        setError("");
+      }
+
+      try {
+        const response = await fetch(
+          `/api/admin/members?crew=${encodeURIComponent(crewName)}`,
+        );
+        const data = (await response.json()) as {
+          error?: string;
+          members?: MemberRow[];
+          version?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "멤버 목록을 불러오지 못했습니다.");
+        }
+
+        setMembers(data.members ?? []);
+        setMembersVersion(data.version ?? "");
+      } catch (loadError) {
+        if (!options?.silent) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "멤버 목록을 불러오지 못했습니다.",
+          );
+        }
+      } finally {
+        if (!options?.silent) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void loadMembers(selectedCrew);
   }, [loadMembers, selectedCrew]);
+
+  useEffect(() => {
+    if (!selectedCrew) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadMembers(selectedCrew, { silent: true });
+    }, 30_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [loadMembers, selectedCrew]);
+
+  async function handleMemberConflict() {
+    await loadMembers(selectedCrew);
+    setError("다른 기기에서 목록이 변경되었습니다. 목록을 새로 불러왔습니다.");
+  }
 
   async function handleValidate() {
     const userId = searchUserId.trim();
@@ -157,13 +192,26 @@ export default function AdminPanelModal({
         body: JSON.stringify({
           crew_name: selectedCrew,
           user_id: validatedStreamer.user_id,
+          expected_version: membersVersion,
         }),
       });
 
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        version?: string;
+      };
+
+      if (response.status === 409) {
+        await handleMemberConflict();
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.error ?? "멤버 등록에 실패했습니다.");
+      }
+
+      if (data.version) {
+        setMembersVersion(data.version);
       }
 
       setMessage(`${validatedStreamer.nickname} 님을 등록했습니다.`);
@@ -196,13 +244,26 @@ export default function AdminPanelModal({
         body: JSON.stringify({
           crew_name: selectedCrew,
           user_id: userId,
+          expected_version: membersVersion,
         }),
       });
 
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        version?: string;
+      };
+
+      if (response.status === 409) {
+        await handleMemberConflict();
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.error ?? "멤버 삭제에 실패했습니다.");
+      }
+
+      if (data.version) {
+        setMembersVersion(data.version);
       }
 
       setMessage(`${userId} 멤버를 삭제했습니다.`);
@@ -232,13 +293,26 @@ export default function AdminPanelModal({
           crew_name: selectedCrew,
           user_id: member.user_id,
           note: nextNote,
+          expected_version: membersVersion,
         }),
       });
 
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        version?: string;
+      };
+
+      if (response.status === 409) {
+        await handleMemberConflict();
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.error ?? "휴직 상태 변경에 실패했습니다.");
+      }
+
+      if (data.version) {
+        setMembersVersion(data.version);
       }
 
       setMessage(
@@ -407,7 +481,16 @@ export default function AdminPanelModal({
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-[#e5e7eb]">멤버 목록</h3>
-              <span className="text-xs text-[#a8a2b8]">{members.length}명</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-xs font-medium text-[#a8a2b8] hover:text-[#e5e7eb]"
+                  onClick={() => void loadMembers(selectedCrew)}
+                >
+                  새로고침
+                </button>
+                <span className="text-xs text-[#a8a2b8]">{members.length}명</span>
+              </div>
             </div>
 
             {isLoading ? (
@@ -473,8 +556,8 @@ export default function AdminPanelModal({
           ) : null}
 
           <p className="text-xs leading-5 text-[#8d879c]">
-            시트 변경 후 「데이터 갱신」을 누르면 크롤이 즉시 시작됩니다. 매시
-            자동 갱신도 계속 동작합니다.
+            다른 기기에서 변경되면 자동으로 목록이 갱신되며, 충돌 시 수정이
+            차단됩니다. 시트 반영 후 「데이터 갱신」을 눌러주세요.
           </p>
         </div>
       </div>

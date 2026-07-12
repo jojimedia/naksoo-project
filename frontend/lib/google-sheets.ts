@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { google, sheets_v4 } from "googleapis";
 
 export type SheetMember = {
@@ -14,6 +15,13 @@ export type SheetAdmin = {
   password: string;
   crews: string[];
 };
+
+export class CrewVersionConflictError extends Error {
+  constructor() {
+    super("다른 기기에서 목록이 변경되었습니다. 새로고침 후 다시 시도해주세요.");
+    this.name = "CrewVersionConflictError";
+  }
+}
 
 const ADMINS_SHEET = "admins";
 const DEFAULT_SHEET_ID = "1w-hCArIqriowgLawxlAwZ1xOmGvGw32ics0ZGRHmwQs";
@@ -207,6 +215,97 @@ function noteColumnLetter(headers: string[]) {
   return String.fromCharCode("A".charCodeAt(0) + noteIndex);
 }
 
+export function computeCrewVersion(members: SheetMember[]) {
+  const payload = members
+    .map(
+      (member) =>
+        `${member.crew_name}\t${member.user_id.toLowerCase()}\t${member.nickname}\t${member.note}`,
+    )
+    .sort()
+    .join("\n");
+
+  return createHash("sha256").update(payload).digest("hex").slice(0, 16);
+}
+
+export async function getCrewMembersState(crewName: string) {
+  const members = await listMembers(crewName);
+
+  return {
+    members,
+    version: computeCrewVersion(members),
+  };
+}
+
+export async function assertCrewVersion(
+  crewName: string,
+  expectedVersion?: string,
+) {
+  if (!expectedVersion) {
+    return;
+  }
+
+  const { version } = await getCrewMembersState(crewName);
+
+  if (version !== expectedVersion) {
+    throw new CrewVersionConflictError();
+  }
+}
+
+async function deleteMemberRow(rowIndex: number) {
+  const sheetName = await resolveMembersSheetName();
+  const sheets = getSheetsClient();
+  const sheetId = await getSheetIdByTitle(sheetName);
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: getSheetId(),
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: "ROWS",
+              startIndex: rowIndex - 1,
+              endIndex: rowIndex,
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
+function pickPreferredMember(matches: SheetMember[]) {
+  return [...matches].sort((left, right) => {
+    if (left.is_on_leave !== right.is_on_leave) {
+      return left.is_on_leave ? 1 : -1;
+    }
+
+    return left.rowIndex - right.rowIndex;
+  })[0];
+}
+
+async function dedupeMemberRowsByUserId(userId: string) {
+  const members = await listMembers();
+  const normalizedUserId = userId.toLowerCase();
+  const matches = members.filter(
+    (member) => member.user_id.toLowerCase() === normalizedUserId,
+  );
+
+  if (matches.length <= 1) {
+    return;
+  }
+
+  const keep = pickPreferredMember(matches);
+  const duplicates = matches
+    .filter((member) => member.rowIndex !== keep.rowIndex)
+    .sort((left, right) => right.rowIndex - left.rowIndex);
+
+  for (const member of duplicates) {
+    await deleteMemberRow(member.rowIndex);
+  }
+}
+
 export async function listAdmins(): Promise<SheetAdmin[]> {
   const sheetName = await resolveAdminsSheetName();
   const table = await getSheetTable(sheetName);
@@ -258,7 +357,10 @@ export async function addMember(
   crewName: string,
   userId: string,
   nickname: string,
+  expectedVersion?: string,
 ) {
+  await assertCrewVersion(crewName, expectedVersion);
+
   const existing = await findMemberByUserId(userId);
 
   if (existing) {
@@ -283,47 +385,42 @@ export async function addMember(
       values: [[crewName, userId, nickname, ""]],
     },
   });
+
+  await dedupeMemberRowsByUserId(userId);
 }
 
-export async function deleteMember(crewName: string, userId: string) {
+export async function deleteMember(
+  crewName: string,
+  userId: string,
+  expectedVersion?: string,
+) {
+  await assertCrewVersion(crewName, expectedVersion);
+
   const member = await findMember(crewName, userId);
 
   if (!member) {
     throw new Error("멤버를 찾을 수 없습니다.");
   }
 
-  const sheetName = await resolveMembersSheetName();
-  const sheets = getSheetsClient();
-  const sheetId = await getSheetIdByTitle(sheetName);
-
-  await sheets.spreadsheets.batchUpdate({
-    spreadsheetId: getSheetId(),
-    requestBody: {
-      requests: [
-        {
-          deleteDimension: {
-            range: {
-              sheetId,
-              dimension: "ROWS",
-              startIndex: member.rowIndex - 1,
-              endIndex: member.rowIndex,
-            },
-          },
-        },
-      ],
-    },
-  });
+  await deleteMemberRow(member.rowIndex);
 }
 
 export async function updateMemberNote(
   crewName: string,
   userId: string,
   note: string,
+  expectedVersion?: string,
 ) {
+  await assertCrewVersion(crewName, expectedVersion);
+
   const member = await findMember(crewName, userId);
 
   if (!member) {
     throw new Error("멤버를 찾을 수 없습니다.");
+  }
+
+  if (member.note === note) {
+    return;
   }
 
   const sheetName = await resolveMembersSheetName();
