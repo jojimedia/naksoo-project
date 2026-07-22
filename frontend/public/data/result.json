@@ -1,8 +1,8 @@
 {
   "project": "naksoo",
-  "created_at": "2026-07-22T13:59:04.999743+09:00",
+  "created_at": "2026-07-22T15:42:17.491928+09:00",
   "created_date": "2026-07-22",
-  "created_time": "13:59:04",
+  "created_time": "15:42:17",
   "timezone": "Asia/Seoul",
   "current_period": {
     "year": 2026,
@@ -4717,7 +4717,10 @@
         "daily_balloons": [],
         "fans": []
       },
-      "success": true
+      "success": true,
+      "is_stale": true,
+      "stale_reason": "poong fallback empty",
+      "stale_source": "github_result"
     },
     {
       "crew_name": "광우사관학교",
@@ -4733,9 +4736,17 @@
       "current_month": {
         "year": 2026,
         "month": 7,
-        "total_balloons": 222272,
+        "total_balloons": 231671,
         "daily_balloons": [],
         "fans": [
+          {
+            "user_id": "56hk",
+            "nickname": "엘도리",
+            "balloons": 31918,
+            "count": 64,
+            "avg_balloons": 498,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/56/56hk/56hk.jpg"
+          },
           {
             "user_id": "businessman1",
             "nickname": "콜트.",
@@ -4743,14 +4754,6 @@
             "count": 56,
             "avg_balloons": 525,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/bu/businessman1/businessman1.jpg"
-          },
-          {
-            "user_id": "56hk",
-            "nickname": "엘도리",
-            "balloons": 29403,
-            "count": 60,
-            "avg_balloons": 490,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/56/56hk/56hk.jpg"
           },
           {
             "user_id": "egsd61712",
@@ -4763,9 +4766,9 @@
           {
             "user_id": "bebe97",
             "nickname": "방울",
-            "balloons": 15011,
-            "count": 76,
-            "avg_balloons": 197,
+            "balloons": 15291,
+            "count": 77,
+            "avg_balloons": 198,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/be/bebe97/bebe97.jpg"
           },
           {
@@ -4779,9 +4782,9 @@
           {
             "user_id": "lee5255",
             "nickname": "미소,,",
-            "balloons": 12369,
-            "count": 64,
-            "avg_balloons": 193,
+            "balloons": 12913,
+            "count": 70,
+            "avg_balloons": 184,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/le/lee5255/lee5255.jpg"
           },
           {
@@ -4811,9 +4814,9 @@
           {
             "user_id": "clsrn9796",
             "nickname": "#잭스",
-            "balloons": 5545,
-            "count": 19,
-            "avg_balloons": 291,
+            "balloons": 7026,
+            "count": 21,
+            "avg_balloons": 334,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/cl/clsrn9796/clsrn9796.jpg"
           },
           {
@@ -4823,6 +4826,14 @@
             "count": 4,
             "avg_balloons": 1121,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ss/ssobbang0000/ssobbang0000.jpg"
+          },
+          {
+            "user_id": "zenithukr",
+            "nickname": "도브네",
+            "balloons": 3396,
+            "count": 13,
+            "avg_balloons": 261,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ze/zenithukr/zenithukr.jpg"
           },
           {
             "user_id": "shushu1414",
@@ -4850,11 +4861,19 @@
           },
           {
             "user_id": "cocker",
-            "nickname": "NOYEHA김노예",
+            "nickname": "NOYEHA노예",
             "balloons": 2982,
             "count": 11,
             "avg_balloons": 271,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/co/cocker/cocker.jpg"
+          },
+          {
+            "user_id": "pontus1125",
+            "nickname": "잉여",
+            "balloons": 2960,
+            "count": 2,
+            "avg_balloons": 1480,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/po/pontus1125/pontus1125.jpg"
           },
           {
             "user_id": "califo111",
@@ -4897,14 +4916,6 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ht/hthong/hthong.jpg"
           },
           {
-            "user_id": "zenithukr",
-            "nickname": "도브네",
-            "balloons": 1793,
-            "count": 7,
-            "avg_balloons": 256,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ze/zenithukr/zenithukr.jpg"
-          },
-          {
             "user_id": "creed8",
             "nickname": "creed.",
             "balloons": 1697,
@@ -4937,6 +4948,22 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/nd/ndljd159/ndljd159.jpg"
           },
           {
+            "user_id": "1127jjj",
+            "nickname": "JINU_Jason",
+            "balloons": 1480,
+            "count": 1,
+            "avg_balloons": 1480,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/11/1127jjj/1127jjj.jpg"
+          },
+          {
+            "user_id": "6seong",
+            "nickname": "척애",
+            "balloons": 1480,
+            "count": 1,
+            "avg_balloons": 1480,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/6s/6seong/6seong.jpg"
+          },
+          {
             "user_id": "combo164",
             "nickname": "예진",
             "balloons": 1480,
@@ -4951,30 +4978,6 @@
             "count": 1,
             "avg_balloons": 1480,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/nn/nnounsook04/nnounsook04.jpg"
-          },
-          {
-            "user_id": "1127jjj",
-            "nickname": "JINU_Jason",
-            "balloons": 1480,
-            "count": 1,
-            "avg_balloons": 1480,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/11/1127jjj/1127jjj.jpg"
-          },
-          {
-            "user_id": "pontus1125",
-            "nickname": "잉여",
-            "balloons": 1480,
-            "count": 1,
-            "avg_balloons": 1480,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/po/pontus1125/pontus1125.jpg"
-          },
-          {
-            "user_id": "6seong",
-            "nickname": "척애",
-            "balloons": 1480,
-            "count": 1,
-            "avg_balloons": 1480,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/6s/6seong/6seong.jpg"
           },
           {
             "user_id": "gurk777",
@@ -5031,6 +5034,14 @@
             "count": 11,
             "avg_balloons": 97,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/sn/snulawyer/snulawyer.jpg"
+          },
+          {
+            "user_id": "eeee0000",
+            "nickname": "소단.",
+            "balloons": 1035,
+            "count": 3,
+            "avg_balloons": 345,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ee/eeee0000/eeee0000.jpg"
           },
           {
             "user_id": "0000111222",
@@ -5123,18 +5134,10 @@
           {
             "user_id": "wintersong",
             "nickname": "♬윈터",
-            "balloons": 606,
-            "count": 14,
-            "avg_balloons": 43,
+            "balloons": 610,
+            "count": 15,
+            "avg_balloons": 40,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/wi/wintersong/wintersong.jpg"
-          },
-          {
-            "user_id": "nscout1234",
-            "nickname": "빅터막시무스",
-            "balloons": 600,
-            "count": 1,
-            "avg_balloons": 600,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ns/nscout1234/nscout1234.jpg"
           }
         ],
         "data_source": "poonggo_monthly"
@@ -7069,7 +7072,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/03/03apple/03apple.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-07-21 17:37:29",
+      "broadcast_start": "2026-07-22 15:01:03",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -10960,7 +10963,7 @@
           },
           {
             "user_id": "wha1203",
-            "nickname": "함뽀",
+            "nickname": "그냥뽀",
             "balloons": 2097,
             "count": 11,
             "avg_balloons": 190,
@@ -11496,15 +11499,15 @@
       "current_month": {
         "year": 2026,
         "month": 7,
-        "total_balloons": 333615,
+        "total_balloons": 333648,
         "daily_balloons": [],
         "fans": [
           {
             "user_id": "pontus1125",
             "nickname": "잉여",
-            "balloons": 40934,
-            "count": 21,
-            "avg_balloons": 1949,
+            "balloons": 40967,
+            "count": 22,
+            "avg_balloons": 1862,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/po/pontus1125/pontus1125.jpg"
           },
           {
@@ -27716,7 +27719,7 @@
       "current_month": {
         "year": 2026,
         "month": 7,
-        "total_balloons": 433165,
+        "total_balloons": 437344,
         "daily_balloons": [],
         "fans": [
           {
@@ -27816,6 +27819,14 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/zp/zpfht2/zpfht2.jpg"
           },
           {
+            "user_id": "dusdus0001",
+            "nickname": "송화꺼구이",
+            "balloons": 5569,
+            "count": 49,
+            "avg_balloons": 113,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/du/dusdus0001/dusdus0001.jpg"
+          },
+          {
             "user_id": "ssoi0911",
             "nickname": "소냥이에요",
             "balloons": 5020,
@@ -27840,14 +27851,6 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/pi/pig24680/pig24680.jpg"
           },
           {
-            "user_id": "dusdus0001",
-            "nickname": "송화꺼구이",
-            "balloons": 4850,
-            "count": 45,
-            "avg_balloons": 107,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/du/dusdus0001/dusdus0001.jpg"
-          },
-          {
             "user_id": "ydm4686",
             "nickname": "근육냥",
             "balloons": 4375,
@@ -27870,6 +27873,14 @@
             "count": 6,
             "avg_balloons": 633,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/he/hellion/hellion.jpg"
+          },
+          {
+            "user_id": "cttrtjzrl",
+            "nickname": "정삐,",
+            "balloons": 3351,
+            "count": 20,
+            "avg_balloons": 167,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ct/cttrtjzrl/cttrtjzrl.jpg"
           },
           {
             "user_id": "jjmi95",
@@ -27968,12 +27979,12 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ty/tyr84fgh2/tyr84fgh2.jpg"
           },
           {
-            "user_id": "cttrtjzrl",
-            "nickname": "정삐,",
+            "user_id": "shtndk5",
+            "nickname": "노두식♥",
             "balloons": 1500,
-            "count": 11,
-            "avg_balloons": 136,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ct/cttrtjzrl/cttrtjzrl.jpg"
+            "count": 3,
+            "avg_balloons": 500,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/sh/shtndk5/shtndk5.jpg"
           },
           {
             "user_id": "bmh0946",
@@ -28048,20 +28059,20 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/pu/pu1030/pu1030.jpg"
           },
           {
-            "user_id": "djagusals17",
-            "nickname": "띠로리이이잉",
-            "balloons": 1086,
-            "count": 1,
-            "avg_balloons": 1086,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/dj/djagusals17/djagusals17.jpg"
-          },
-          {
             "user_id": "kerin0308",
             "nickname": "포카린",
             "balloons": 1086,
             "count": 1,
             "avg_balloons": 1086,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ke/kerin0308/kerin0308.jpg"
+          },
+          {
+            "user_id": "djagusals17",
+            "nickname": "띠로리이이잉",
+            "balloons": 1086,
+            "count": 1,
+            "avg_balloons": 1086,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/dj/djagusals17/djagusals17.jpg"
           },
           {
             "user_id": "1frogmonkey1",
@@ -28110,14 +28121,6 @@
             "count": 1,
             "avg_balloons": 1000,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/05/05rnwls/05rnwls.jpg"
-          },
-          {
-            "user_id": "zzotx00",
-            "nickname": "목곰이에요",
-            "balloons": 897,
-            "count": 49,
-            "avg_balloons": 18,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/zz/zzotx00/zzotx00.jpg"
           }
         ],
         "data_source": "poonggo_monthly"
@@ -30840,15 +30843,15 @@
       "current_month": {
         "year": 2026,
         "month": 7,
-        "total_balloons": 446018,
+        "total_balloons": 489510,
         "daily_balloons": [],
         "fans": [
           {
             "user_id": "x7mdk02whi5",
             "nickname": "다니감지기",
-            "balloons": 78020,
-            "count": 146,
-            "avg_balloons": 534,
+            "balloons": 78618,
+            "count": 150,
+            "avg_balloons": 524,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/x7/x7mdk02whi5/x7mdk02whi5.jpg"
           },
           {
@@ -30892,11 +30895,19 @@
             "profile_image_url": null
           },
           {
+            "user_id": "flashword1",
+            "nickname": "eudu374d",
+            "balloons": 20000,
+            "count": 1,
+            "avg_balloons": 20000,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/fl/flashword1/flashword1.jpg"
+          },
+          {
             "user_id": "solomelody",
             "nickname": "gugugilo",
-            "balloons": 11484,
-            "count": 32,
-            "avg_balloons": 358,
+            "balloons": 15981,
+            "count": 36,
+            "avg_balloons": 443,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/so/solomelody/solomelody.jpg"
           },
           {
@@ -30924,6 +30935,14 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/rc/rcuzu3bi6/rcuzu3bi6.jpg"
           },
           {
+            "user_id": "thjkl7542",
+            "nickname": "teddyxxx",
+            "balloons": 5980,
+            "count": 3,
+            "avg_balloons": 1993,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/th/thjkl7542/thjkl7542.jpg"
+          },
+          {
             "user_id": "linosong",
             "nickname": "리노,",
             "balloons": 5921,
@@ -30938,6 +30957,14 @@
             "count": 3,
             "avg_balloons": 1778,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/sw/swi8769/swi8769.jpg"
+          },
+          {
+            "user_id": "haebgg",
+            "nickname": "다니폭군",
+            "balloons": 5327,
+            "count": 20,
+            "avg_balloons": 266,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ha/haebgg/haebgg.jpg"
           },
           {
             "user_id": "qkqi456",
@@ -30988,12 +31015,28 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ye/yelllow4069/yelllow4069.jpg"
           },
           {
+            "user_id": "sjj9409",
+            "nickname": "킹콩왕1",
+            "balloons": 3893,
+            "count": 3,
+            "avg_balloons": 1297,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/sj/sjj9409/sjj9409.jpg"
+          },
+          {
             "user_id": "sso7474",
             "nickname": "쉘리",
             "balloons": 3542,
             "count": 22,
             "avg_balloons": 161,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ss/sso7474/sso7474.jpg"
+          },
+          {
+            "user_id": "dignusrok",
+            "nickname": "라파#",
+            "balloons": 3375,
+            "count": 4,
+            "avg_balloons": 843,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/di/dignusrok/dignusrok.jpg"
           },
           {
             "user_id": "helloco",
@@ -31010,6 +31053,22 @@
             "count": 3,
             "avg_balloons": 1018,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/di/dign1461/dign1461.jpg"
+          },
+          {
+            "user_id": "kllshyun78",
+            "nickname": "존버형2↑",
+            "balloons": 3000,
+            "count": 1,
+            "avg_balloons": 3000,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/kl/kllshyun78/kllshyun78.jpg"
+          },
+          {
+            "user_id": "gkseowls",
+            "nickname": "[雪]Hennessy",
+            "balloons": 3000,
+            "count": 1,
+            "avg_balloons": 3000,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/gk/gkseowls/gkseowls.jpg"
           },
           {
             "user_id": "ddooddoo0714",
@@ -31036,36 +31095,12 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/dn/dnjswoaos1/dnjswoaos1.jpg"
           },
           {
-            "user_id": "sjj9409",
-            "nickname": "킹콩왕1",
-            "balloons": 2884,
-            "count": 2,
-            "avg_balloons": 1442,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/sj/sjj9409/sjj9409.jpg"
-          },
-          {
-            "user_id": "dignusrok",
-            "nickname": "라파#",
-            "balloons": 2875,
-            "count": 2,
-            "avg_balloons": 1437,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/di/dignusrok/dignusrok.jpg"
-          },
-          {
             "user_id": "csj000000",
             "nickname": "다니건빵",
             "balloons": 2852,
             "count": 9,
             "avg_balloons": 316,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/cs/csj000000/csj000000.jpg"
-          },
-          {
-            "user_id": "ya1344",
-            "nickname": "[NS]KIA",
-            "balloons": 2842,
-            "count": 1,
-            "avg_balloons": 2842,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ya/ya1344/ya1344.jpg"
           },
           {
             "user_id": "juwon1503",
@@ -31076,12 +31111,20 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ju/juwon1503/juwon1503.jpg"
           },
           {
-            "user_id": "enterprok",
-            "nickname": "현대그룹",
+            "user_id": "ya1344",
+            "nickname": "[NS]KIA",
             "balloons": 2842,
             "count": 1,
             "avg_balloons": 2842,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/en/enterprok/enterprok.jpg"
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ya/ya1344/ya1344.jpg"
+          },
+          {
+            "user_id": "ferraro",
+            "nickname": "ferraro",
+            "balloons": 2842,
+            "count": 1,
+            "avg_balloons": 2842,
+            "profile_image_url": null
           },
           {
             "user_id": "wnsdus5900",
@@ -31092,12 +31135,12 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/wn/wnsdus5900/wnsdus5900.jpg"
           },
           {
-            "user_id": "ferraro",
-            "nickname": "ferraro",
+            "user_id": "enterprok",
+            "nickname": "현대그룹",
             "balloons": 2842,
             "count": 1,
             "avg_balloons": 2842,
-            "profile_image_url": null
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/en/enterprok/enterprok.jpg"
           },
           {
             "user_id": "wnsgh1462",
@@ -31126,17 +31169,17 @@
           {
             "user_id": "nduarlfdns",
             "nickname": "족구러브",
-            "balloons": 2464,
-            "count": 27,
-            "avg_balloons": 91,
+            "balloons": 2474,
+            "count": 28,
+            "avg_balloons": 88,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/nd/nduarlfdns/nduarlfdns.jpg"
           },
           {
             "user_id": "kgogogohotjw",
             "nickname": "C9xx다니xx",
-            "balloons": 2451,
-            "count": 2,
-            "avg_balloons": 1225,
+            "balloons": 2456,
+            "count": 7,
+            "avg_balloons": 350,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/kg/kgogogohotjw/kgogogohotjw.jpg"
           },
           {
@@ -31154,14 +31197,6 @@
             "count": 2,
             "avg_balloons": 1200,
             "profile_image_url": null
-          },
-          {
-            "user_id": "haebgg",
-            "nickname": "다니폭군",
-            "balloons": 2294,
-            "count": 18,
-            "avg_balloons": 127,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ha/haebgg/haebgg.jpg"
           },
           {
             "user_id": "mmnnbb10",
@@ -31188,6 +31223,14 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/hy/hyeeee01/hyeeee01.jpg"
           },
           {
+            "user_id": "bmslwj1234",
+            "nickname": "마인드컨트럴",
+            "balloons": 1655,
+            "count": 20,
+            "avg_balloons": 82,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/bm/bmslwj1234/bmslwj1234.jpg"
+          },
+          {
             "user_id": "fpwp12",
             "nickname": "#오세훈",
             "balloons": 1562,
@@ -31202,46 +31245,6 @@
             "count": 2,
             "avg_balloons": 755,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/to/toobad0/toobad0.jpg"
-          },
-          {
-            "user_id": "alstjr1569",
-            "nickname": "수고^^",
-            "balloons": 1500,
-            "count": 1,
-            "avg_balloons": 1500,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/al/alstjr1569/alstjr1569.jpg"
-          },
-          {
-            "user_id": "bmslwj1234",
-            "nickname": "마인드컨트럴",
-            "balloons": 1454,
-            "count": 17,
-            "avg_balloons": 85,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/bm/bmslwj1234/bmslwj1234.jpg"
-          },
-          {
-            "user_id": "nhwo7lim",
-            "nickname": "hwohwo",
-            "balloons": 1443,
-            "count": 5,
-            "avg_balloons": 288,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/nh/nhwo7lim/nhwo7lim.jpg"
-          },
-          {
-            "user_id": "zzingzzing",
-            "nickname": "부캐7",
-            "balloons": 1442,
-            "count": 1,
-            "avg_balloons": 1442,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/zz/zzingzzing/zzingzzing.jpg"
-          },
-          {
-            "user_id": "cs1266",
-            "nickname": "[C9]웃어",
-            "balloons": 1442,
-            "count": 1,
-            "avg_balloons": 1442,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/cs/cs1266/cs1266.jpg"
           }
         ],
         "data_source": "poonggo_monthly"
@@ -35654,14 +35657,14 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ye/yeeeee00/yeeeee00.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-07-21 20:00:02",
+      "broadcast_start": "2026-07-22 15:30:50",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 7,
-        "total_balloons": 322224,
+        "total_balloons": 322272,
         "daily_balloons": [],
         "fans": [
           {
@@ -35961,14 +35964,6 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/qw/qwe63410/qwe63410.jpg"
           },
           {
-            "user_id": "aaajji",
-            "nickname": "[INO]서키",
-            "balloons": 1000,
-            "count": 1,
-            "avg_balloons": 1000,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/aa/aaajji/aaajji.jpg"
-          },
-          {
             "user_id": "sszzzz",
             "nickname": "sszzzz",
             "balloons": 1000,
@@ -35983,6 +35978,14 @@
             "count": 1,
             "avg_balloons": 1000,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/hk/hkh0527/hkh0527.jpg"
+          },
+          {
+            "user_id": "aaajji",
+            "nickname": "[INO]서키",
+            "balloons": 1000,
+            "count": 1,
+            "avg_balloons": 1000,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/aa/aaajji/aaajji.jpg"
           },
           {
             "user_id": "hiherm",
@@ -36435,14 +36438,14 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/no/nooree/nooree.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-07-21 21:59:45",
+      "broadcast_start": "2026-07-22 14:31:53",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 7,
-        "total_balloons": 194298,
+        "total_balloons": 194761,
         "daily_balloons": [],
         "fans": [
           {
@@ -36614,6 +36617,14 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/sh/shiner555/shiner555.jpg"
           },
           {
+            "user_id": "wyhs0067",
+            "nickname": "#댕교-",
+            "balloons": 2145,
+            "count": 9,
+            "avg_balloons": 238,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/wy/wyhs0067/wyhs0067.jpg"
+          },
+          {
             "user_id": "krushpepsi",
             "nickname": "KRUSHPEPSI",
             "balloons": 2035,
@@ -36636,14 +36647,6 @@
             "count": 7,
             "avg_balloons": 259,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/jo/jorugun111/jorugun111.jpg"
-          },
-          {
-            "user_id": "wyhs0067",
-            "nickname": "#댕교-",
-            "balloons": 1682,
-            "count": 5,
-            "avg_balloons": 336,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/wy/wyhs0067/wyhs0067.jpg"
           },
           {
             "user_id": "alsehfh",
@@ -37216,7 +37219,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ba/baek224983/baek224983.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-07-21 19:46:11",
+      "broadcast_start": "2026-07-22 15:36:03",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -37997,7 +38000,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/zz/zzam2da/zzam2da.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-07-21 22:42:26",
+      "broadcast_start": "2026-07-22 15:35:49",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -38778,14 +38781,14 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/lo/lovemom1225/lovemom1225.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-07-21 14:31:35",
+      "broadcast_start": "2026-07-22 14:47:46",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 7,
-        "total_balloons": 112482,
+        "total_balloons": 112487,
         "daily_balloons": [],
         "fans": [
           {
@@ -38973,12 +38976,12 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ch/chulso435/chulso435.jpg"
           },
           {
-            "user_id": "akaahtm213",
-            "nickname": "UPTOYOU.",
+            "user_id": "kjinny4283",
+            "nickname": "__HOYA_",
             "balloons": 1000,
             "count": 1,
             "avg_balloons": 1000,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ak/akaahtm213/akaahtm213.jpg"
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/kj/kjinny4283/kjinny4283.jpg"
           },
           {
             "user_id": "hkh0527",
@@ -38989,12 +38992,12 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/hk/hkh0527/hkh0527.jpg"
           },
           {
-            "user_id": "kjinny4283",
-            "nickname": "__HOYA_",
+            "user_id": "akaahtm213",
+            "nickname": "UPTOYOU.",
             "balloons": 1000,
             "count": 1,
             "avg_balloons": 1000,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/kj/kjinny4283/kjinny4283.jpg"
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ak/akaahtm213/akaahtm213.jpg"
           },
           {
             "user_id": "jsh882",
@@ -39157,20 +39160,20 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/wl/wldn4422/wldn4422.jpg"
           },
           {
-            "user_id": "ramosksj0828",
-            "nickname": "머겅이",
-            "balloons": 100,
-            "count": 1,
-            "avg_balloons": 100,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ra/ramosksj0828/ramosksj0828.jpg"
-          },
-          {
             "user_id": "korea7754",
             "nickname": "망고오빠",
             "balloons": 100,
             "count": 1,
             "avg_balloons": 100,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ko/korea7754/korea7754.jpg"
+          },
+          {
+            "user_id": "zxcbnm1450",
+            "nickname": "불R탁친노도",
+            "balloons": 100,
+            "count": 1,
+            "avg_balloons": 100,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/zx/zxcbnm1450/zxcbnm1450.jpg"
           },
           {
             "user_id": "tomorrow1111",
@@ -39181,12 +39184,12 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/to/tomorrow1111/tomorrow1111.jpg"
           },
           {
-            "user_id": "zxcbnm1450",
-            "nickname": "불R탁친노도",
+            "user_id": "ramosksj0828",
+            "nickname": "머겅이",
             "balloons": 100,
             "count": 1,
             "avg_balloons": 100,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/zx/zxcbnm1450/zxcbnm1450.jpg"
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ra/ramosksj0828/ramosksj0828.jpg"
           }
         ],
         "data_source": "poonggo_monthly"
@@ -39559,7 +39562,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/fl/flowerboogie/flowerboogie.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-07-21 17:14:46",
+      "broadcast_start": "2026-07-22 15:35:01",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -40340,14 +40343,14 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/nr/nrini1213/nrini1213.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-07-22 08:18:02",
+      "broadcast_start": "2026-07-22 14:33:50",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
         "month": 7,
-        "total_balloons": 68568,
+        "total_balloons": 68601,
         "daily_balloons": [],
         "fans": [
           {
@@ -40535,14 +40538,6 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/yd/ydm4686/ydm4686.jpg"
           },
           {
-            "user_id": "sszzzz",
-            "nickname": "sszzzz",
-            "balloons": 1000,
-            "count": 1,
-            "avg_balloons": 1000,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ss/sszzzz/sszzzz.jpg"
-          },
-          {
             "user_id": "newjys1",
             "nickname": "#갓대표",
             "balloons": 1000,
@@ -40565,6 +40560,14 @@
             "count": 1,
             "avg_balloons": 1000,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/qa/qa574689/qa574689.jpg"
+          },
+          {
+            "user_id": "sszzzz",
+            "nickname": "sszzzz",
+            "balloons": 1000,
+            "count": 1,
+            "avg_balloons": 1000,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/ss/sszzzz/sszzzz.jpg"
           },
           {
             "user_id": "paknw97",
@@ -40735,20 +40738,20 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/jj/jjhh0331/jjhh0331.jpg"
           },
           {
+            "user_id": "dqhui0fecb",
+            "nickname": "@숲페이",
+            "balloons": 209,
+            "count": 9,
+            "avg_balloons": 23,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/dq/dqhui0fecb/dqhui0fecb.jpg"
+          },
+          {
             "user_id": "zong000",
             "nickname": "스윗입니다",
             "balloons": 209,
             "count": 3,
             "avg_balloons": 69,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/zo/zong000/zong000.jpg"
-          },
-          {
-            "user_id": "znls5896",
-            "nickname": "꼭G.",
-            "balloons": 202,
-            "count": 1,
-            "avg_balloons": 202,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/zn/znls5896/znls5896.jpg"
           }
         ],
         "data_source": "poonggo_monthly"
