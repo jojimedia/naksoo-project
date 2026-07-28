@@ -82,6 +82,14 @@ const crewHeaderColors = [
   "#BE123C",
 ];
 
+const CLOSED_CREWS = new Set(["씨나인"]);
+
+function isClosedCrew(crewName: string) {
+  return CLOSED_CREWS.has(crewName);
+}
+
+export { isClosedCrew };
+
 export function getCrewHeaderColor(index: number) {
   if (index < crewHeaderColors.length) {
     return crewHeaderColors[index];
@@ -90,6 +98,19 @@ export function getCrewHeaderColor(index: number) {
   const hue = (index * 137.508 + 262) % 360;
 
   return `hsl(${Math.round(hue)} 72% 48%)`;
+}
+
+function ClosedCrewStamp() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden"
+      aria-hidden="true"
+    >
+      <span className="select-none rotate-[-22deg] border-4 border-red-500/70 px-4 py-1 text-[64px] font-black leading-none tracking-[0.18em] text-red-500/80 drop-shadow-[0_4px_12px_rgba(0,0,0,0.65)] md:text-[80px]">
+        폐업
+      </span>
+    </div>
+  );
 }
 
 function formatNumber(value: number) {
@@ -168,6 +189,9 @@ function CrewCardHeader({
   headerColor: string;
 }) {
   const style = { "--crew-header": headerColor } as CSSProperties;
+  const closed = isClosedCrew(crew.crew_name);
+  const totalBalloons = closed ? 0 : crew.current_total_balloons;
+  const averageBalloons = closed ? 0 : crew.average_current_balloons;
 
   return (
     <div className="bg-[var(--crew-header)] p-2.5 text-white" style={style}>
@@ -181,14 +205,8 @@ function CrewCardHeader({
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">
-        <StatBox
-          label="Total Balloons"
-          value={crew.current_total_balloons}
-        />
-        <StatBox
-          label="Average Balloons"
-          value={crew.average_current_balloons}
-        />
+        <StatBox label="Total Balloons" value={totalBalloons} />
+        <StatBox label="Average Balloons" value={averageBalloons} />
       </div>
       <div className="mt-1.5 flex items-center justify-between">
         <span className="text-[10px] font-semibold leading-none">
@@ -439,7 +457,8 @@ export default function CrewCard({
   expandMembers?: boolean;
   searchQuery?: string;
 }) {
-  const headerColor = getCrewHeaderColor(index);
+  const closed = isClosedCrew(crew.crew_name);
+  const headerColor = closed ? "#6b7280" : getCrewHeaderColor(index);
   const header = <CrewCardHeader crew={crew} headerColor={headerColor} />;
   const body = (
     <CrewCardBody
@@ -452,12 +471,28 @@ export default function CrewCard({
 
   return (
     <>
-      <MobileCrewCard header={header} body={body} forceOpen={expandMembers} />
+      <div className="relative md:hidden">
+        <div className={closed ? "grayscale" : undefined}>
+          <MobileCrewCard
+            header={header}
+            body={body}
+            forceOpen={expandMembers}
+          />
+        </div>
+        {closed ? <ClosedCrewStamp /> : null}
+      </div>
 
-      <section className="hidden overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] transition-all duration-300 hover:shadow-xl hover:shadow-black/25 md:block">
-        {header}
-        {body}
-      </section>
+      <div className="relative hidden md:block">
+        <section
+          className={`overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] transition-all duration-300 hover:shadow-xl hover:shadow-black/25 ${
+            closed ? "grayscale" : ""
+          }`}
+        >
+          {header}
+          {body}
+        </section>
+        {closed ? <ClosedCrewStamp /> : null}
+      </div>
     </>
   );
 }

@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLoginModal from "./admin-login-modal";
 import AdminPanelModal from "./admin-panel-modal";
-import CrewCard, { getCrewHeaderColor, type CrewCardData } from "./crew-card";
+import CrewCard, {
+  getCrewHeaderColor,
+  isClosedCrew,
+  type CrewCardData,
+} from "./crew-card";
 import StreamerMemberRow from "./streamer-member-row";
 
 type CrewDashboardData = {
@@ -325,19 +329,22 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           return nickname.includes(search) || userId.includes(search);
         });
         const activeMembers = members.filter((member) => !member.is_on_leave);
-        const currentTotal = activeMembers.reduce(
-          (sum, member) => sum + member.current_balloons,
-          0,
-        );
+        const closed = isClosedCrew(crew.crew_name);
+        const currentTotal = closed
+          ? 0
+          : activeMembers.reduce(
+              (sum, member) => sum + member.current_balloons,
+              0,
+            );
 
         return {
           ...crew,
           member_count: activeMembers.length,
           current_total_balloons: currentTotal,
           average_current_balloons:
-            activeMembers.length > 0
-              ? Math.round(currentTotal / activeMembers.length)
-              : 0,
+            closed || activeMembers.length === 0
+              ? 0
+              : Math.round(currentTotal / activeMembers.length),
           members,
         };
       })

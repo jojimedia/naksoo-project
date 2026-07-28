@@ -765,10 +765,13 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
           };
         });
       const members = [...activeMembers, ...leaveMembers];
-      const currentTotal = activeMembers.reduce(
-        (sum, member) => sum + member.current_balloons,
-        0,
-      );
+      const closed = crewName === "씨나인";
+      const currentTotal = closed
+        ? 0
+        : activeMembers.reduce(
+            (sum, member) => sum + member.current_balloons,
+            0,
+          );
       const activeCount = activeMembers.length;
 
       return {
@@ -777,7 +780,9 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
         member_count: activeCount,
         current_total_balloons: currentTotal,
         average_current_balloons:
-          activeCount > 0 ? Math.round(currentTotal / activeCount) : 0,
+          closed || activeCount === 0
+            ? 0
+            : Math.round(currentTotal / activeCount),
         members,
         naksoo_gods: getNaksooGods(activeCrewItems, naksooThresholds),
         crew_kings: getCrewKings(activeCrewItems),
