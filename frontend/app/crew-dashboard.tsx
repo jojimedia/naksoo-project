@@ -17,6 +17,7 @@ type CrewDashboardData = {
   created_date: string;
   created_time: string;
   crews: CrewCardData[];
+  fa_crew: CrewCardData | null;
 };
 
 type SearchMode = "members" | "donors";
@@ -531,10 +532,13 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   );
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
+  const rankingCrews = useMemo(
+    () => (data.fa_crew ? [...data.crews, data.fa_crew] : data.crews),
+    [data.crews, data.fa_crew],
+  );
   const crews = useMemo(() => {
-    const sourceCrews = isSearching
-      ? data.crews
-      : data.crews.filter((crew) => !isFaCrew(crew.crew_name));
+    // 홈/검색 카드에는 소속 크루만 표시한다. FA는 카드로 넣지 않는다.
+    const sourceCrews = data.crews;
 
     if (!isSearching) {
       return sourceCrews;
@@ -571,20 +575,18 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       return [];
     }
 
-    return aggregateDonors(data.crews, search);
-  }, [data.crews, isSearching, search, searchMode]);
+    return aggregateDonors(rankingCrews, search);
+  }, [rankingCrews, isSearching, search, searchMode]);
   const kingRows = useMemo(
-    () => aggregateDonors(data.crews).slice(0, 100),
-    [data.crews],
+    () => aggregateDonors(rankingCrews).slice(0, 100),
+    [rankingCrews],
   );
   const faRows = useMemo(() => {
-    const faCrew = data.crews.find((crew) => isFaCrew(crew.crew_name));
-
-    if (!faCrew) {
+    if (!data.fa_crew) {
       return [];
     }
 
-    return faCrew.members
+    return data.fa_crew.members
       .filter((member) => !member.is_on_leave)
       .slice()
       .sort((a, b) => b.current_balloons - a.current_balloons)
@@ -596,7 +598,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           rank: index + 1,
         },
       }));
-  }, [data.crews]);
+  }, [data.fa_crew]);
   const hasResults =
     (showOverall || showKings || showFa) && !isSearching
       ? true
@@ -606,7 +608,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const updateStatus = getUpdateStatus(data);
   const overallRows = useMemo(
     () =>
-      data.crews
+      rankingCrews
         .flatMap((crew, crewIndex) =>
           crew.members
             .filter((member) => !member.is_on_leave)
@@ -630,7 +632,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             rank: index + 1,
           },
         })),
-    [data.crews],
+    [rankingCrews],
   );
 
   useEffect(() => {
@@ -658,8 +660,8 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   }, []);
 
   useEffect(() => {
-    // 크루 카드 + FA/전체 순위에 보이는 모든 활성 멤버를 페이지 오픈 시 조회한다.
-    const userIds = data.crews.flatMap((crew) =>
+    // 크루 카드 + FA 탭에 보이는 모든 활성 멤버를 페이지 오픈 시 조회한다.
+    const userIds = rankingCrews.flatMap((crew) =>
       crew.members
         .filter((member) => !member.is_on_leave)
         .map((member) => member.user_id),
@@ -704,7 +706,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     void loadLiveStatus();
 
     return () => controller.abort();
-  }, [data.crews]);
+  }, [rankingCrews]);
 
   function handleAdminButtonClick() {
     if (adminSession) {
@@ -757,10 +759,10 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               ) : null}
             </label>
 
-            <div className="inline-flex shrink-0 rounded-full border border-[#3a3548] bg-[#17151f] p-1">
+            <div className="inline-flex max-w-full shrink-0 flex-wrap justify-end gap-0.5 rounded-full border border-[#3a3548] bg-[#17151f] p-1">
               <button
                 type="button"
-                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
+                className={`rounded-full px-2.5 py-1.5 text-[12px] font-semibold transition md:px-4 md:text-sm ${
                   !showOverall &&
                   !showKings &&
                   !showFa &&
@@ -779,7 +781,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               </button>
               <button
                 type="button"
-                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
+                className={`rounded-full px-2.5 py-1.5 text-[12px] font-semibold transition md:px-4 md:text-sm ${
                   showKings ||
                   (!showOverall && !showFa && searchMode === "donors")
                     ? "bg-[#5b4bdb] text-white"
@@ -798,7 +800,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               </button>
               <button
                 type="button"
-                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
+                className={`rounded-full px-2.5 py-1.5 text-[12px] font-semibold transition md:px-4 md:text-sm ${
                   showFa
                     ? "bg-[#5b4bdb] text-white"
                     : "text-[#a8a2b8] hover:text-[#d8d4ff]"
@@ -816,7 +818,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               </button>
               <button
                 type="button"
-                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
+                className={`rounded-full px-2.5 py-1.5 text-[12px] font-semibold transition md:px-4 md:text-sm ${
                   showOverall
                     ? "bg-[#5b4bdb] text-white"
                     : "text-[#a8a2b8] hover:text-[#d8d4ff]"

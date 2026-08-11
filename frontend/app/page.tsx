@@ -113,6 +113,7 @@ type CrewCardData = {
     month: number;
   };
   crews: CrewCard[];
+  fa_crew: CrewCard | null;
 };
 
 type MonthlyStats = {
@@ -801,7 +802,9 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
     display_date: displayDate,
     current_period: result.current_period,
     previous_period: result.previous_period,
-    crews: faCrew ? [...rankedCrews, { ...faCrew, rank: 0 }] : rankedCrews,
+    // FA는 홈 크루 카드에 넣지 않고 별도 필드로만 둔다.
+    crews: rankedCrews,
+    fa_crew: faCrew ? { ...faCrew, rank: 0 } : null,
   };
 }
 
