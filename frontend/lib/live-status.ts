@@ -1,5 +1,6 @@
 const LIVE_API_URL = "https://live.sooplive.co.kr/afreeca/player_live_api.php";
-const CONCURRENCY = 12;
+const CONCURRENCY = 40;
+const REQUEST_TIMEOUT_MS = 3500;
 
 export type LiveStatusEntry = {
   user_id: string;
@@ -19,6 +20,9 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
     return { user_id: userId, is_live: false };
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
     const body = new URLSearchParams({
       bid: trimmed,
@@ -37,6 +41,7 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
       },
       body,
       cache: "no-store",
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -70,7 +75,39 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
     return { user_id: trimmed, is_live: isLive };
   } catch {
     return { user_id: trimmed, is_live: false };
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+
+      if (index >= items.length) {
+        return;
+      }
+
+      results[index] = await mapper(items[index]);
+    }
+  }
+
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 export async function fetchLiveStatuses(
@@ -93,15 +130,6 @@ export async function fetchLiveStatuses(
   }
 
   const unique = Array.from(originalByLower.values()).slice(0, 200);
-  const results: LiveStatusEntry[] = [];
 
-  for (let index = 0; index < unique.length; index += CONCURRENCY) {
-    const chunk = unique.slice(index, index + CONCURRENCY);
-    const chunkResults = await Promise.all(
-      chunk.map((id) => fetchOneLiveStatus(id)),
-    );
-    results.push(...chunkResults);
-  }
-
-  return results;
+  return mapWithConcurrency(unique, CONCURRENCY, fetchOneLiveStatus);
 }
