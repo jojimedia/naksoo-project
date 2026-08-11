@@ -1,5 +1,4 @@
 const LIVE_API_URL = "https://live.sooplive.co.kr/afreeca/player_live_api.php";
-const STATION_API_URL = "https://api-channel.sooplive.com/v1.1/channel";
 const CONCURRENCY = 12;
 
 export type LiveStatusEntry = {
@@ -13,65 +12,6 @@ const defaultHeaders = {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
 };
 
-async function fetchPlayerLive(userId: string) {
-  const body = new URLSearchParams({
-    bid: userId,
-    from_api: "0",
-    mode: "landing",
-    player_type: "html5",
-  });
-
-  const response = await fetch(LIVE_API_URL, {
-    method: "POST",
-    headers: {
-      ...defaultHeaders,
-      "Content-Type": "application/x-www-form-urlencoded",
-      Origin: "https://live.sooplive.co.kr",
-      Referer: `https://live.sooplive.co.kr/${encodeURIComponent(userId)}`,
-    },
-    body,
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    return { is_live: false, is_password: false };
-  }
-
-  const data = (await response.json()) as {
-    CHANNEL?: {
-      RESULT?: number | string;
-      BPWD?: string;
-    };
-  };
-  const channel = data.CHANNEL ?? {};
-  const isPassword = channel.BPWD === "Y";
-  const isLive = Number(channel.RESULT) === 1 && !isPassword;
-
-  return { is_live: isLive, is_password: isPassword };
-}
-
-async function fetchStationBroadcastStart(userId: string) {
-  const response = await fetch(
-    `${STATION_API_URL}/${encodeURIComponent(userId)}/station`,
-    {
-      headers: defaultHeaders,
-      cache: "no-store",
-    },
-  );
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const data = (await response.json()) as {
-    station?: {
-      broadStart?: string | null;
-    };
-  };
-
-  return data.station?.broadStart ?? null;
-}
-
 async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
   const trimmed = userId.trim();
 
@@ -80,23 +20,54 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
   }
 
   try {
-    const player = await fetchPlayerLive(trimmed);
+    const body = new URLSearchParams({
+      bid: trimmed,
+      from_api: "0",
+      mode: "landing",
+      player_type: "html5",
+    });
 
-    if (player.is_password) {
+    const response = await fetch(LIVE_API_URL, {
+      method: "POST",
+      headers: {
+        ...defaultHeaders,
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: "https://live.sooplive.co.kr",
+        Referer: `https://live.sooplive.co.kr/${encodeURIComponent(trimmed)}`,
+      },
+      body,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
       return { user_id: trimmed, is_live: false };
     }
 
-    if (player.is_live) {
-      return { user_id: trimmed, is_live: true };
+    const data = (await response.json()) as {
+      CHANNEL?: {
+        RESULT?: number | string;
+        BPWD?: string;
+        TITLE?: string;
+        BTIME?: number | string;
+      };
+    };
+    const channel = data.CHANNEL ?? {};
+    const result = Number(channel.RESULT);
+    const isPassword = channel.BPWD === "Y";
+
+    if (isPassword || Number.isNaN(result) || result === 0) {
+      return { user_id: trimmed, is_live: false };
     }
 
-    // 19금 등은 player RESULT가 1이 아니어도 station.broadStart가 있으면 방송 중.
-    const broadcastStart = await fetchStationBroadcastStart(trimmed);
+    // RESULT 1: 일반 공개 방송
+    // RESULT -6: 19금 등으로 시청 제한이지만 방송 중
+    // 그 외 음수 코드도 TITLE/BTIME이 있으면 제한된 라이브로 본다.
+    const isLive =
+      result === 1 ||
+      result === -6 ||
+      (result < 0 && Boolean(channel.TITLE || channel.BTIME));
 
-    return {
-      user_id: trimmed,
-      is_live: Boolean(broadcastStart),
-    };
+    return { user_id: trimmed, is_live: isLive };
   } catch {
     return { user_id: trimmed, is_live: false };
   }
@@ -127,7 +98,7 @@ export async function fetchLiveStatuses(
   for (let index = 0; index < unique.length; index += CONCURRENCY) {
     const chunk = unique.slice(index, index + CONCURRENCY);
     const chunkResults = await Promise.all(
-      chunk.map((userId) => fetchOneLiveStatus(userId)),
+      chunk.map((id) => fetchOneLiveStatus(id)),
     );
     results.push(...chunkResults);
   }
