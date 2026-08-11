@@ -139,37 +139,43 @@ function LiveBadge({
   title: string | null;
   viewerCount: number | null;
 }) {
-  const anchorRef = useRef<HTMLAnchorElement>(null);
+  const streamUrl = `https://play.sooplive.co.kr/${encodeURIComponent(userId)}`;
+  const badgeRef = useRef<HTMLAnchorElement>(null);
+  const previewRef = useRef<HTMLAnchorElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const [preview, setPreview] = useState<{
     top: number;
     left: number;
     src: string;
   } | null>(null);
 
-  useEffect(() => {
-    if (!preview) {
-      return;
+  function clearCloseTimer() {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
     }
+  }
 
-    function hide() {
+  function hidePreview() {
+    clearCloseTimer();
+    setPreview(null);
+  }
+
+  function scheduleHidePreview() {
+    clearCloseTimer();
+    closeTimerRef.current = window.setTimeout(() => {
       setPreview(null);
-    }
+      closeTimerRef.current = null;
+    }, 120);
+  }
 
-    window.addEventListener("scroll", hide, true);
-    window.addEventListener("resize", hide);
-
-    return () => {
-      window.removeEventListener("scroll", hide, true);
-      window.removeEventListener("resize", hide);
-    };
-  }, [preview]);
-
-  function showPreview() {
-    if (!thumbnailUrl || !anchorRef.current) {
+  function openPreview() {
+    if (!thumbnailUrl || !badgeRef.current) {
       return;
     }
 
-    const rect = anchorRef.current.getBoundingClientRect();
+    clearCloseTimer();
+    const rect = badgeRef.current.getBoundingClientRect();
     const previewHeight = title || viewerCount != null ? 188 : 132;
     const spaceBelow = window.innerHeight - rect.bottom;
     const top =
@@ -188,28 +194,112 @@ function LiveBadge({
     });
   }
 
+  function supportsHoverPreview() {
+    return (
+      typeof window !== "undefined" &&
+      window.matchMedia("(hover: hover) and (pointer: fine)").matches
+    );
+  }
+
+  useEffect(() => {
+    if (!preview) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+
+      if (
+        badgeRef.current?.contains(target) ||
+        previewRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      hidePreview();
+    }
+
+    function handleViewportChange() {
+      hidePreview();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("scroll", handleViewportChange, true);
+    window.addEventListener("resize", handleViewportChange);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("scroll", handleViewportChange, true);
+      window.removeEventListener("resize", handleViewportChange);
+    };
+  }, [preview]);
+
+  useEffect(() => {
+    return () => clearCloseTimer();
+  }, []);
+
   return (
     <>
       <a
-        ref={anchorRef}
-        href={`https://play.sooplive.co.kr/${encodeURIComponent(userId)}`}
+        ref={badgeRef}
+        href={streamUrl}
         target="_blank"
         rel="noreferrer"
         className="inline-flex shrink-0 items-center rounded border border-white/85 px-1 py-px text-[9px] font-semibold leading-none tracking-wide text-white/90 no-underline hover:bg-white/10"
-        aria-label={`${nickname} 방송국 열기`}
-        onMouseEnter={showPreview}
-        onMouseLeave={() => setPreview(null)}
-        onFocus={showPreview}
-        onBlur={() => setPreview(null)}
+        aria-label={`${nickname} 라이브 미리보기`}
+        aria-expanded={Boolean(preview)}
+        onClick={(event) => {
+          if (!thumbnailUrl) {
+            return;
+          }
+
+          // 모바일/터치: 첫 탭은 프리뷰, 두 번째 탭(뱃지)은 닫기.
+          // 데스크톱 호버는 유지하고, 클릭해도 방송으로 바로 가지 않게 한다.
+          event.preventDefault();
+
+          if (preview) {
+            hidePreview();
+            return;
+          }
+
+          openPreview();
+        }}
+        onMouseEnter={() => {
+          if (supportsHoverPreview()) {
+            openPreview();
+          }
+        }}
+        onMouseLeave={() => {
+          if (supportsHoverPreview()) {
+            scheduleHidePreview();
+          }
+        }}
       >
         LIVE
       </a>
       {preview
         ? createPortal(
-            <div
-              className="pointer-events-none fixed z-[80] w-[220px] -translate-x-1/2 overflow-hidden rounded-lg border border-[#4b455c] bg-[#17151f] shadow-xl shadow-black/50"
+            <a
+              ref={previewRef}
+              href={streamUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="fixed z-[80] w-[220px] -translate-x-1/2 overflow-hidden rounded-lg border border-[#4b455c] bg-[#17151f] shadow-xl shadow-black/50 no-underline outline-none focus-visible:ring-2 focus-visible:ring-[#a99cff]"
               style={{ top: preview.top, left: preview.left }}
-              role="tooltip"
+              aria-label={`${nickname} 방송 보기`}
+              onMouseEnter={() => {
+                if (supportsHoverPreview()) {
+                  clearCloseTimer();
+                }
+              }}
+              onMouseLeave={() => {
+                if (supportsHoverPreview()) {
+                  scheduleHidePreview();
+                }
+              }}
+              onClick={() => {
+                hidePreview();
+              }}
             >
               <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -229,7 +319,7 @@ function LiveBadge({
                   {title}
                 </p>
               ) : null}
-            </div>,
+            </a>,
             document.body,
           )
         : null}
