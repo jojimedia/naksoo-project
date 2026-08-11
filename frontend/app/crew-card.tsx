@@ -1,6 +1,13 @@
 "use client";
 
-import { CSSProperties, useMemo, useState } from "react";
+import {
+  CSSProperties,
+  SyntheticEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import MobileCrewCard from "./mobile-crew-card";
 import StreamerMemberRow from "./streamer-member-row";
 
@@ -82,14 +89,6 @@ const crewHeaderColors = [
   "#BE123C",
 ];
 
-const CLOSED_CREWS = new Set(["씨나인"]);
-
-function isClosedCrew(crewName: string) {
-  return CLOSED_CREWS.has(crewName);
-}
-
-export { isClosedCrew };
-
 export function getCrewHeaderColor(index: number) {
   if (index < crewHeaderColors.length) {
     return crewHeaderColors[index];
@@ -98,19 +97,6 @@ export function getCrewHeaderColor(index: number) {
   const hue = (index * 137.508 + 262) % 360;
 
   return `hsl(${Math.round(hue)} 72% 48%)`;
-}
-
-function ClosedCrewStamp() {
-  return (
-    <div
-      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden"
-      aria-hidden="true"
-    >
-      <span className="select-none rotate-[-22deg] border-4 border-red-500/70 px-4 py-1 text-[64px] font-black leading-none tracking-[0.18em] text-red-500/80 drop-shadow-[0_4px_12px_rgba(0,0,0,0.65)] md:text-[80px]">
-        폐업
-      </span>
-    </div>
-  );
 }
 
 function formatNumber(value: number) {
@@ -171,12 +157,85 @@ function StatBox({
 }) {
   return (
     <div className="flex min-h-[38px] flex-col justify-center rounded bg-black/10 px-1.5 py-1 text-white">
-      <p className="text-[9px] font-bold uppercase leading-none opacity-80">
-        {label}
-      </p>
+      <p className="text-[10px] font-bold leading-none opacity-80">{label}</p>
       <p className="mt-1 text-[18px] font-semibold leading-none tabular-nums">
         {formatNumber(value)}
       </p>
+    </div>
+  );
+}
+
+const TRIMMED_AVERAGE_TIP =
+  "크루의 평균적인 풍력을 정확하게 보기 위해 최고·최저 1명씩 제외하고 구한 평균입니다.";
+
+function TrimmedAverageStat({ value }: { value: number }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  function toggleTip(event: SyntheticEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen((current) => !current);
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="group relative flex min-h-[38px] flex-col justify-center rounded bg-black/10 px-1.5 py-1 text-white"
+    >
+      <div className="flex items-center gap-1">
+        <p className="text-[10px] font-bold leading-none opacity-80">절사평균</p>
+        <span
+          role="button"
+          tabIndex={0}
+          className="flex h-3.5 w-3.5 shrink-0 cursor-help items-center justify-center rounded-full border border-white/45 text-[9px] font-bold leading-none text-white/90"
+          aria-label="절사평균 설명"
+          aria-expanded={open}
+          onClick={toggleTip}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              toggleTip(event);
+            }
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          ?
+        </span>
+      </div>
+      <p className="mt-1 text-[18px] font-semibold leading-none tabular-nums">
+        {formatNumber(value)}
+      </p>
+
+      {/* 모바일: 클릭 시 표시 */}
+      {open ? (
+        <div
+          className="absolute top-[calc(100%+4px)] right-0 z-30 w-[min(220px,calc(100vw-48px))] rounded-lg border border-white/20 bg-[#17151f]/95 px-2.5 py-2 text-[11px] font-semibold leading-4 text-[#e5e7eb] shadow-lg shadow-black/40 md:hidden"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {TRIMMED_AVERAGE_TIP}
+        </div>
+      ) : null}
+
+      {/* 데스크톱: 호버 시 표시 */}
+      <div className="pointer-events-none absolute top-[calc(100%+4px)] right-0 z-30 hidden w-[min(220px,calc(100vw-48px))] rounded-lg border border-white/20 bg-[#17151f]/95 px-2.5 py-2 text-[11px] font-semibold leading-4 text-[#e5e7eb] opacity-0 shadow-lg shadow-black/40 transition-opacity group-hover:opacity-100 md:block">
+        {TRIMMED_AVERAGE_TIP}
+      </div>
     </div>
   );
 }
@@ -189,9 +248,6 @@ function CrewCardHeader({
   headerColor: string;
 }) {
   const style = { "--crew-header": headerColor } as CSSProperties;
-  const closed = isClosedCrew(crew.crew_name);
-  const totalBalloons = closed ? 0 : crew.current_total_balloons;
-  const averageBalloons = closed ? 0 : crew.average_current_balloons;
 
   return (
     <div className="bg-[var(--crew-header)] p-2.5 text-white" style={style}>
@@ -205,8 +261,8 @@ function CrewCardHeader({
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">
-        <StatBox label="Total Balloons" value={totalBalloons} />
-        <StatBox label="Average Balloons" value={averageBalloons} />
+        <StatBox label="전체합계" value={crew.current_total_balloons} />
+        <TrimmedAverageStat value={crew.average_current_balloons} />
       </div>
       <div className="mt-1.5 flex items-center justify-between">
         <span className="text-[10px] font-semibold leading-none">
@@ -457,8 +513,7 @@ export default function CrewCard({
   expandMembers?: boolean;
   searchQuery?: string;
 }) {
-  const closed = isClosedCrew(crew.crew_name);
-  const headerColor = closed ? "#6b7280" : getCrewHeaderColor(index);
+  const headerColor = getCrewHeaderColor(index);
   const header = <CrewCardHeader crew={crew} headerColor={headerColor} />;
   const body = (
     <CrewCardBody
@@ -471,28 +526,12 @@ export default function CrewCard({
 
   return (
     <>
-      <div className="relative md:hidden">
-        <div className={closed ? "grayscale" : undefined}>
-          <MobileCrewCard
-            header={header}
-            body={body}
-            forceOpen={expandMembers}
-          />
-        </div>
-        {closed ? <ClosedCrewStamp /> : null}
-      </div>
+      <MobileCrewCard header={header} body={body} forceOpen={expandMembers} />
 
-      <div className="relative hidden md:block">
-        <section
-          className={`overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] transition-all duration-300 hover:shadow-xl hover:shadow-black/25 ${
-            closed ? "grayscale" : ""
-          }`}
-        >
-          {header}
-          {body}
-        </section>
-        {closed ? <ClosedCrewStamp /> : null}
-      </div>
+      <section className="hidden overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] transition-all duration-300 hover:shadow-xl hover:shadow-black/25 md:block">
+        {header}
+        {body}
+      </section>
     </>
   );
 }

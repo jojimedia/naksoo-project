@@ -1,5 +1,6 @@
-import { listAdmins } from "./google-sheets";
+import { listAdmins, listRegisteredCrewNames, syncAdminsCrewColumns } from "./google-sheets";
 import type { AdminSession } from "./admin-session";
+import { resolveManagedCrews } from "./crews";
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -43,9 +44,12 @@ export async function authenticateAdmin(
     return null;
   }
 
+  const registeredCrews = await listRegisteredCrewNames();
+  await syncAdminsCrewColumns(registeredCrews);
+
   return {
     loginId: admin.login_id,
-    crews: admin.crews,
+    crews: resolveManagedCrews(admin.crews, registeredCrews),
   };
 }
 
@@ -91,4 +95,88 @@ export async function validateSoopUser(userId: string) {
     nickname: station.userNick,
     profile_image_url: station.profileImage ?? null,
   };
+}
+
+type SoopSearchHit = {
+  user_id: string;
+  nickname: string;
+  profile_image_url: string | null;
+};
+
+function looksLikeSoopUserId(value: string) {
+  return /^[a-zA-Z0-9_-]{3,30}$/.test(value);
+}
+
+export async function searchSoopBroadcasters(
+  query: string,
+  limit = 12,
+): Promise<SoopSearchHit[]> {
+  const trimmed = query.trim();
+
+  if (!trimmed) {
+    return [];
+  }
+
+  const hits = new Map<string, SoopSearchHit>();
+
+  const exactPromise = looksLikeSoopUserId(trimmed)
+    ? validateSoopUser(trimmed)
+    : Promise.resolve(null);
+
+  const searchPromise = fetch(
+    `https://sch.sooplive.co.kr/api.php?${new URLSearchParams({
+      m: "bjSearch",
+      v: "1.0",
+      c: "UTF-8",
+      szKeyword: trimmed,
+      nPageNo: "1",
+      nListCnt: String(Math.min(Math.max(limit, 1), 30)),
+    }).toString()}`,
+    {
+      headers: {
+        Accept: "application/json, text/javascript, */*; q=0.01",
+        Referer: "https://www.sooplive.co.kr/",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      },
+      cache: "no-store",
+    },
+  );
+
+  const [exact, response] = await Promise.all([exactPromise, searchPromise]);
+
+  if (exact) {
+    hits.set(exact.user_id.toLowerCase(), exact);
+  }
+
+  if (response.ok) {
+    const data = (await response.json()) as {
+      DATA?: Array<{
+        user_id?: string;
+        user_nick?: string;
+        station_logo?: string;
+      }>;
+    };
+
+    for (const entry of data.DATA ?? []) {
+      const userId = String(entry.user_id ?? "").trim();
+      const nickname = String(entry.user_nick ?? "").trim();
+
+      if (!userId || !nickname) {
+        continue;
+      }
+
+      const key = userId.toLowerCase();
+
+      if (!hits.has(key)) {
+        hits.set(key, {
+          user_id: userId,
+          nickname,
+          profile_image_url: entry.station_logo ?? null,
+        });
+      }
+    }
+  }
+
+  return Array.from(hits.values()).slice(0, limit);
 }

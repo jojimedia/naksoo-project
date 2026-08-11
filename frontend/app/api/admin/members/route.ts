@@ -6,11 +6,14 @@ import {
   getSessionFromCookies,
 } from "@/lib/admin-session";
 import { jsonError } from "@/lib/api-utils";
+import { isFaCrew } from "@/lib/crews";
 import {
   addMember,
+  assignMembersFromFa,
   CrewVersionConflictError,
-  deleteMember,
   getCrewMembersState,
+  moveMemberToFa,
+  removeMemberPermanently,
   updateMemberNote,
 } from "@/lib/google-sheets";
 
@@ -69,11 +72,53 @@ export async function POST(request: Request) {
       crew_name?: string;
       user_id?: string;
       expected_version?: string;
+      assignments?: Array<{ user_id?: string; target_crew?: string }>;
     };
+
+    const expectedVersion = body.expected_version?.trim() ?? "";
+
+    if (Array.isArray(body.assignments)) {
+      assertCrewAccess(session, "FA");
+
+      const assignments = body.assignments.map((entry) => ({
+        userId: entry.user_id?.trim() ?? "",
+        targetCrew: entry.target_crew?.trim() ?? "",
+      }));
+
+      if (
+        assignments.length === 0 ||
+        assignments.some((entry) => !entry.userId || !entry.targetCrew)
+      ) {
+        return jsonError("assignments에 user_id와 target_crew가 필요합니다.");
+      }
+
+      for (const assignment of assignments) {
+        assertCrewAccess(session, assignment.targetCrew);
+      }
+
+      const moved = await assignMembersFromFa(
+        assignments,
+        expectedVersion || undefined,
+      );
+
+      const { version } = await getCrewMembersState("FA");
+
+      return NextResponse.json({
+        ok: true,
+        version,
+        assigned: moved.length,
+        members: moved.map((member) => ({
+          crew_name: member.crew_name,
+          user_id: member.user_id,
+          nickname: member.nickname,
+          note: member.note,
+          is_on_leave: member.is_on_leave,
+        })),
+      });
+    }
 
     const crewName = body.crew_name?.trim() ?? "";
     const userId = body.user_id?.trim() ?? "";
-    const expectedVersion = body.expected_version?.trim() ?? "";
 
     if (!crewName || !userId) {
       return jsonError("crew_name과 user_id가 필요합니다.");
@@ -138,11 +183,32 @@ export async function DELETE(request: Request) {
     }
 
     assertCrewAccess(session, crewName);
-    await deleteMember(crewName, userId, expectedVersion || undefined);
+
+    if (isFaCrew(crewName)) {
+      await removeMemberPermanently(
+        crewName,
+        userId,
+        expectedVersion || undefined,
+      );
+
+      const { version } = await getCrewMembersState(crewName);
+
+      return NextResponse.json({
+        ok: true,
+        version,
+        deleted: true,
+      });
+    }
+
+    await moveMemberToFa(crewName, userId, expectedVersion || undefined);
 
     const { version } = await getCrewMembersState(crewName);
 
-    return NextResponse.json({ ok: true, version });
+    return NextResponse.json({
+      ok: true,
+      version,
+      moved_to: "FA",
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return jsonError("로그인이 필요합니다.", 401);

@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import { google, sheets_v4 } from "googleapis";
 
+import { FA_CREW_NAME, isFaCrew } from "./crews";
+
 export type SheetMember = {
   rowIndex: number;
   crew_name: string;
@@ -25,12 +27,46 @@ export class CrewVersionConflictError extends Error {
 
 const ADMINS_SHEET = "admins";
 const DEFAULT_SHEET_ID = "1w-hCArIqriowgLawxlAwZ1xOmGvGw32ics0ZGRHmwQs";
+const MEMBERS_CACHE_TTL_MS = 45_000;
+const META_CACHE_TTL_MS = 5 * 60_000;
 
 type SheetTable = {
   sheetName: string;
   headers: string[];
   rows: string[][];
 };
+
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const sheetCache = {
+  titles: null as CacheEntry<string[]> | null,
+  tables: new Map<string, CacheEntry<SheetTable>>(),
+  members: null as CacheEntry<SheetMember[]> | null,
+};
+
+function readCache<T>(entry: CacheEntry<T> | null | undefined): T | null {
+  if (!entry || entry.expiresAt <= Date.now()) {
+    return null;
+  }
+
+  return entry.value;
+}
+
+function writeCache<T>(value: T, ttlMs: number): CacheEntry<T> {
+  return {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  };
+}
+
+function invalidateSheetsCache() {
+  sheetCache.titles = null;
+  sheetCache.tables.clear();
+  sheetCache.members = null;
+}
 
 function getSheetId() {
   return process.env.GOOGLE_SHEET_ID ?? DEFAULT_SHEET_ID;
@@ -123,17 +159,25 @@ function parseAdminRow(row: string[]): SheetAdmin | null {
 }
 
 async function listSheetTitles() {
+  const cached = readCache(sheetCache.titles);
+
+  if (cached) {
+    return cached;
+  }
+
   const sheets = getSheetsClient();
   const response = await sheets.spreadsheets.get({
     spreadsheetId: getSheetId(),
     fields: "sheets.properties.title",
   });
 
-  return (
+  const titles =
     response.data.sheets
       ?.map((entry) => entry.properties?.title)
-      .filter((title): title is string => Boolean(title)) ?? []
-  );
+      .filter((title): title is string => Boolean(title)) ?? [];
+
+  sheetCache.titles = writeCache(titles, META_CACHE_TTL_MS);
+  return titles;
 }
 
 async function resolveSheetName(
@@ -167,6 +211,12 @@ async function resolveAdminsSheetName() {
 }
 
 async function getSheetTable(sheetName: string): Promise<SheetTable> {
+  const cached = readCache(sheetCache.tables.get(sheetName));
+
+  if (cached) {
+    return cached;
+  }
+
   const sheets = getSheetsClient();
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: getSheetId(),
@@ -175,16 +225,21 @@ async function getSheetTable(sheetName: string): Promise<SheetTable> {
 
   const values = response.data.values ?? [];
 
-  if (values.length === 0) {
-    return { sheetName, headers: [], rows: [] };
-  }
+  const table: SheetTable =
+    values.length === 0
+      ? { sheetName, headers: [], rows: [] }
+      : {
+          sheetName,
+          headers: values[0].map((cell) =>
+            normalizeHeader(String(cell ?? "")),
+          ),
+          rows: values
+            .slice(1)
+            .map((row) => row.map((cell) => String(cell ?? ""))),
+        };
 
-  const headers = values[0].map((cell) => normalizeHeader(String(cell ?? "")));
-  const rows = values
-    .slice(1)
-    .map((row) => row.map((cell) => String(cell ?? "")));
-
-  return { sheetName, headers, rows };
+  sheetCache.tables.set(sheetName, writeCache(table, MEMBERS_CACHE_TTL_MS));
+  return table;
 }
 
 async function getSheetIdByTitle(title: string): Promise<number> {
@@ -213,6 +268,34 @@ function noteColumnLetter(headers: string[]) {
   }
 
   return String.fromCharCode("A".charCodeAt(0) + noteIndex);
+}
+
+function columnLetter(headers: string[], name: string, fallback: string) {
+  const index = getColumnIndex(headers, name);
+
+  if (index < 0) {
+    return fallback;
+  }
+
+  return String.fromCharCode("A".charCodeAt(0) + index);
+}
+
+async function updateMemberCrewName(rowIndex: number, crewName: string) {
+  const sheetName = await resolveMembersSheetName();
+  const table = await getSheetTable(sheetName);
+  const crewColumn = columnLetter(table.headers, "crew_name", "A");
+  const sheets = getSheetsClient();
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: getSheetId(),
+    range: `${sheetName}!${crewColumn}${rowIndex}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: {
+      values: [[crewName]],
+    },
+  });
+
+  invalidateSheetsCache();
 }
 
 export function computeCrewVersion(members: SheetMember[]) {
@@ -273,6 +356,8 @@ async function deleteMemberRow(rowIndex: number) {
       ],
     },
   });
+
+  invalidateSheetsCache();
 }
 
 function pickPreferredMember(matches: SheetMember[]) {
@@ -315,14 +400,146 @@ export async function listAdmins(): Promise<SheetAdmin[]> {
     .filter((admin): admin is SheetAdmin => admin !== null);
 }
 
-export async function listMembers(crewName?: string): Promise<SheetMember[]> {
-  const sheetName = await resolveMembersSheetName();
-  const table = await getSheetTable(sheetName);
+async function findOptionalSheetName(
+  configuredName: string | undefined,
+  preferredNames: string[],
+) {
+  const titles = await listSheetTitles();
 
-  return table.rows
-    .map((row, index) => parseMemberRow(table.headers, row, index + 2))
-    .filter((member): member is SheetMember => member !== null)
-    .filter((member) => !crewName || member.crew_name === crewName);
+  if (configuredName && titles.includes(configuredName)) {
+    return configuredName;
+  }
+
+  for (const preferredName of preferredNames) {
+    if (titles.includes(preferredName)) {
+      return preferredName;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 시트에 존재하는 관리 대상 크루 목록.
+ * `crews` 탭이 있으면 그 목록을 쓰고, 없으면 members의 crew_name 고윳값(FA 제외)을 쓴다.
+ */
+export async function listRegisteredCrewNames(): Promise<string[]> {
+  const crewsSheetName = await findOptionalSheetName(
+    process.env.GOOGLE_CREWS_SHEET_NAME,
+    ["crews"],
+  );
+
+  if (crewsSheetName) {
+    const table = await getSheetTable(crewsSheetName);
+    const crewColumn = getColumnIndex(table.headers, "crew_name");
+    const names = new Set<string>();
+
+    for (const row of table.rows) {
+      const raw =
+        crewColumn >= 0 ? getCell(row, crewColumn) : (row[0] ?? "").trim();
+      const crewName = raw.trim();
+
+      if (crewName && !isFaCrew(crewName)) {
+        names.add(crewName);
+      }
+    }
+
+    return Array.from(names);
+  }
+
+  const members = await listMembers();
+  const names = new Set<string>();
+
+  for (const member of members) {
+    if (member.crew_name && !isFaCrew(member.crew_name)) {
+      names.add(member.crew_name);
+    }
+  }
+
+  return Array.from(names);
+}
+
+/**
+ * admins 탭 crews 열에서, 시트에 존재하지 않는 크루명을 제거해 다시 쓴다.
+ */
+export async function syncAdminsCrewColumns(registeredCrews?: string[]) {
+  const registered = new Set(
+    (registeredCrews ?? (await listRegisteredCrewNames()))
+      .map((crew) => crew.trim())
+      .filter((crew) => crew && !isFaCrew(crew)),
+  );
+  const sheetName = await resolveAdminsSheetName();
+  const table = await getSheetTable(sheetName);
+  const sheets = getSheetsClient();
+  const updates: { range: string; values: string[][] }[] = [];
+
+  for (let index = 0; index < table.rows.length; index += 1) {
+    const admin = parseAdminRow(table.rows[index]);
+
+    if (!admin) {
+      continue;
+    }
+
+    const cleaned = admin.crews
+      .map((crew) => crew.trim())
+      .filter((crew) => crew && !isFaCrew(crew) && registered.has(crew));
+    const nextValue = cleaned.join(",");
+    const previousValue = admin.crews
+      .map((crew) => crew.trim())
+      .filter((crew) => crew && !isFaCrew(crew))
+      .join(",");
+
+    if (nextValue === previousValue) {
+      continue;
+    }
+
+    const rowNumber = index + 2;
+    updates.push({
+      range: `${sheetName}!C${rowNumber}`,
+      values: [[nextValue]],
+    });
+  }
+
+  if (updates.length === 0) {
+    return { updated: 0 };
+  }
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: getSheetId(),
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data: updates,
+    },
+  });
+
+  invalidateSheetsCache();
+  return { updated: updates.length };
+}
+
+export async function listMembers(crewName?: string): Promise<SheetMember[]> {
+  const cached = readCache(sheetCache.members);
+  let members = cached;
+
+  if (!members) {
+    const sheetName = await resolveMembersSheetName();
+    const table = await getSheetTable(sheetName);
+    members = table.rows
+      .map((row, index) => parseMemberRow(table.headers, row, index + 2))
+      .filter((member): member is SheetMember => member !== null);
+    sheetCache.members = writeCache(members, MEMBERS_CACHE_TTL_MS);
+  }
+
+  if (!crewName) {
+    return members;
+  }
+
+  return members.filter((member) => {
+    if (isFaCrew(crewName)) {
+      return isFaCrew(member.crew_name);
+    }
+
+    return member.crew_name === crewName;
+  });
 }
 
 export async function findMember(
@@ -334,7 +551,9 @@ export async function findMember(
   return (
     members.find(
       (member) =>
-        member.crew_name === crewName &&
+        (isFaCrew(crewName)
+          ? isFaCrew(member.crew_name)
+          : member.crew_name === crewName) &&
         member.user_id.toLowerCase() === userId.toLowerCase(),
     ) ?? null
   );
@@ -353,6 +572,24 @@ export async function findMemberByUserId(
   );
 }
 
+export async function findMembersByUserIds(
+  userIds: string[],
+): Promise<Map<string, SheetMember>> {
+  const members = await listMembers();
+  const wanted = new Set(userIds.map((userId) => userId.toLowerCase()));
+  const result = new Map<string, SheetMember>();
+
+  for (const member of members) {
+    const key = member.user_id.toLowerCase();
+
+    if (wanted.has(key) && !result.has(key)) {
+      result.set(key, member);
+    }
+  }
+
+  return result;
+}
+
 export async function addMember(
   crewName: string,
   userId: string,
@@ -364,8 +601,51 @@ export async function addMember(
   const existing = await findMemberByUserId(userId);
 
   if (existing) {
-    if (existing.crew_name === crewName) {
-      throw new Error("이미 이 크루에 등록된 스트리머입니다.");
+    if (
+      isFaCrew(crewName)
+        ? isFaCrew(existing.crew_name)
+        : existing.crew_name === crewName
+    ) {
+      throw new Error(
+        isFaCrew(crewName)
+          ? "이미 무소속으로 등록된 스트리머입니다."
+          : "이미 이 크루에 등록된 스트리머입니다.",
+      );
+    }
+
+    if (isFaCrew(existing.crew_name) && !isFaCrew(crewName)) {
+      const sheetName = await resolveMembersSheetName();
+      const table = await getSheetTable(sheetName);
+      const crewColumn = columnLetter(table.headers, "crew_name", "A");
+      const nicknameColumn = columnLetter(table.headers, "nickname", "C");
+      const sheets = getSheetsClient();
+
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: getSheetId(),
+        requestBody: {
+          valueInputOption: "USER_ENTERED",
+          data: [
+            {
+              range: `${sheetName}!${crewColumn}${existing.rowIndex}`,
+              values: [[crewName]],
+            },
+            {
+              range: `${sheetName}!${nicknameColumn}${existing.rowIndex}`,
+              values: [[nickname]],
+            },
+          ],
+        },
+      });
+
+      invalidateSheetsCache();
+      await dedupeMemberRowsByUserId(userId);
+      return;
+    }
+
+    if (isFaCrew(crewName)) {
+      throw new Error(
+        `이미 ${existing.crew_name} 크루에 등록된 스트리머입니다. 해당 크루에서 퇴사 처리해주세요.`,
+      );
     }
 
     throw new Error(
@@ -386,10 +666,101 @@ export async function addMember(
     },
   });
 
+  invalidateSheetsCache();
+}
+
+export async function moveMemberToFa(
+  crewName: string,
+  userId: string,
+  expectedVersion?: string,
+) {
+  await assertCrewVersion(crewName, expectedVersion);
+
+  if (isFaCrew(crewName)) {
+    throw new Error("이미 FA 소속입니다.");
+  }
+
+  const member = await findMember(crewName, userId);
+
+  if (!member) {
+    throw new Error("멤버를 찾을 수 없습니다.");
+  }
+
+  await updateMemberCrewName(member.rowIndex, FA_CREW_NAME);
   await dedupeMemberRowsByUserId(userId);
 }
 
-export async function deleteMember(
+/** 무소속(FA) 멤버를 여러 크루로 한 번에 배정한다. */
+export async function assignMembersFromFa(
+  assignments: Array<{ userId: string; targetCrew: string }>,
+  expectedVersion?: string,
+) {
+  if (assignments.length === 0) {
+    return [];
+  }
+
+  await assertCrewVersion(FA_CREW_NAME, expectedVersion);
+
+  const allMembers = await listMembers();
+  const byUserId = new Map(
+    allMembers.map((member) => [member.user_id.toLowerCase(), member]),
+  );
+  const sheetName = await resolveMembersSheetName();
+  const table = await getSheetTable(sheetName);
+  const crewColumn = columnLetter(table.headers, "crew_name", "A");
+  const data: { range: string; values: string[][] }[] = [];
+  const moved: SheetMember[] = [];
+
+  for (const assignment of assignments) {
+    const userId = assignment.userId.trim();
+    const targetCrew = assignment.targetCrew.trim();
+
+    if (!userId || !targetCrew || isFaCrew(targetCrew)) {
+      throw new Error("유효하지 않은 크루 배정입니다.");
+    }
+
+    const member = byUserId.get(userId.toLowerCase());
+
+    if (!member || !isFaCrew(member.crew_name)) {
+      throw new Error(`${userId} 멤버를 무소속 목록에서 찾을 수 없습니다.`);
+    }
+
+    data.push({
+      range: `${sheetName}!${crewColumn}${member.rowIndex}`,
+      values: [[targetCrew]],
+    });
+    moved.push({
+      ...member,
+      crew_name: targetCrew,
+    });
+  }
+
+  const sheets = getSheetsClient();
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: getSheetId(),
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data,
+    },
+  });
+
+  // Sheets는 write 직후 read가 옛값을 줄 수 있어, 캐시를 삭제하지 않고 낙관적으로 갱신한다.
+  const movedById = new Map(
+    moved.map((member) => [member.user_id.toLowerCase(), member.crew_name]),
+  );
+  const nextMembers = allMembers.map((member) => {
+    const nextCrew = movedById.get(member.user_id.toLowerCase());
+    return nextCrew ? { ...member, crew_name: nextCrew } : member;
+  });
+  sheetCache.tables.clear();
+  sheetCache.members = writeCache(nextMembers, MEMBERS_CACHE_TTL_MS);
+
+  return moved;
+}
+
+/** 시트에서 멤버 행을 완전히 삭제한다. */
+export async function removeMemberPermanently(
   crewName: string,
   userId: string,
   expectedVersion?: string,
@@ -403,6 +774,15 @@ export async function deleteMember(
   }
 
   await deleteMemberRow(member.rowIndex);
+}
+
+/** @deprecated 퇴사 처리는 moveMemberToFa를 사용합니다. */
+export async function deleteMember(
+  crewName: string,
+  userId: string,
+  expectedVersion?: string,
+) {
+  return moveMemberToFa(crewName, userId, expectedVersion);
 }
 
 export async function updateMemberNote(
@@ -436,4 +816,6 @@ export async function updateMemberNote(
       values: [[note]],
     },
   });
+
+  invalidateSheetsCache();
 }

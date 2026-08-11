@@ -16,7 +16,7 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       NAKSOO_BACKUP_RETENTION_DAYS: "3"
       NAKSOO_BACKUP_MAX_COUNT: "100"
-      NAKSOO_ENABLE_POONGTODAY_FALLBACK: "0"
+      NAKSOO_ENABLE_POONGGO_FALLBACK: "0"
 
     steps:
       - name: 코드 가져오기
@@ -37,7 +37,7 @@ jobs:
           cd backend
           python main.py --prune-backups
 
-      - name: 풍고 기준 수집 실행
+      - name: 풍투 기준 수집 실행
         run: |
           cd backend
           python main.py

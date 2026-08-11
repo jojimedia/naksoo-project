@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     "낙수표",
     "크루별 낙수표",
     "아프리카TV",
-    "풍고",
+    "풍투",
   ],
   openGraph: {
     title: "엑셀 크루 낙수표 | SOOP 숲 별풍선 낙수표",

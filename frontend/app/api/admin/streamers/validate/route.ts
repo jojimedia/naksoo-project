@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { validateSoopUser } from "@/lib/admin-auth";
 import { getSessionFromCookies } from "@/lib/admin-session";
 import { jsonError } from "@/lib/api-utils";
+import { isFaCrew } from "@/lib/crews";
 import { findMemberByUserId } from "@/lib/google-sheets";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("user_id")?.trim() ?? "";
+  const targetCrew = searchParams.get("crew")?.trim() ?? "";
 
   if (!userId) {
     return jsonError("user_id 파라미터가 필요합니다.");
@@ -33,6 +35,16 @@ export async function GET(request: Request) {
     const existing = await findMemberByUserId(validated.user_id);
 
     if (existing) {
+      if (isFaCrew(existing.crew_name) && !isFaCrew(targetCrew)) {
+        return NextResponse.json({
+          valid: true,
+          from_fa: true,
+          user_id: validated.user_id,
+          nickname: validated.nickname,
+          profile_image_url: validated.profile_image_url,
+        });
+      }
+
       return NextResponse.json({
         valid: false,
         already_registered: true,
@@ -41,7 +53,7 @@ export async function GET(request: Request) {
         nickname: validated.nickname,
         profile_image_url: validated.profile_image_url,
         error:
-          existing.crew_name === (searchParams.get("crew")?.trim() ?? "")
+          existing.crew_name === targetCrew
             ? "이미 이 크루에 등록된 스트리머입니다."
             : `이미 ${existing.crew_name} 크루에 등록된 스트리머입니다.`,
       });

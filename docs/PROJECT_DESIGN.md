@@ -24,7 +24,7 @@ SOOP 숲 플랫폼에서 활동하는 **크루(엑셀 크루 등) 소속 스트�
 | 후원자(큰손)와 낙수의 신(분산 후원자) 파악이 어려움 | 크루별 **후원 구조 분석 뷰**를 제공한다 |
 | 모바일·PC 모두에서 빠르게 조회 필요 | **정적 JSON 기반**의 가벼운 프론트엔드로 배포한다 |
 
-핵심 가치는 **투명한 크루 내부 경쟁/협력 지표 공유**와 **팬·후원 데이터 탐색 편의성**이다. 공식 SOOP API가 아닌 [풍고(poonggo.com)](https://poonggo.com) 통계를 데이터 소스로 사용한다.
+핵심 가치는 **투명한 크루 내부 경쟁/협력 지표 공유**와 **팬·후원 데이터 탐색 편의성**이다. 공식 SOOP API가 아닌 [풍투(poong.today)](https://poong.today) 통계를 데이터 소스로 사용한다.
 
 ---
 
@@ -42,7 +42,7 @@ SOOP 숲 플랫폼에서 활동하는 **크루(엑셀 크루 등) 소속 스트�
 ```
 [구글 시트: 크루원 목록]  →  [백엔드 크롤러]  →  [result.json]  →  [Next.js 대시보드]
          ↑                         ↑
-    운영자가 유지              풍고 + SOOP API
+    운영자가 유지              풍투 + SOOP API
 ```
 
 - **크루원 마스터 데이터**는 구글 시트 CSV로 운영자가 관리한다.
@@ -66,8 +66,12 @@ SOOP 숲 플랫폼에서 활동하는 **크루(엑셀 크루 등) 소속 스트�
 
 ### 4.1 크루 카드 대시보드 (기본 화면)
 
-- 크루별 카드로 **멤버 목록·월간 별풍선·크루 합계·평균** 표시
-- 크루 순위: **크루 평균 월간 별풍선** 내림차순
+- 크루별 카드로 **멤버 목록·월간 별풍선·크루 합계·절사평균** 표시
+- 크루 순위: **크루 절사평균 월간 별풍선** 내림차순
+- 절사평균: **휴직 제외** 후 활성 멤버의 **최고·최저 각 1명**을 제외한 산술평균 (활성 3명 미만이면 전체 평균)
+- 멤버 삭제는 시트 행 삭제가 아니라 **퇴사 처리**로 `crew_name`을 `FA`로 변경한다
+- FA 소속 스트리머를 다시 등록하면 해당 크루로 `crew_name`이 이동한다
+- `crew_name`이 `FA`인 멤버는 크루 카드/순위에서 제외되고, 상단 **FA** 탭의 리스트로만 표시
 - 멤버 순위: **개인 월간 별풍선** 내림차순
 - 반응형 그리드: 모바일 1열 → md 3열 → lg 5열
 
@@ -109,7 +113,7 @@ SOOP 숲 플랫폼에서 활동하는 **크루(엑셀 크루 등) 소속 스트�
 
 ### 4.6 데이터 신선도 표시
 
-헤더에 마지막 업데이트 시각과 출처(풍고)를 표시한다.
+헤더에 마지막 업데이트 시각과 출처(풍투)를 표시한다.
 
 | 경과 시간 | 상태 |
 |-----------|------|
@@ -136,7 +140,7 @@ SOOP 숲 플랫폼에서 활동하는 **크루(엑셀 크루 등) 소속 스트�
 flowchart TB
     subgraph sources [외부 데이터 소스]
         GS[구글 시트 CSV<br/>crew_name, user_id]
-        PG[풍고 poonggo.com<br/>월간 별풍선·팬랭킹 HTML]
+        PG[풍투 poong.today<br/>월·일별 별풍선·팬랭킹]
         SOOP[SOOP API<br/>프로필·라이브 상태]
     end
 
@@ -187,7 +191,7 @@ flowchart TB
 3. 멤버별 병렬 수집 (동시 요청 Semaphore 제한)
    - SOOP station API: 닉네임, 프로필, 방송 시작
    - SOOP live API: 라이브·비번방 여부
-   - **풍고** station 월간 페이지: 현재월·이전월 별풍선 합계, 팬랭킹
+   - **풍투** `bj/detail/get`: 현재월·이전월 별풍선 합계, 일별, 팬랭킹 (실패 시 `chart/get`)
 4. 실패 항목은 이전 `result.json` / 백업에서 복구
 5. 비정상 월 데이터(미래 일자 포함 등) 감지 후 복구
 6. `result.json` 저장 + 타임스탬프 백업 스냅샷 생성
@@ -280,19 +284,19 @@ flowchart TB
 - 필수 컬럼: `crew_name`, `user_id`
 - 크루 추가·멤버 변경은 시트 수정만으로 반영 (다음 크롤 주기에 적용)
 
-### 8.2 풍고 (poonggo.com) — 기본 데이터 소스
+### 8.2 풍투 (poong.today) — 기본 데이터 소스
 
-월간 통계 HTML 파싱. 상세 매핑: `backend/docs/poonggo-station-monthly.md`
+`bj/detail/get` → 실패 시 `chart/get`. 상세: `backend/docs/bj-detail-get.md`
 
 ```
-https://poonggo.com/station/{user_id}?c=monthly&date={year}-{month}-01&page=1&tab=1
+https://static.poong.today/bj/detail/get?id={user_id}&year={year}&month={month}
 ```
 
-> poonggo 월간 페이지에는 일별 배열이 없어 `daily_balloons`는 빈 배열로 저장된다.
+> detail의 `d[]`(일별)로 **오늘 별풍선**을 채운다. chart fallback은 월합만 제공한다.
 
-### 8.3 풍투 (poong.today) — 폴백 (비활성 기본)
+### 8.3 풍고 (poonggo.com) — 폴백 (비활성 기본)
 
-`NAKSOO_ENABLE_POONGTODAY_FALLBACK=1`일 때만 poonggo 실패 후 `bj/detail/get` → `chart/get` 경로 사용.  
+`NAKSOO_ENABLE_POONGGO_FALLBACK=1`일 때만 풍투 실패 후 station 월간 HTML을 사용한다. 일별 배열은 비어 있다. 상세: `backend/docs/poonggo-station-monthly.md`  
 상세: `backend/docs/bj-detail-get.md`
 
 ### 8.4 SOOP API
@@ -405,7 +409,7 @@ naksoo-project/
 |------|------|------|
 | `NAKSOO_BACKUP_RETENTION_DAYS` | 3 | 백업 보관 일수 |
 | `NAKSOO_BACKUP_MAX_COUNT` | 100 | 백업 최대 개수 |
-| `NAKSOO_ENABLE_POONGTODAY_FALLBACK` | 0 | 풍투 폴백 활성화 |
+| `NAKSOO_ENABLE_POONGGO_FALLBACK` | 0 | 풍고 폴백 활성화 |
 | `GITHUB_DATA_REF` | main | GitHub 복구 시 브랜치 |
 
 ### 프론트엔드
@@ -426,7 +430,7 @@ naksoo-project/
 
 ### 14.1 개요
 
-DB 없이 구글 시트로 관리자 계정·크루 권한·멤버 마스터를 관리한다. 헤더의 key 아이콘으로 로그인 후, 권한이 있는 크루의 스트리머를 등록·삭제·휴직 처리할 수 있다.
+DB 없이 구글 시트로 관리자 계정·크루 권한·멤버 마스터를 관리한다. 헤더의 key 아이콘으로 로그인 후, 권한이 있는 크루의 스트리머를 등록·퇴사(FA 이동)·휴직 처리할 수 있다. 모든 관리자에게 **FA** 항목이 자동으로 추가된다. 관리 크루 드롭다운은 `admins.crews`와 시트에 현재 존재하는 크루(`crews` 탭 또는 `members`의 crew_name)의 교집합만 보여 삭제된 크루가 남지 않는다. 스트리머 추가는 **SOOP ID·닉네임 검색**으로 유사 후보를 고른 뒤 등록한다.
 
 상세 시트 설정: [`docs/ADMIN_SHEET_SETUP.md`](ADMIN_SHEET_SETUP.md)
 
@@ -447,7 +451,7 @@ DB 없이 구글 시트로 관리자 계정·크루 권한·멤버 마스터를 
 | GET | `/api/admin/members?crew=` | 크루 멤버 목록 |
 | GET | `/api/admin/streamers/validate?user_id=` | SOOP ID 검증 |
 | POST | `/api/admin/members` | 멤버 등록 |
-| DELETE | `/api/admin/members` | 멤버 삭제 |
+| DELETE | `/api/admin/members` | 멤버 퇴사 처리 (`crew_name` → FA) |
 | PATCH | `/api/admin/members` | 휴직/복직 (`note`) |
 
 ### 14.4 휴직 처리
@@ -460,7 +464,7 @@ DB 없이 구글 시트로 관리자 계정·크루 권한·멤버 마스터를 
 
 ## 15. 향후 확장 고려사항
 
-- poonggo에 일별 데이터가 없어 **오늘 별풍선**은 `daily_balloons` 또는 별도 소스 보강 필요
+- 풍투 detail의 일별 데이터로 **오늘 별풍선**을 표시한다 (chart fallback 시에는 일별 없음)
 - 과거 월 스냅샷 비교·차트
 - 관리자 비밀번호 해시 저장
 
@@ -470,8 +474,8 @@ DB 없이 구글 시트로 관리자 계정·크루 권한·멤버 마스터를 
 
 | 문서 | 내용 |
 |------|------|
-| `backend/docs/poonggo-station-monthly.md` | 풍고 HTML → JSON 필드 매핑 |
-| `backend/docs/bj-detail-get.md` | 풍투 API 폴백 경로 |
+| `backend/docs/bj-detail-get.md` | 풍투 API → JSON 필드 매핑 |
+| `backend/docs/poonggo-station-monthly.md` | 풍고 HTML 폴백 매핑 |
 | `docs/ADMIN_SHEET_SETUP.md` | 관리자 시트·서비스 계정 설정 |
 | `frontend/app/crew-card.tsx` | 낙수의 신 계산식 UI 문구 |
 | `frontend/app/page.tsx` | `getNaksooGods`, `getCrewKings` 구현 |

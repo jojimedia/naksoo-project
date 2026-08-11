@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { useIsLive } from "./live-status-context";
+
 type Fan = {
   rank: number;
   user_id: string;
@@ -210,7 +212,9 @@ export default function StreamerMemberRow({
   disableScoreTone?: boolean;
 }) {
   const [isManuallyOpen, setIsManuallyOpen] = useState(false);
+  const isLive = useIsLive(member.user_id);
   const isOnLeave = member.is_on_leave === true;
+  const showLive = !isOnLeave && isLive;
   const isOpen = !isOnLeave && (defaultOpen || isManuallyOpen);
   const tone =
     disableScoreTone || isOnLeave
@@ -251,15 +255,28 @@ export default function StreamerMemberRow({
             <span className="ml-1 text-[11px] text-[#fbbf24]">휴직</span>
           </p>
         ) : (
-          <button
-            type="button"
-            className={`block min-w-0 cursor-pointer truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff] ${tone.name}`}
-            aria-expanded={isOpen}
-            aria-label={`${member.nickname} 이달의 후원자 ${isOpen ? "접기" : "열기"}`}
-            onClick={() => setIsManuallyOpen((current) => !current)}
-          >
-            <HighlightText text={member.nickname} query={searchQuery} />
-          </button>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button
+              type="button"
+              className={`min-w-0 truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff] ${tone.name}`}
+              aria-expanded={isOpen}
+              aria-label={`${member.nickname}${showLive ? " 방송중" : ""} 이달의 후원자 ${isOpen ? "접기" : "열기"}`}
+              onClick={() => setIsManuallyOpen((current) => !current)}
+            >
+              <HighlightText text={member.nickname} query={searchQuery} />
+            </button>
+            {showLive ? (
+              <a
+                href={`https://play.sooplive.co.kr/${encodeURIComponent(member.user_id)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex shrink-0 items-center rounded border border-white/85 px-1 py-px text-[9px] font-semibold leading-none tracking-wide text-white/90 no-underline hover:bg-white/10"
+                aria-label={`${member.nickname} 방송국 열기`}
+              >
+                LIVE
+              </a>
+            ) : null}
+          </div>
         )}
         <p className={`text-right font-bold whitespace-nowrap tabular-nums ${tone.score}`}>
           {isOnLeave ? "—" : formatNumber(member.current_balloons)}

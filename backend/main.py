@@ -71,8 +71,8 @@ POONGGO_HEADERS = {
     "Pragma": "no-cache",
 }
 
-ENABLE_POONGTODAY_FALLBACK = (
-    os.environ.get("NAKSOO_ENABLE_POONGTODAY_FALLBACK", "0") == "1"
+ENABLE_POONGGO_FALLBACK = (
+    os.environ.get("NAKSOO_ENABLE_POONGGO_FALLBACK", "0") == "1"
 )
 
 # =========================
@@ -517,32 +517,10 @@ async def resolve_month_balloon_data(
     crew_name="",
 ):
     """
-    poonggo 월간 HTML을 우선 사용한다.
-    기존 풍투 API는 NAKSOO_ENABLE_POONGTODAY_FALLBACK=1일 때만 연결한다.
-    poonggo는 월합·팬랭킹을 채우고 일별은 비운다.
+    풍투(poong.today) detail/get → chart/get 을 기본으로 사용한다.
+    detail 경로에는 일별(d)이 있어 오늘 별풍선도 채워진다.
+    NAKSOO_ENABLE_POONGGO_FALLBACK=1이면 풍투 실패 시 poonggo 월간 HTML을 사용한다.
     """
-
-    try:
-        month_data = await retry(
-            lambda: fetch_poonggo_month_data(client, user_id, year, month),
-            retries=3,
-            delay=1,
-            label=f"{crew_name}/{user_id} poonggo {year}-{month}",
-        )
-        print(
-            f"[{crew_name}/{user_id}] poonggo 월간 성공 {year}-{month} "
-            f"total={month_data.get('total_balloons')}"
-        )
-        return month_data
-    except Exception as e:
-        print(f"[{crew_name}/{user_id}] poonggo 월간 실패 {year}-{month}: {e}")
-
-    if not ENABLE_POONGTODAY_FALLBACK:
-        print(
-            f"[{crew_name}/{user_id}] 풍투 fallback 비활성화 "
-            f"{year}-{month}"
-        )
-        return None
 
     label = f"{crew_name}/{user_id} balloon {year}-{month}"
     balloon_data = None
@@ -564,6 +542,11 @@ async def resolve_month_balloon_data(
     ):
         month_data = build_month_data(balloon_data, year, month)
         month_data["data_source"] = "detail"
+        print(
+            f"[{crew_name}/{user_id}] detail/get 성공 {year}-{month} "
+            f"total={month_data.get('total_balloons')} "
+            f"daily={len(month_data.get('daily_balloons') or [])}"
+        )
         return month_data
 
     try:
@@ -575,29 +558,52 @@ async def resolve_month_balloon_data(
         )
     except Exception as e:
         print(f"[{crew_name}/{user_id}] chart/get 실패 {year}-{month}: {e}")
+        ranking = None
+
+    if ranking is not None:
+        entry = find_ranking_entry(ranking, user_id)
+
+        if entry is None:
+            print(
+                f"[{crew_name}/{user_id}] chart/get 미등록 {year}-{month} → 월합 0"
+            )
+            return {
+                "year": year,
+                "month": month,
+                "total_balloons": 0,
+                "daily_balloons": [],
+                "fans": [],
+                "data_source": "chart_ranking",
+            }
+
+        print(
+            f"[{crew_name}/{user_id}] chart/get fallback {year}-{month} "
+            f"total={entry.get('b')}"
+        )
+        return build_month_data_from_chart(entry, year, month)
+
+    if not ENABLE_POONGGO_FALLBACK:
+        print(
+            f"[{crew_name}/{user_id}] 풍고 fallback 비활성화 "
+            f"{year}-{month}"
+        )
         return None
 
-    entry = find_ranking_entry(ranking, user_id)
-
-    if entry is None:
-        print(
-            f"[{crew_name}/{user_id}] chart/get 미등록 {year}-{month} → 월합 0"
+    try:
+        month_data = await retry(
+            lambda: fetch_poonggo_month_data(client, user_id, year, month),
+            retries=3,
+            delay=1,
+            label=f"{crew_name}/{user_id} poonggo {year}-{month}",
         )
-        return {
-            "year": year,
-            "month": month,
-            "total_balloons": 0,
-            "daily_balloons": [],
-            "fans": [],
-            "data_source": "chart_ranking",
-        }
-
-    print(
-        f"[{crew_name}/{user_id}] chart/get fallback {year}-{month} "
-        f"total={entry.get('b')}"
-    )
-
-    return build_month_data_from_chart(entry, year, month)
+        print(
+            f"[{crew_name}/{user_id}] poonggo 월간 성공 {year}-{month} "
+            f"total={month_data.get('total_balloons')}"
+        )
+        return month_data
+    except Exception as e:
+        print(f"[{crew_name}/{user_id}] poonggo 월간 실패 {year}-{month}: {e}")
+        return None
 
 
 # =========================
@@ -1690,23 +1696,20 @@ async def main():
             }
             ranking_cache = {}
 
-            if ENABLE_POONGTODAY_FALLBACK:
-                for year, month in (
-                    (calendar["current"]["year"], calendar["current"]["month"]),
-                    (calendar["previous"]["year"], calendar["previous"]["month"]),
-                ):
-                    try:
-                        await get_month_ranking_cached(
-                            client,
-                            year,
-                            month,
-                            ranking_cache,
-                        )
-                        print(f"풍투 월간 랭킹 캐시 로드: {year}-{month}")
-                    except Exception as e:
-                        print(f"풍투 월간 랭킹 캐시 로드 실패: {year}-{month}", e)
-            else:
-                print("풍투 fallback 비활성화: 풍고 기준으로만 수집")
+            for year, month in (
+                (calendar["current"]["year"], calendar["current"]["month"]),
+                (calendar["previous"]["year"], calendar["previous"]["month"]),
+            ):
+                try:
+                    await get_month_ranking_cached(
+                        client,
+                        year,
+                        month,
+                        ranking_cache,
+                    )
+                    print(f"풍투 월간 랭킹 캐시 로드: {year}-{month}")
+                except Exception as e:
+                    print(f"풍투 월간 랭킹 캐시 로드 실패: {year}-{month}", e)
 
             tasks = [
                 fetch_one_member(

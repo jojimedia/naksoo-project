@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLoginModal from "./admin-login-modal";
 import AdminPanelModal from "./admin-panel-modal";
+import { getTrimmedAverage } from "@/lib/stats";
+import { FA_CREW_NAME, isFaCrew } from "@/lib/crews";
+
 import CrewCard, {
   getCrewHeaderColor,
-  isClosedCrew,
   type CrewCardData,
 } from "./crew-card";
+import { LiveStatusProvider } from "./live-status-context";
 import StreamerMemberRow from "./streamer-member-row";
 
 type CrewDashboardData = {
@@ -54,7 +57,7 @@ function formatUpdatedAt(data: CrewDashboardData) {
   )}월 ${Number(data.created_date.slice(8, 10))}일 ${data.created_time.slice(
     0,
     5,
-  )} 업데이트 출처: 풍고`;
+  )} 업데이트 출처: 풍투`;
 }
 
 function normalizeSearch(value: string) {
@@ -168,6 +171,175 @@ function getUpdateStatus(data: CrewDashboardData): UpdateStatus {
     className:
       "border-[#3a3548] bg-[#17151f]/70 text-[#8d879c]",
   };
+}
+
+function aggregateDonors(
+  crews: CrewCardData[],
+  search = "",
+): DonorSearchResult[] {
+  const donors = new Map<
+    string,
+    {
+      key: string;
+      nickname: string;
+      totalBalloons: number;
+      crews: Map<
+        string,
+        {
+          crewName: string;
+          balloons: number;
+          streamers: Map<
+            string,
+            {
+              nickname: string;
+              balloons: number;
+            }
+          >;
+        }
+      >;
+    }
+  >();
+
+  for (const crew of crews) {
+    for (const member of crew.members) {
+      for (const fan of member.monthly_fans) {
+        const nickname = normalizeSearch(fan.nickname);
+        const userId = normalizeSearch(fan.user_id);
+
+        if (
+          search &&
+          !nickname.includes(search) &&
+          !userId.includes(search)
+        ) {
+          continue;
+        }
+
+        const key = normalizeDonorKey(fan.user_id, fan.nickname);
+        const current = donors.get(key) ?? {
+          key,
+          nickname: fan.nickname,
+          totalBalloons: 0,
+          crews: new Map(),
+        };
+        const currentCrew = current.crews.get(crew.crew_name) ?? {
+          crewName: crew.crew_name,
+          balloons: 0,
+          streamers: new Map(),
+        };
+        const streamer = currentCrew.streamers.get(member.user_id) ?? {
+          nickname: member.nickname,
+          balloons: 0,
+        };
+
+        streamer.balloons += fan.balloons;
+        currentCrew.streamers.set(member.user_id, streamer);
+        currentCrew.balloons += fan.balloons;
+        current.crews.set(crew.crew_name, currentCrew);
+        current.totalBalloons += fan.balloons;
+        donors.set(key, current);
+      }
+    }
+  }
+
+  return Array.from(donors.values())
+    .map((donor) => ({
+      key: donor.key,
+      nickname: donor.nickname,
+      totalBalloons: donor.totalBalloons,
+      crews: Array.from(donor.crews.values())
+        .map((crew) => ({
+          crewName: crew.crewName,
+          balloons: crew.balloons,
+          streamers: Array.from(crew.streamers.values()).sort(
+            (a, b) => b.balloons - a.balloons,
+          ),
+        }))
+        .sort((a, b) => b.balloons - a.balloons),
+    }))
+    .sort((a, b) => b.totalBalloons - a.totalBalloons);
+}
+
+function KingsRankingRow({
+  rank,
+  donor,
+}: {
+  rank: number;
+  donor: DonorSearchResult;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const tone = getScoreTone(donor.totalBalloons);
+
+  return (
+    <div className="border-b border-[#3a3548]/70">
+      <div
+        className={`grid min-h-7 grid-cols-[34px_minmax(0,1fr)_92px] items-center gap-x-3 rounded px-0.5 py-0.5 text-[16px] tracking-tight transition hover:ring-1 hover:ring-white/35 ${tone.row}`}
+      >
+        <p className={`font-semibold tabular-nums ${tone.muted}`}>{rank}</p>
+        <button
+          type="button"
+          className={`block min-w-0 cursor-pointer truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#93c5fd] ${tone.name}`}
+          aria-expanded={isOpen}
+          aria-label={`${donor.nickname} 후원 내역 ${isOpen ? "접기" : "열기"}`}
+          onClick={() => setIsOpen((current) => !current)}
+        >
+          {donor.nickname}
+        </button>
+        <p className={`text-right font-bold tabular-nums ${tone.score}`}>
+          {formatNumber(donor.totalBalloons)}
+        </p>
+      </div>
+
+      {isOpen ? (
+        <div className="mx-1 mb-2 rounded border border-[#3a3548] bg-[#211e2b] px-2 py-2">
+          <div className="mb-1 grid min-h-6 grid-cols-[92px_minmax(0,1fr)_112px] items-center gap-x-0.5 border-b border-[#3a3548] px-1 py-0.5 text-[13px] font-semibold text-[#a8a2b8]">
+            <p>후원크루</p>
+            <p>스트리머</p>
+            <p className="text-right">별풍선</p>
+          </div>
+          {donor.crews.map((crew) => (
+            <DonorCrewRow key={crew.crewName} crew={crew} query="" />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function KingsRankingCard({ rows }: { rows: DonorSearchResult[] }) {
+  return (
+    <section className="w-full max-w-[520px] overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm">
+      <div className="bg-[#2563EB] p-3 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[23px] font-semibold leading-7">큰손순위</h2>
+          <p className="rounded bg-black/10 px-2.5 py-1.5 text-[12px] font-bold">
+            {rows.length}명
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-[#17151f] p-1">
+        <div className="grid min-h-6 grid-cols-[34px_minmax(0,1fr)_92px] items-center gap-x-3 border-b border-[#3a3548] px-0.5 py-0.5 text-[14px] font-semibold tracking-tight text-[#a8a2b8]">
+          <p>순위</p>
+          <p>닉네임</p>
+          <p className="text-right">별풍선</p>
+        </div>
+
+        {rows.length > 0 ? (
+          rows.map((donor, index) => (
+            <KingsRankingRow
+              key={donor.key}
+              rank={index + 1}
+              donor={donor}
+            />
+          ))
+        ) : (
+          <p className="rounded border border-[#3a3548] bg-[#211e2b] px-3 py-6 text-center text-sm font-bold text-[#a8a2b8]">
+            큰손 데이터 없음
+          </p>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function DonorResultCard({
@@ -306,21 +478,69 @@ function OverallRankingCard({ rows }: { rows: OverallMember[] }) {
   );
 }
 
+function FaRankingCard({ rows }: { rows: OverallMember[] }) {
+  return (
+    <section className="w-full max-w-[520px] overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm">
+      <div className="bg-[#0F766E] p-3 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[23px] font-semibold leading-7">FA</h2>
+          <p className="rounded bg-black/10 px-2.5 py-1.5 text-[12px] font-bold">
+            {rows.length}명
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-[#17151f] p-1">
+        <div className="grid min-h-6 grid-cols-[30px_minmax(0,1fr)_112px] items-center gap-x-0.5 border-b border-[#3a3548] px-0.5 py-0.5 text-[14px] font-semibold tracking-tight text-[#a8a2b8]">
+          <p>순위</p>
+          <p>닉네임</p>
+          <p className="text-right">별풍선</p>
+        </div>
+
+        {rows.length > 0 ? (
+          rows.map((row) => (
+            <StreamerMemberRow
+              key={`${row.crewName}-${row.member.user_id}`}
+              member={row.member}
+              crewName={row.crewName}
+              crewColor={row.crewColor}
+              disableScoreTone
+            />
+          ))
+        ) : (
+          <p className="rounded border border-[#3a3548] bg-[#211e2b] px-3 py-6 text-center text-sm font-bold text-[#a8a2b8]">
+            FA 스트리머가 없습니다.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("members");
   const [showOverall, setShowOverall] = useState(false);
+  const [showKings, setShowKings] = useState(false);
+  const [showFa, setShowFa] = useState(false);
   const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [liveUserIds, setLiveUserIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const crews = useMemo(() => {
+    const sourceCrews = isSearching
+      ? data.crews
+      : data.crews.filter((crew) => !isFaCrew(crew.crew_name));
+
     if (!isSearching) {
-      return data.crews;
+      return sourceCrews;
     }
 
-    return data.crews
+    return sourceCrews
       .map((crew) => {
         const members = crew.members.filter((member) => {
           const nickname = normalizeSearch(member.nickname);
@@ -329,22 +549,18 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           return nickname.includes(search) || userId.includes(search);
         });
         const activeMembers = members.filter((member) => !member.is_on_leave);
-        const closed = isClosedCrew(crew.crew_name);
-        const currentTotal = closed
-          ? 0
-          : activeMembers.reduce(
-              (sum, member) => sum + member.current_balloons,
-              0,
-            );
+        const currentTotal = activeMembers.reduce(
+          (sum, member) => sum + member.current_balloons,
+          0,
+        );
 
         return {
           ...crew,
           member_count: activeMembers.length,
           current_total_balloons: currentTotal,
-          average_current_balloons:
-            closed || activeMembers.length === 0
-              ? 0
-              : Math.round(currentTotal / activeMembers.length),
+          average_current_balloons: getTrimmedAverage(
+            activeMembers.map((member) => member.current_balloons),
+          ),
           members,
         };
       })
@@ -355,89 +571,38 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       return [];
     }
 
-    const donors = new Map<
-      string,
-      {
-        key: string;
-        nickname: string;
-        totalBalloons: number;
-        crews: Map<
-          string,
-          {
-            crewName: string;
-            balloons: number;
-            streamers: Map<
-              string,
-              {
-                nickname: string;
-                balloons: number;
-              }
-            >;
-          }
-        >;
-      }
-    >();
+    return aggregateDonors(data.crews, search);
+  }, [data.crews, isSearching, search, searchMode]);
+  const kingRows = useMemo(
+    () => aggregateDonors(data.crews).slice(0, 100),
+    [data.crews],
+  );
+  const faRows = useMemo(() => {
+    const faCrew = data.crews.find((crew) => isFaCrew(crew.crew_name));
 
-    for (const crew of data.crews) {
-      for (const member of crew.members) {
-        for (const fan of member.monthly_fans) {
-          const nickname = normalizeSearch(fan.nickname);
-          const userId = normalizeSearch(fan.user_id);
-
-          if (!nickname.includes(search) && !userId.includes(search)) {
-            continue;
-          }
-
-          const key = normalizeDonorKey(fan.user_id, fan.nickname);
-          const current = donors.get(key) ?? {
-            key,
-            nickname: fan.nickname,
-            totalBalloons: 0,
-            crews: new Map(),
-          };
-          const currentCrew = current.crews.get(crew.crew_name) ?? {
-            crewName: crew.crew_name,
-            balloons: 0,
-            streamers: new Map(),
-          };
-          const streamer = currentCrew.streamers.get(member.user_id) ?? {
-            nickname: member.nickname,
-            balloons: 0,
-          };
-
-          streamer.balloons += fan.balloons;
-          currentCrew.streamers.set(member.user_id, streamer);
-          currentCrew.balloons += fan.balloons;
-          current.crews.set(crew.crew_name, currentCrew);
-          current.totalBalloons += fan.balloons;
-          donors.set(key, current);
-        }
-      }
+    if (!faCrew) {
+      return [];
     }
 
-    return Array.from(donors.values())
-      .map((donor) => ({
-        key: donor.key,
-        nickname: donor.nickname,
-        totalBalloons: donor.totalBalloons,
-        crews: Array.from(donor.crews.values())
-          .map((crew) => ({
-            crewName: crew.crewName,
-            balloons: crew.balloons,
-            streamers: Array.from(crew.streamers.values()).sort(
-              (a, b) => b.balloons - a.balloons,
-            ),
-          }))
-          .sort((a, b) => b.balloons - a.balloons),
-      }))
-      .sort((a, b) => b.totalBalloons - a.totalBalloons);
-  }, [data.crews, isSearching, search, searchMode]);
+    return faCrew.members
+      .filter((member) => !member.is_on_leave)
+      .slice()
+      .sort((a, b) => b.current_balloons - a.current_balloons)
+      .map((member, index) => ({
+        crewName: FA_CREW_NAME,
+        crewColor: "#0F766E",
+        member: {
+          ...member,
+          rank: index + 1,
+        },
+      }));
+  }, [data.crews]);
   const hasResults =
-    showOverall && !isSearching
+    (showOverall || showKings || showFa) && !isSearching
       ? true
       : searchMode === "donors" && isSearching
-      ? donorResults.length > 0
-      : crews.length > 0;
+        ? donorResults.length > 0
+        : crews.length > 0;
   const updateStatus = getUpdateStatus(data);
   const overallRows = useMemo(
     () =>
@@ -446,10 +611,14 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           crew.members
             .filter((member) => !member.is_on_leave)
             .map((member) => ({
-            crewName: crew.crew_name,
-            crewColor: getCrewHeaderColor(crewIndex),
-            member,
-          })),
+              crewName: isFaCrew(crew.crew_name)
+                ? FA_CREW_NAME
+                : crew.crew_name,
+              crewColor: isFaCrew(crew.crew_name)
+                ? "#0F766E"
+                : getCrewHeaderColor(crewIndex),
+              member,
+            })),
         )
         .sort(
           (a, b) => b.member.current_balloons - a.member.current_balloons,
@@ -488,6 +657,55 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     void loadSession();
   }, []);
 
+  useEffect(() => {
+    // 크루 카드 + FA/전체 순위에 보이는 모든 활성 멤버를 페이지 오픈 시 조회한다.
+    const userIds = data.crews.flatMap((crew) =>
+      crew.members
+        .filter((member) => !member.is_on_leave)
+        .map((member) => member.user_id),
+    );
+
+    if (userIds.length === 0) {
+      setLiveUserIds(new Set());
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadLiveStatus() {
+      try {
+        const response = await fetch("/api/live-status", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ user_ids: userIds }),
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as {
+          live?: string[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          return;
+        }
+
+        setLiveUserIds(
+          new Set((payload.live ?? []).map((userId) => userId.toLowerCase())),
+        );
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
+    void loadLiveStatus();
+
+    return () => controller.abort();
+  }, [data.crews]);
+
   function handleAdminButtonClick() {
     if (adminSession) {
       setShowAdminPanel(true);
@@ -498,6 +716,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   }
 
   return (
+    <LiveStatusProvider liveUserIds={liveUserIds}>
     <main className="min-h-screen bg-[#111018] bg-[radial-gradient(#2b2836_1px,transparent_1px)] bg-[length:20px_20px] text-[#e5e7eb]">
       <header className="sticky top-0 z-40 w-full border-b border-[#3a3548] bg-[#111018]/95 backdrop-blur">
         <div className="mx-auto grid min-h-16 w-full max-w-[1920px] grid-cols-1 items-center gap-2 px-3 py-2 md:grid-cols-[minmax(240px,1fr)_minmax(420px,720px)_minmax(240px,1fr)] md:px-8">
@@ -542,12 +761,17 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               <button
                 type="button"
                 className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
-                  !showOverall && searchMode === "members"
+                  !showOverall &&
+                  !showKings &&
+                  !showFa &&
+                  searchMode === "members"
                     ? "bg-[#5b4bdb] text-white"
                     : "text-[#a8a2b8] hover:text-[#d8d4ff]"
                 }`}
                 onClick={() => {
                   setShowOverall(false);
+                  setShowKings(false);
+                  setShowFa(false);
                   setSearchMode("members");
                 }}
               >
@@ -556,16 +780,39 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               <button
                 type="button"
                 className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
-                  !showOverall && searchMode === "donors"
+                  showKings ||
+                  (!showOverall && !showFa && searchMode === "donors")
                     ? "bg-[#5b4bdb] text-white"
                     : "text-[#a8a2b8] hover:text-[#d8d4ff]"
                 }`}
+                aria-pressed={showKings}
                 onClick={() => {
+                  setQuery("");
                   setShowOverall(false);
+                  setShowFa(false);
+                  setShowKings(true);
                   setSearchMode("donors");
                 }}
               >
                 큰손
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold transition md:px-4 md:text-sm ${
+                  showFa
+                    ? "bg-[#5b4bdb] text-white"
+                    : "text-[#a8a2b8] hover:text-[#d8d4ff]"
+                }`}
+                aria-pressed={showFa}
+                onClick={() => {
+                  setQuery("");
+                  setShowOverall(false);
+                  setShowKings(false);
+                  setShowFa(true);
+                  setSearchMode("members");
+                }}
+              >
+                FA
               </button>
               <button
                 type="button"
@@ -577,6 +824,8 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                 aria-pressed={showOverall}
                 onClick={() => {
                   setQuery("");
+                  setShowKings(false);
+                  setShowFa(false);
                   setShowOverall((current) => !current);
                 }}
               >
@@ -645,35 +894,41 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         {hasResults ? (
           <div
             className={`mx-auto gap-3 ${
-              isSearching || showOverall
+              isSearching || showOverall || showKings || showFa
                 ? "flex max-w-[520px] flex-col items-center"
                 : "grid max-w-[420px] grid-cols-1 md:max-w-[820px] md:grid-cols-3 lg:max-w-none lg:grid-cols-5"
             }`}
           >
             {showOverall && !isSearching ? (
               <OverallRankingCard rows={overallRows} />
-            ) : searchMode === "donors" && isSearching
-              ? donorResults.map((donor, donorIndex) => (
-                  <DonorResultCard
-                    key={`${donor.key}-${donorIndex}`}
-                    donor={donor}
-                    query={query}
+            ) : showKings && !isSearching ? (
+              <KingsRankingCard rows={kingRows} />
+            ) : showFa && !isSearching ? (
+              <FaRankingCard rows={faRows} />
+            ) : searchMode === "donors" && isSearching ? (
+              donorResults.map((donor, donorIndex) => (
+                <DonorResultCard
+                  key={`${donor.key}-${donorIndex}`}
+                  donor={donor}
+                  query={query}
+                />
+              ))
+            ) : (
+              crews.map((crew, index) => (
+                <div
+                  key={crew.crew_name}
+                  className={isSearching ? "w-full max-w-[420px]" : "w-full"}
+                >
+                  <CrewCard
+                    crew={crew}
+                    index={index}
+                    membersOnly={isSearching}
+                    expandMembers={isSearching}
+                    searchQuery={query}
                   />
-                ))
-              : crews.map((crew, index) => (
-                  <div
-                    key={crew.crew_name}
-                    className={isSearching ? "w-full max-w-[420px]" : "w-full"}
-                  >
-                    <CrewCard
-                      crew={crew}
-                      index={index}
-                      membersOnly={isSearching}
-                      expandMembers={isSearching}
-                      searchQuery={query}
-                    />
-                  </div>
-                ))}
+                </div>
+              ))
+            )}
           </div>
         ) : (
           <div className="mx-auto mt-12 max-w-[420px] rounded-xl border border-[#3a3548] bg-[#17151f] px-5 py-8 text-center text-[16px] font-semibold text-[#a8a2b8]">
@@ -720,5 +975,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         />
       ) : null}
     </main>
+    </LiveStatusProvider>
   );
 }

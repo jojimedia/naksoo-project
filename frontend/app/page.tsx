@@ -1,6 +1,9 @@
 import { readFile } from "fs/promises";
 import path from "path";
 
+import { getTrimmedAverage } from "@/lib/stats";
+import { isFaCrew } from "@/lib/crews";
+
 import CrewDashboard from "./crew-dashboard";
 
 const GITHUB_REPO = "jojimedia/naksoo-project";
@@ -765,31 +768,32 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
           };
         });
       const members = [...activeMembers, ...leaveMembers];
-      const closed = crewName === "씨나인";
-      const currentTotal = closed
-        ? 0
-        : activeMembers.reduce(
-            (sum, member) => sum + member.current_balloons,
-            0,
-          );
+      const currentTotal = activeMembers.reduce(
+        (sum, member) => sum + member.current_balloons,
+        0,
+      );
       const activeCount = activeMembers.length;
+      const averageCurrent = getTrimmedAverage(
+        activeMembers.map((member) => member.current_balloons),
+      );
 
       return {
         rank: 0,
         crew_name: crewName,
         member_count: activeCount,
         current_total_balloons: currentTotal,
-        average_current_balloons:
-          closed || activeCount === 0
-            ? 0
-            : Math.round(currentTotal / activeCount),
+        average_current_balloons: averageCurrent,
         members,
         naksoo_gods: getNaksooGods(activeCrewItems, naksooThresholds),
         crew_kings: getCrewKings(activeCrewItems),
       };
-    })
+    });
+
+  const rankedCrews = crews
+    .filter((crew) => !isFaCrew(crew.crew_name))
     .sort((a, b) => b.average_current_balloons - a.average_current_balloons)
     .map((crew, index) => ({ ...crew, rank: index + 1 }));
+  const faCrew = crews.find((crew) => isFaCrew(crew.crew_name));
 
   return {
     created_date: result.created_date,
@@ -797,7 +801,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
     display_date: displayDate,
     current_period: result.current_period,
     previous_period: result.previous_period,
-    crews,
+    crews: faCrew ? [...rankedCrews, { ...faCrew, rank: 0 }] : rankedCrews,
   };
 }
 
