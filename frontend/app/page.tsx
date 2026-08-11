@@ -389,20 +389,6 @@ function normalizeResult(raw: RawNaksooResult): NaksooResult {
   };
 }
 
-function parseKstDateTime(value?: string | null) {
-  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
-
-  if (!match) {
-    return null;
-  }
-
-  return {
-    year: Number(match[1]),
-    month: Number(match[2]),
-    day: Number(match[3]),
-  };
-}
-
 function getDailyBalloonsForDate(
   period: MonthlyStats | null,
   day: number,
@@ -427,19 +413,15 @@ function getMonthlyStatsForDate(
 function getDailyBalloonsForDisplayDate(
   item: RankingItem,
   result: NaksooResult,
+  displayDate: Pick<
+    ReturnType<typeof getKstDateParts>,
+    "year" | "month" | "day"
+  >,
 ) {
-  const targetDate =
-    item.is_live && item.broadcast_start
-      ? parseKstDateTime(item.broadcast_start)
-      : null;
-
-  if (!targetDate) {
-    return 0;
-  }
-
+  // 오늘 별풍선은 방송 시작일(마지막 방송)이 아니라 KST 오늘 일별 값을 쓴다.
   return getDailyBalloonsForDate(
-    getMonthlyStatsForDate(item, result, targetDate),
-    targetDate.day,
+    getMonthlyStatsForDate(item, result, displayDate),
+    displayDate.day,
   );
 }
 
@@ -728,6 +710,7 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             display_day_balloons: getDailyBalloonsForDisplayDate(
               item,
               result,
+              displayDate,
             ),
             current_daily_balloons: item.current_month.daily_balloons,
             previous_daily_balloons: item.previous_month.daily_balloons,
