@@ -23,6 +23,7 @@ export async function POST(request: Request) {
           user_id: entry.user_id.toLowerCase(),
           thumbnail_url: entry.thumbnail_url,
           title: entry.title,
+          viewer_count: entry.viewer_count,
         })),
     });
   } catch (error) {

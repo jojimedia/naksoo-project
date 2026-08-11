@@ -5,6 +5,7 @@ import { createContext, useContext } from "react";
 export type LiveStreamInfo = {
   thumbnailUrl: string | null;
   title: string | null;
+  viewerCount: number | null;
 };
 
 const LiveStatusContext = createContext<ReadonlyMap<string, LiveStreamInfo>>(

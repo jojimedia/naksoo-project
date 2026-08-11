@@ -131,11 +131,13 @@ function LiveBadge({
   nickname,
   thumbnailUrl,
   title,
+  viewerCount,
 }: {
   userId: string;
   nickname: string;
   thumbnailUrl: string | null;
   title: string | null;
+  viewerCount: number | null;
 }) {
   const anchorRef = useRef<HTMLAnchorElement>(null);
   const [preview, setPreview] = useState<{
@@ -168,7 +170,7 @@ function LiveBadge({
     }
 
     const rect = anchorRef.current.getBoundingClientRect();
-    const previewHeight = title ? 168 : 132;
+    const previewHeight = title || viewerCount != null ? 188 : 132;
     const spaceBelow = window.innerHeight - rect.bottom;
     const top =
       spaceBelow < previewHeight && rect.top > previewHeight
@@ -209,12 +211,19 @@ function LiveBadge({
               style={{ top: preview.top, left: preview.left }}
               role="tooltip"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={preview.src}
-                alt={`${nickname} 라이브 썸네일`}
-                className="aspect-video w-full bg-[#111018] object-cover"
-              />
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={preview.src}
+                  alt={`${nickname} 라이브 썸네일`}
+                  className="aspect-video w-full bg-[#111018] object-cover"
+                />
+                {viewerCount != null ? (
+                  <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                    {formatNumber(viewerCount)}명
+                  </span>
+                ) : null}
+              </div>
               {title ? (
                 <p className="line-clamp-2 px-2 py-1.5 text-[11px] font-semibold leading-snug text-[#e5e7eb]">
                   {title}
@@ -375,6 +384,7 @@ export default function StreamerMemberRow({
                 nickname={member.nickname}
                 thumbnailUrl={liveInfo?.thumbnailUrl ?? null}
                 title={liveInfo?.title ?? null}
+                viewerCount={liveInfo?.viewerCount ?? null}
               />
             ) : null}
           </div>

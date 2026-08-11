@@ -8,7 +8,18 @@ export type LiveStatusEntry = {
   is_live: boolean;
   thumbnail_url: string | null;
   title: string | null;
+  viewer_count: number | null;
 };
+
+function offlineEntry(userId: string): LiveStatusEntry {
+  return {
+    user_id: userId,
+    is_live: false,
+    thumbnail_url: null,
+    title: null,
+    viewer_count: null,
+  };
+}
 
 const defaultHeaders = {
   Accept: "application/json",
@@ -25,12 +36,7 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
   const trimmed = userId.trim();
 
   if (!trimmed) {
-    return {
-      user_id: userId,
-      is_live: false,
-      thumbnail_url: null,
-      title: null,
-    };
+    return offlineEntry(userId);
   }
 
   const controller = new AbortController();
@@ -47,45 +53,34 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
     );
 
     if (!response.ok) {
-      return {
-        user_id: trimmed,
-        is_live: false,
-        thumbnail_url: null,
-        title: null,
-      };
+      return offlineEntry(trimmed);
     }
 
     const data = (await response.json()) as {
       broad?: {
         broad_no?: number | string;
         broad_title?: string;
+        current_sum_viewer?: number | string;
         is_password?: boolean;
       } | null;
     };
     const broad = data.broad;
 
     if (!broad || broad.is_password || broad.broad_no == null) {
-      return {
-        user_id: trimmed,
-        is_live: false,
-        thumbnail_url: null,
-        title: null,
-      };
+      return offlineEntry(trimmed);
     }
+
+    const viewerCount = Number(broad.current_sum_viewer);
 
     return {
       user_id: trimmed,
       is_live: true,
       thumbnail_url: buildLiveThumbnailUrl(broad.broad_no),
       title: broad.broad_title?.trim() || null,
+      viewer_count: Number.isFinite(viewerCount) ? viewerCount : null,
     };
   } catch {
-    return {
-      user_id: trimmed,
-      is_live: false,
-      thumbnail_url: null,
-      title: null,
-    };
+    return offlineEntry(trimmed);
   } finally {
     clearTimeout(timer);
   }

@@ -692,6 +692,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             user_id?: string;
             thumbnail_url?: string | null;
             title?: string | null;
+            viewer_count?: number | null;
           }>;
           error?: string;
         };
@@ -709,9 +710,12 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             continue;
           }
 
+          const viewerCount = Number(entry.viewer_count);
+
           next.set(userId, {
             thumbnailUrl: entry.thumbnail_url ?? null,
             title: entry.title ?? null,
+            viewerCount: Number.isFinite(viewerCount) ? viewerCount : null,
           });
         }
 
