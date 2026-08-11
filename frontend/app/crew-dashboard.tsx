@@ -10,7 +10,10 @@ import CrewCard, {
   getCrewHeaderColor,
   type CrewCardData,
 } from "./crew-card";
-import { LiveStatusProvider } from "./live-status-context";
+import {
+  LiveStatusProvider,
+  type LiveStreamInfo,
+} from "./live-status-context";
 import StreamerMemberRow from "./streamer-member-row";
 
 type CrewDashboardData = {
@@ -527,9 +530,9 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [liveUserIds, setLiveUserIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [liveByUserId, setLiveByUserId] = useState<
+    ReadonlyMap<string, LiveStreamInfo>
+  >(() => new Map());
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const rankingCrews = useMemo(
@@ -668,7 +671,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     );
 
     if (userIds.length === 0) {
-      setLiveUserIds(new Set());
+      setLiveByUserId(new Map());
       return;
     }
 
@@ -685,7 +688,11 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           signal: controller.signal,
         });
         const payload = (await response.json()) as {
-          live?: string[];
+          live?: Array<{
+            user_id?: string;
+            thumbnail_url?: string | null;
+            title?: string | null;
+          }>;
           error?: string;
         };
 
@@ -693,9 +700,22 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           return;
         }
 
-        setLiveUserIds(
-          new Set((payload.live ?? []).map((userId) => userId.toLowerCase())),
-        );
+        const next = new Map<string, LiveStreamInfo>();
+
+        for (const entry of payload.live ?? []) {
+          const userId = entry.user_id?.trim().toLowerCase();
+
+          if (!userId) {
+            continue;
+          }
+
+          next.set(userId, {
+            thumbnailUrl: entry.thumbnail_url ?? null,
+            title: entry.title ?? null,
+          });
+        }
+
+        setLiveByUserId(next);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
@@ -718,7 +738,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   }
 
   return (
-    <LiveStatusProvider liveUserIds={liveUserIds}>
+    <LiveStatusProvider liveByUserId={liveByUserId}>
     <main className="min-h-screen bg-[#111018] bg-[radial-gradient(#2b2836_1px,transparent_1px)] bg-[length:20px_20px] text-[#e5e7eb]">
       <header className="sticky top-0 z-40 w-full border-b border-[#3a3548] bg-[#111018]/95 backdrop-blur">
         <div className="mx-auto grid min-h-16 w-full max-w-[1920px] grid-cols-1 items-center gap-2 px-3 py-2 md:grid-cols-[minmax(240px,1fr)_minmax(420px,720px)_minmax(240px,1fr)] md:px-8">

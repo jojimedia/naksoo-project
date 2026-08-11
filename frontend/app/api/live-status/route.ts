@@ -19,7 +19,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       live: statuses
         .filter((entry) => entry.is_live)
-        .map((entry) => entry.user_id.toLowerCase()),
+        .map((entry) => ({
+          user_id: entry.user_id.toLowerCase(),
+          thumbnail_url: entry.thumbnail_url,
+          title: entry.title,
+        })),
     });
   } catch (error) {
     const message =

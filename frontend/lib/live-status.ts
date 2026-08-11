@@ -1,80 +1,91 @@
-const LIVE_API_URL = "https://live.sooplive.co.kr/afreeca/player_live_api.php";
+const STATION_API_URL = "https://chapi.sooplive.co.kr/api";
+const LIVE_THUMB_BASE = "https://liveimg.sooplive.co.kr/m";
 const CONCURRENCY = 40;
 const REQUEST_TIMEOUT_MS = 3500;
 
 export type LiveStatusEntry = {
   user_id: string;
   is_live: boolean;
+  thumbnail_url: string | null;
+  title: string | null;
 };
 
 const defaultHeaders = {
   Accept: "application/json",
   "User-Agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+  Referer: "https://www.sooplive.co.kr/",
 };
+
+export function buildLiveThumbnailUrl(broadNo: number | string) {
+  return `${LIVE_THUMB_BASE}/${broadNo}`;
+}
 
 async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
   const trimmed = userId.trim();
 
   if (!trimmed) {
-    return { user_id: userId, is_live: false };
+    return {
+      user_id: userId,
+      is_live: false,
+      thumbnail_url: null,
+      title: null,
+    };
   }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const body = new URLSearchParams({
-      bid: trimmed,
-      from_api: "0",
-      mode: "landing",
-      player_type: "html5",
-    });
-
-    const response = await fetch(LIVE_API_URL, {
-      method: "POST",
-      headers: {
-        ...defaultHeaders,
-        "Content-Type": "application/x-www-form-urlencoded",
-        Origin: "https://live.sooplive.co.kr",
-        Referer: `https://live.sooplive.co.kr/${encodeURIComponent(trimmed)}`,
+    const response = await fetch(
+      `${STATION_API_URL}/${encodeURIComponent(trimmed)}/station`,
+      {
+        headers: defaultHeaders,
+        cache: "no-store",
+        signal: controller.signal,
       },
-      body,
-      cache: "no-store",
-      signal: controller.signal,
-    });
+    );
 
     if (!response.ok) {
-      return { user_id: trimmed, is_live: false };
+      return {
+        user_id: trimmed,
+        is_live: false,
+        thumbnail_url: null,
+        title: null,
+      };
     }
 
     const data = (await response.json()) as {
-      CHANNEL?: {
-        RESULT?: number | string;
-        BPWD?: string;
-        TITLE?: string;
-        BTIME?: number | string;
-      };
+      broad?: {
+        broad_no?: number | string;
+        broad_title?: string;
+        is_password?: boolean;
+      } | null;
     };
-    const channel = data.CHANNEL ?? {};
-    const result = Number(channel.RESULT);
-    const isPassword = channel.BPWD === "Y";
+    const broad = data.broad;
 
-    if (isPassword || Number.isNaN(result) || result === 0) {
-      return { user_id: trimmed, is_live: false };
+    if (!broad || broad.is_password || broad.broad_no == null) {
+      return {
+        user_id: trimmed,
+        is_live: false,
+        thumbnail_url: null,
+        title: null,
+      };
     }
 
-    // RESULT 1: 일반 공개 방송
-    // RESULT -6: 19금 등으로 시청 제한이지만 방송 중
-    // 그 외 음수 코드도 TITLE/BTIME이 있으면 제한된 라이브로 본다.
-    const isLive =
-      result === 1 ||
-      result === -6 ||
-      (result < 0 && Boolean(channel.TITLE || channel.BTIME));
-
-    return { user_id: trimmed, is_live: isLive };
+    return {
+      user_id: trimmed,
+      is_live: true,
+      thumbnail_url: buildLiveThumbnailUrl(broad.broad_no),
+      title: broad.broad_title?.trim() || null,
+    };
   } catch {
-    return { user_id: trimmed, is_live: false };
+    return {
+      user_id: trimmed,
+      is_live: false,
+      thumbnail_url: null,
+      title: null,
+    };
   } finally {
     clearTimeout(timer);
   }

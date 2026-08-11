@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-import { useIsLive } from "./live-status-context";
+import { useIsLive, useLiveInfo } from "./live-status-context";
 
 type Fan = {
   rank: number;
@@ -125,6 +126,108 @@ function FanRow({ fan }: { fan: Fan }) {
   );
 }
 
+function LiveBadge({
+  userId,
+  nickname,
+  thumbnailUrl,
+  title,
+}: {
+  userId: string;
+  nickname: string;
+  thumbnailUrl: string | null;
+  title: string | null;
+}) {
+  const anchorRef = useRef<HTMLAnchorElement>(null);
+  const [preview, setPreview] = useState<{
+    top: number;
+    left: number;
+    src: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!preview) {
+      return;
+    }
+
+    function hide() {
+      setPreview(null);
+    }
+
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+
+    return () => {
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
+    };
+  }, [preview]);
+
+  function showPreview() {
+    if (!thumbnailUrl || !anchorRef.current) {
+      return;
+    }
+
+    const rect = anchorRef.current.getBoundingClientRect();
+    const previewHeight = title ? 168 : 132;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top =
+      spaceBelow < previewHeight && rect.top > previewHeight
+        ? rect.top - previewHeight - 8
+        : rect.bottom + 8;
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2, 118),
+      window.innerWidth - 118,
+    );
+
+    setPreview({
+      top,
+      left,
+      src: `${thumbnailUrl}?t=${Date.now()}`,
+    });
+  }
+
+  return (
+    <>
+      <a
+        ref={anchorRef}
+        href={`https://play.sooplive.co.kr/${encodeURIComponent(userId)}`}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex shrink-0 items-center rounded border border-white/85 px-1 py-px text-[9px] font-semibold leading-none tracking-wide text-white/90 no-underline hover:bg-white/10"
+        aria-label={`${nickname} 방송국 열기`}
+        onMouseEnter={showPreview}
+        onMouseLeave={() => setPreview(null)}
+        onFocus={showPreview}
+        onBlur={() => setPreview(null)}
+      >
+        LIVE
+      </a>
+      {preview
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-[80] w-[220px] -translate-x-1/2 overflow-hidden rounded-lg border border-[#4b455c] bg-[#17151f] shadow-xl shadow-black/50"
+              style={{ top: preview.top, left: preview.left }}
+              role="tooltip"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={preview.src}
+                alt={`${nickname} 라이브 썸네일`}
+                className="aspect-video w-full bg-[#111018] object-cover"
+              />
+              {title ? (
+                <p className="line-clamp-2 px-2 py-1.5 text-[11px] font-semibold leading-snug text-[#e5e7eb]">
+                  {title}
+                </p>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 function FanRanking({
   fans,
   previousBalloons,
@@ -213,6 +316,7 @@ export default function StreamerMemberRow({
 }) {
   const [isManuallyOpen, setIsManuallyOpen] = useState(false);
   const isLive = useIsLive(member.user_id);
+  const liveInfo = useLiveInfo(member.user_id);
   const isOnLeave = member.is_on_leave === true;
   const showLive = !isOnLeave && isLive;
   const isOpen = !isOnLeave && (defaultOpen || isManuallyOpen);
@@ -266,15 +370,12 @@ export default function StreamerMemberRow({
               <HighlightText text={member.nickname} query={searchQuery} />
             </button>
             {showLive ? (
-              <a
-                href={`https://play.sooplive.co.kr/${encodeURIComponent(member.user_id)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex shrink-0 items-center rounded border border-white/85 px-1 py-px text-[9px] font-semibold leading-none tracking-wide text-white/90 no-underline hover:bg-white/10"
-                aria-label={`${member.nickname} 방송국 열기`}
-              >
-                LIVE
-              </a>
+              <LiveBadge
+                userId={member.user_id}
+                nickname={member.nickname}
+                thumbnailUrl={liveInfo?.thumbnailUrl ?? null}
+                title={liveInfo?.title ?? null}
+              />
             ) : null}
           </div>
         )}
