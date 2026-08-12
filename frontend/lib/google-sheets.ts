@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { google, sheets_v4 } from "googleapis";
 
-import { FA_CREW_NAME, isFaCrew } from "./crews";
+import { FA_CREW_NAME, isFaCrew, withFaCrew } from "./crews";
 
 export type SheetMember = {
   rowIndex: number;
@@ -16,6 +16,28 @@ export type SheetAdmin = {
   login_id: string;
   password: string;
   crews: string[];
+};
+
+export type MemberRequestAction = "add" | "leave" | "restore" | "retire";
+export type MemberRequestStatus = "pending" | "approved" | "rejected";
+
+export type SheetMemberRequest = {
+  rowIndex: number;
+  action: MemberRequestAction;
+  crew_name: string;
+  user_id: string;
+  nickname: string;
+  status: MemberRequestStatus;
+  requested_at: string;
+  processed_by: string;
+  processed_at: string;
+};
+
+export type NewMemberRequestInput = {
+  action: MemberRequestAction;
+  crew_name: string;
+  user_id: string;
+  nickname: string;
 };
 
 export class CrewVersionConflictError extends Error {
@@ -208,6 +230,95 @@ async function resolveMembersSheetName() {
 
 async function resolveAdminsSheetName() {
   return resolveSheetName(process.env.GOOGLE_ADMINS_SHEET_NAME, ["admins"]);
+}
+
+async function resolveMemberAddSheetName() {
+  return resolveSheetName(process.env.GOOGLE_MEMBER_ADD_SHEET_NAME, [
+    "member_add",
+  ]);
+}
+
+const MEMBER_REQUEST_ACTIONS = new Set<MemberRequestAction>([
+  "add",
+  "leave",
+  "restore",
+  "retire",
+]);
+
+const MEMBER_REQUEST_STATUSES = new Set<MemberRequestStatus>([
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+function parseMemberRequestAction(value: string): MemberRequestAction | null {
+  const normalized = value.trim().toLowerCase() as MemberRequestAction;
+  return MEMBER_REQUEST_ACTIONS.has(normalized) ? normalized : null;
+}
+
+function parseMemberRequestStatus(value: string): MemberRequestStatus {
+  const normalized = value.trim().toLowerCase() as MemberRequestStatus;
+  return MEMBER_REQUEST_STATUSES.has(normalized) ? normalized : "pending";
+}
+
+function parseMemberRequestRow(
+  headers: string[],
+  row: string[],
+  rowIndex: number,
+): SheetMemberRequest | null {
+  const action = parseMemberRequestAction(
+    getCell(row, getColumnIndex(headers, "action")),
+  );
+  const crew_name = getCell(row, getColumnIndex(headers, "crew_name"));
+  const user_id = getCell(row, getColumnIndex(headers, "user_id"));
+  const nickname = getCell(row, getColumnIndex(headers, "nickname"));
+  const status = parseMemberRequestStatus(
+    getCell(row, getColumnIndex(headers, "status")),
+  );
+
+  if (!action || !crew_name || !user_id) {
+    return null;
+  }
+
+  return {
+    rowIndex,
+    action,
+    crew_name,
+    user_id,
+    nickname,
+    status,
+    requested_at: getCell(row, getColumnIndex(headers, "requested_at")),
+    processed_by: getCell(row, getColumnIndex(headers, "processed_by")),
+    processed_at: getCell(row, getColumnIndex(headers, "processed_at")),
+  };
+}
+
+const MEMBER_ADD_HEADERS = [
+  "action",
+  "crew_name",
+  "user_id",
+  "nickname",
+  "status",
+  "requested_at",
+  "processed_by",
+  "processed_at",
+] as const;
+
+async function ensureMemberAddHeaders(sheetName: string, headers: string[]) {
+  if (headers.length > 0) {
+    return;
+  }
+
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: getSheetId(),
+    range: `${sheetName}!A1:H1`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: {
+      values: [Array.from(MEMBER_ADD_HEADERS)],
+    },
+  });
+  invalidateSheetsCache();
 }
 
 async function getSheetTable(sheetName: string): Promise<SheetTable> {
@@ -818,4 +929,170 @@ export async function updateMemberNote(
   });
 
   invalidateSheetsCache();
+}
+
+/** FA + 등록 크루 목록 (공개 신청 UI용). */
+export async function listPublicCrewNames(): Promise<string[]> {
+  const registered = await listRegisteredCrewNames();
+  return withFaCrew(registered);
+}
+
+export async function listMemberRequests(
+  status?: MemberRequestStatus,
+): Promise<SheetMemberRequest[]> {
+  const sheetName = await resolveMemberAddSheetName();
+  const table = await getSheetTable(sheetName);
+  await ensureMemberAddHeaders(sheetName, table.headers);
+
+  const fresh =
+    table.headers.length === 0 ? await getSheetTable(sheetName) : table;
+
+  const requests = fresh.rows
+    .map((row, index) => parseMemberRequestRow(fresh.headers, row, index + 2))
+    .filter((entry): entry is SheetMemberRequest => entry !== null);
+
+  if (!status) {
+    return requests;
+  }
+
+  return requests.filter((entry) => entry.status === status);
+}
+
+export async function listPendingMemberRequests(): Promise<SheetMemberRequest[]> {
+  return listMemberRequests("pending");
+}
+
+export async function appendMemberRequests(
+  requests: NewMemberRequestInput[],
+): Promise<SheetMemberRequest[]> {
+  if (requests.length === 0) {
+    return [];
+  }
+
+  const sheetName = await resolveMemberAddSheetName();
+  let table = await getSheetTable(sheetName);
+  await ensureMemberAddHeaders(sheetName, table.headers);
+
+  if (table.headers.length === 0) {
+    table = await getSheetTable(sheetName);
+  }
+
+  const pending = await listPendingMemberRequests();
+  const pendingKeys = new Set(
+    pending.map(
+      (entry) =>
+        `${entry.action}:${entry.crew_name.toLowerCase()}:${entry.user_id.toLowerCase()}`,
+    ),
+  );
+
+  const now = new Date().toISOString();
+  const rowsToAppend: string[][] = [];
+  const created: SheetMemberRequest[] = [];
+
+  for (const request of requests) {
+    const action = parseMemberRequestAction(request.action);
+    const crewName = request.crew_name.trim();
+    const userId = request.user_id.trim();
+    const nickname = request.nickname.trim();
+
+    if (!action || !crewName || !userId) {
+      throw new Error("신청 항목이 올바르지 않습니다.");
+    }
+
+    const key = `${action}:${crewName.toLowerCase()}:${userId.toLowerCase()}`;
+
+    if (pendingKeys.has(key)) {
+      const label = nickname || userId;
+      throw new Error(`${label}은 신청이 이미 대기중입니다`);
+    }
+
+    pendingKeys.add(key);
+    rowsToAppend.push([
+      action,
+      isFaCrew(crewName) ? FA_CREW_NAME : crewName,
+      userId,
+      nickname,
+      "pending",
+      now,
+      "",
+      "",
+    ]);
+    created.push({
+      rowIndex: -1,
+      action,
+      crew_name: isFaCrew(crewName) ? FA_CREW_NAME : crewName,
+      user_id: userId,
+      nickname,
+      status: "pending",
+      requested_at: now,
+      processed_by: "",
+      processed_at: "",
+    });
+  }
+
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: getSheetId(),
+    range: `${sheetName}!A:H`,
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: {
+      values: rowsToAppend,
+    },
+  });
+
+  invalidateSheetsCache();
+  return created;
+}
+
+export async function updateMemberRequestStatuses(
+  rowIndexes: number[],
+  status: Exclude<MemberRequestStatus, "pending">,
+  processedBy: string,
+) {
+  if (rowIndexes.length === 0) {
+    return;
+  }
+
+  const sheetName = await resolveMemberAddSheetName();
+  const table = await getSheetTable(sheetName);
+  const statusColumn = columnLetter(table.headers, "status", "E");
+  const processedByColumn = columnLetter(table.headers, "processed_by", "G");
+  const processedAtColumn = columnLetter(table.headers, "processed_at", "H");
+  const now = new Date().toISOString();
+  const uniqueRows = Array.from(new Set(rowIndexes));
+
+  const data = uniqueRows.flatMap((rowIndex) => [
+    {
+      range: `${sheetName}!${statusColumn}${rowIndex}`,
+      values: [[status]],
+    },
+    {
+      range: `${sheetName}!${processedByColumn}${rowIndex}`,
+      values: [[processedBy]],
+    },
+    {
+      range: `${sheetName}!${processedAtColumn}${rowIndex}`,
+      values: [[now]],
+    },
+  ]);
+
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: getSheetId(),
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data,
+    },
+  });
+
+  invalidateSheetsCache();
+}
+
+export async function getMemberRequestsByRowIndexes(
+  rowIndexes: number[],
+): Promise<SheetMemberRequest[]> {
+  const wanted = new Set(rowIndexes);
+  const all = await listMemberRequests();
+  return all.filter((entry) => wanted.has(entry.rowIndex));
 }

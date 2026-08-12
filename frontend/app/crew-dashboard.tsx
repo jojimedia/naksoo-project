@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLoginModal from "./admin-login-modal";
 import AdminPanelModal from "./admin-panel-modal";
+import MemberRequestModal from "./member-request-modal";
 import { getTrimmedAverage } from "@/lib/stats";
 import { FA_CREW_NAME, isFaCrew } from "@/lib/crews";
 
@@ -530,6 +531,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showMemberRequestModal, setShowMemberRequestModal] = useState(false);
   const [liveByUserId, setLiveByUserId] = useState<
     ReadonlyMap<string, LiveStreamInfo>
   >(() => new Map());
@@ -863,6 +865,13 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           <div className="hidden items-center justify-end gap-2 md:flex">
             <button
               type="button"
+              className="rounded-full border border-[#3a3548] bg-[#17151f] px-2.5 py-1.5 text-[11px] font-medium text-[#d8d4ff] transition hover:border-[#a99cff]/40"
+              onClick={() => setShowMemberRequestModal(true)}
+            >
+              스트리머 등록 신청
+            </button>
+            <button
+              type="button"
               className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border p-0 leading-none transition ${
                 adminSession
                   ? "border-[#a99cff]/50 bg-[#5b4bdb]/20 text-[#d8d4ff]"
@@ -891,6 +900,13 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
 
       <div className="mx-auto max-w-[1920px] px-3 pt-3 pb-8 md:px-8">
         <div className="mb-3 flex items-center justify-center gap-2 md:hidden">
+          <button
+            type="button"
+            className="rounded-full border border-[#3a3548] bg-[#17151f] px-2.5 py-1.5 text-[11px] font-medium text-[#d8d4ff]"
+            onClick={() => setShowMemberRequestModal(true)}
+          >
+            스트리머 등록 신청
+          </button>
           <button
             type="button"
             className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border p-0 leading-none transition ${
@@ -987,6 +1003,12 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             setShowLoginModal(false);
             setShowAdminPanel(true);
           }}
+        />
+      ) : null}
+
+      {showMemberRequestModal ? (
+        <MemberRequestModal
+          onClose={() => setShowMemberRequestModal(false)}
         />
       ) : null}
 

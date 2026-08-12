@@ -4,9 +4,9 @@ export function isFaCrew(crewName: string) {
   return crewName.trim().toUpperCase() === FA_CREW_NAME;
 }
 
-/** 관리 UI에서 FA를 무소속으로 표시한다. */
+/** 관리 UI에서 FA를 FA(무소속)으로 표시한다. */
 export function displayCrewName(crewName: string) {
-  return isFaCrew(crewName) ? "무소속" : crewName.trim();
+  return isFaCrew(crewName) ? "FA(무소속)" : crewName.trim();
 }
 
 /** 모든 관리자 세션에 FA(무소속) 관리 권한을 붙인다. FA를 맨 앞에 둔다. */

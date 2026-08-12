@@ -369,7 +369,7 @@ function FanRanking({
         </div>
         <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
           <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
-            오늘 별풍선
+            오늘
           </p>
           <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
             {formatNumber(todayBalloons)}
