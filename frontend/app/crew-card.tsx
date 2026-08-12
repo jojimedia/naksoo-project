@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import MobileCrewCard from "./mobile-crew-card";
 import StreamerMemberRow from "./streamer-member-row";
 
@@ -171,20 +172,65 @@ const TRIMMED_AVERAGE_TIP =
 function TrimmedAverageStat({ value }: { value: number }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const tipButtonRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [tipPos, setTipPos] = useState<{ top: number; left: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!open) {
+      setTipPos(null);
       return;
     }
 
-    function handlePointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+    function placeTip() {
+      const button = tipButtonRef.current;
+
+      if (!button) {
+        return;
       }
+
+      const rect = button.getBoundingClientRect();
+      const tipWidth = Math.min(220, window.innerWidth - 24);
+      const left = Math.min(
+        Math.max(rect.right - tipWidth, 12),
+        window.innerWidth - tipWidth - 12,
+      );
+      const estimatedHeight = 72;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const top =
+        spaceBelow < estimatedHeight + 8 && rect.top > estimatedHeight + 8
+          ? rect.top - estimatedHeight - 8
+          : rect.bottom + 8;
+
+      setTipPos({ top, left });
+    }
+
+    placeTip();
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+
+      if (
+        rootRef.current?.contains(target) ||
+        tipRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setOpen(false);
     }
 
     document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("resize", placeTip);
+    window.addEventListener("scroll", placeTip, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", placeTip);
+      window.removeEventListener("scroll", placeTip, true);
+    };
   }, [open]);
 
   function toggleTip(event: SyntheticEvent) {
@@ -201,6 +247,7 @@ function TrimmedAverageStat({ value }: { value: number }) {
       <div className="flex items-center gap-1">
         <p className="text-[10px] font-bold leading-none opacity-80">절사평균</p>
         <span
+          ref={tipButtonRef}
           role="button"
           tabIndex={0}
           className="flex h-3.5 w-3.5 shrink-0 cursor-help items-center justify-center rounded-full border border-white/45 text-[9px] font-bold leading-none text-white/90"
@@ -221,16 +268,21 @@ function TrimmedAverageStat({ value }: { value: number }) {
         {formatNumber(value)}
       </p>
 
-      {/* 모바일: 클릭 시 표시 */}
-      {open ? (
-        <div
-          className="absolute top-[calc(100%+4px)] right-0 z-30 w-[min(220px,calc(100vw-48px))] rounded-lg border border-white/20 bg-[#17151f]/95 px-2.5 py-2 text-[11px] font-semibold leading-4 text-[#e5e7eb] shadow-lg shadow-black/40 md:hidden"
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          {TRIMMED_AVERAGE_TIP}
-        </div>
-      ) : null}
+      {/* 모바일: 카드 overflow에 잘리지 않게 portal로 표시 */}
+      {open && tipPos
+        ? createPortal(
+            <div
+              ref={tipRef}
+              className="fixed z-[80] w-[min(220px,calc(100vw-24px))] rounded-lg border border-white/20 bg-[#17151f]/95 px-2.5 py-2 text-[11px] font-semibold leading-4 text-[#e5e7eb] shadow-lg shadow-black/40 md:hidden"
+              style={{ top: tipPos.top, left: tipPos.left }}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {TRIMMED_AVERAGE_TIP}
+            </div>,
+            document.body,
+          )
+        : null}
 
       {/* 데스크톱: 호버 시 표시 */}
       <div className="pointer-events-none absolute top-[calc(100%+4px)] right-0 z-30 hidden w-[min(220px,calc(100vw-48px))] rounded-lg border border-white/20 bg-[#17151f]/95 px-2.5 py-2 text-[11px] font-semibold leading-4 text-[#e5e7eb] opacity-0 shadow-lg shadow-black/40 transition-opacity group-hover:opacity-100 md:block">
