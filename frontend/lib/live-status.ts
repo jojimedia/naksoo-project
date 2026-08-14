@@ -10,6 +10,7 @@ export type LiveStatusEntry = {
   title: string | null;
   viewer_count: number | null;
   broad_no: number | null;
+  broad_start_ms: number | null;
 };
 
 function offlineEntry(userId: string): LiveStatusEntry {
@@ -20,7 +21,28 @@ function offlineEntry(userId: string): LiveStatusEntry {
     title: null,
     viewer_count: null,
     broad_no: null,
+    broad_start_ms: null,
   };
+}
+
+function parseSoopDateTime(value: unknown): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const ms = Date.parse(
+    `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}+09:00`,
+  );
+
+  return Number.isFinite(ms) ? ms : null;
 }
 
 const defaultHeaders = {
@@ -65,6 +87,9 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
         current_sum_viewer?: number | string;
         is_password?: boolean;
       } | null;
+      station?: {
+        broad_start?: string;
+      } | null;
     };
     const broad = data.broad;
 
@@ -82,6 +107,7 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
       title: broad.broad_title?.trim() || null,
       viewer_count: Number.isFinite(viewerCount) ? viewerCount : null,
       broad_no: Number.isFinite(broadNo) && broadNo > 0 ? broadNo : null,
+      broad_start_ms: parseSoopDateTime(data.station?.broad_start),
     };
   } catch {
     return offlineEntry(trimmed);

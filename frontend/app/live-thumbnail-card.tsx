@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { FanRanking } from "./streamer-member-row";
 import { useLiveInfo } from "./live-status-context";
@@ -32,6 +32,44 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
 
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function formatElapsed(broadStartMs: number) {
+  const minutesTotal = Math.max(
+    0,
+    Math.floor((Date.now() - broadStartMs) / 60_000),
+  );
+  const hours = Math.floor(minutesTotal / 60);
+  const minutes = minutesTotal % 60;
+
+  return `${pad2(hours)}:${pad2(minutes)}`;
+}
+
+function useElapsedLabel(broadStartMs: number | null | undefined) {
+  const [label, setLabel] = useState(() =>
+    broadStartMs != null ? formatElapsed(broadStartMs) : null,
+  );
+
+  useEffect(() => {
+    if (broadStartMs == null) {
+      setLabel(null);
+      return;
+    }
+
+    function tick() {
+      setLabel(formatElapsed(broadStartMs));
+    }
+
+    tick();
+    const timerId = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timerId);
+  }, [broadStartMs]);
+
+  return label;
+}
+
 function buildProfileImageUrl(userId: string) {
   const trimmed = userId.trim();
 
@@ -53,6 +91,7 @@ export default function LiveThumbnailCard({
   liveBroadcastMode,
 }: LiveThumbnailCardProps) {
   const liveInfo = useLiveInfo(member.user_id);
+  const elapsedLabel = useElapsedLabel(liveInfo?.broadStartMs);
   const [expanded, setExpanded] = useState(false);
   const streamUrl = `https://play.sooplive.co.kr/${encodeURIComponent(member.user_id)}`;
   const profileUrl = buildProfileImageUrl(member.user_id);
@@ -90,6 +129,12 @@ export default function LiveThumbnailCard({
               : "—"}
           </span>
         </span>
+
+        {elapsedLabel ? (
+          <span className="absolute top-2 right-2 rounded bg-black/70 px-2 py-1 text-[11px] font-bold tabular-nums text-white">
+            {elapsedLabel}
+          </span>
+        ) : null}
 
         <span className="absolute right-2 bottom-2 rounded bg-black/70 px-2 py-1 text-[11px] font-bold tabular-nums text-white">
           별풍선 {formatNumber(broadcastBalloons)}

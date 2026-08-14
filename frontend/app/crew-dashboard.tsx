@@ -1006,6 +1006,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             title?: string | null;
             viewer_count?: number | null;
             broad_no?: number | null;
+            broad_start_ms?: number | null;
           }>;
           error?: string;
         };
@@ -1024,12 +1025,14 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           }
 
           const viewerCount = Number(entry.viewer_count);
+          const broadStartMs = Number(entry.broad_start_ms);
 
           next.set(userId, {
             thumbnailUrl: entry.thumbnail_url ?? null,
             title: entry.title ?? null,
             viewerCount: Number.isFinite(viewerCount) ? viewerCount : null,
             broadNo: Number(entry.broad_no) > 0 ? Number(entry.broad_no) : null,
+            broadStartMs: Number.isFinite(broadStartMs) ? broadStartMs : null,
           });
         }
 
@@ -1093,6 +1096,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             title?: string | null;
             viewer_count?: number | null;
             broad_no?: number | null;
+            broad_start_ms?: number | null;
           }>;
         };
 
@@ -1113,12 +1117,14 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           liveIds.push(userId);
 
           const viewerCount = Number(entry.viewer_count);
+          const broadStartMs = Number(entry.broad_start_ms);
 
           nextLive.set(userId, {
             thumbnailUrl: entry.thumbnail_url ?? null,
             title: entry.title ?? null,
             viewerCount: Number.isFinite(viewerCount) ? viewerCount : null,
             broadNo: Number(entry.broad_no) > 0 ? Number(entry.broad_no) : null,
+            broadStartMs: Number.isFinite(broadStartMs) ? broadStartMs : null,
           });
         }
 

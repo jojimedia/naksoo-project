@@ -25,6 +25,7 @@ export async function POST(request: Request) {
           title: entry.title,
           viewer_count: entry.viewer_count,
           broad_no: entry.broad_no,
+          broad_start_ms: entry.broad_start_ms,
         })),
     });
   } catch (error) {
