@@ -17,23 +17,30 @@ export async function POST(request: Request) {
 
     const statuses = await fetchLiveStatuses(userIds);
 
-    return NextResponse.json({
-      live: statuses
-        .filter((entry) => entry.is_live)
-        .map((entry) => ({
-          user_id: entry.user_id.toLowerCase(),
-          thumbnail_url: entry.thumbnail_url,
-          title: entry.title,
-          viewer_count: entry.viewer_count,
-          broad_no: entry.broad_no,
-          broad_start_ms:
-            typeof entry.broad_start_ms === "number" &&
-            Number.isFinite(entry.broad_start_ms) &&
-            entry.broad_start_ms > 0
-              ? entry.broad_start_ms
-              : null,
-        })),
-    });
+    return NextResponse.json(
+      {
+        live: statuses
+          .filter((entry) => entry.is_live)
+          .map((entry) => ({
+            user_id: entry.user_id.toLowerCase(),
+            thumbnail_url: entry.thumbnail_url,
+            title: entry.title,
+            viewer_count: entry.viewer_count,
+            broad_no: entry.broad_no,
+            broad_start_ms:
+              typeof entry.broad_start_ms === "number" &&
+              Number.isFinite(entry.broad_start_ms) &&
+              entry.broad_start_ms > 0
+                ? entry.broad_start_ms
+                : null,
+          })),
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "라이브 상태 조회에 실패했습니다.";

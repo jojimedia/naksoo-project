@@ -85,6 +85,33 @@ function toLiveStreamInfo(entry: LiveStatusPayloadEntry): LiveStreamInfo {
   };
 }
 
+const LIVE_CREW_FILTER_KEY = "naksoo_live_crew_filter";
+
+function readStoredLiveCrew() {
+  try {
+    const value = window.localStorage.getItem(LIVE_CREW_FILTER_KEY)?.trim();
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredLiveCrew(crewName: string) {
+  try {
+    window.localStorage.setItem(LIVE_CREW_FILTER_KEY, crewName);
+  } catch {
+    // private mode or quota — keep the in-memory selection
+  }
+}
+
+function clearStoredLiveCrew() {
+  try {
+    window.localStorage.removeItem(LIVE_CREW_FILTER_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 type UpdateStatus = {
   label: string;
   className: string;
@@ -960,6 +987,29 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     return options;
   }, [data.crews, data.fa_crew, liveRows]);
 
+  useEffect(() => {
+    const saved = readStoredLiveCrew();
+
+    if (!saved) {
+      return;
+    }
+
+    setLiveCrewFilter(saved);
+  }, []);
+
+  useEffect(() => {
+    if (!liveCrewFilter) {
+      return;
+    }
+
+    const exists = liveCrewOptions.some((crew) => crew.name === liveCrewFilter);
+
+    if (!exists) {
+      setLiveCrewFilter(null);
+      clearStoredLiveCrew();
+    }
+  }, [liveCrewFilter, liveCrewOptions]);
+
   const filteredLiveRows = useMemo(() => {
     let rows = liveRows;
 
@@ -1257,7 +1307,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     setShowFa(false);
     setShowLive(false);
     setLiveFilterMode("all");
-    setLiveCrewFilter(null);
     setShowLoginModal(false);
     setShowAdminPanel(false);
     setShowMemberRequestModal(false);
@@ -1416,7 +1465,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   setShowKings(false);
                   setShowFa(false);
                   setLiveFilterMode("all");
-                  setLiveCrewFilter(null);
 
                   if (!showLive) {
                     setLiveTabReady(false);
@@ -1521,15 +1569,12 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                 updatedAt={liveStatsUpdatedAt}
                 loading={!liveTabReady}
                 filterMode={liveFilterMode}
-                onFilterModeChange={(mode) => {
-                  setLiveFilterMode(mode);
-
-                  if (mode === "all") {
-                    setLiveCrewFilter(null);
-                  }
-                }}
+                onFilterModeChange={setLiveFilterMode}
                 crewFilter={liveCrewFilter}
-                onCrewFilterChange={setLiveCrewFilter}
+                onCrewFilterChange={(crewName) => {
+                  setLiveCrewFilter(crewName);
+                  writeStoredLiveCrew(crewName);
+                }}
                 crewOptions={liveCrewOptions}
               />
             ) : showKings && !isSearching ? (
