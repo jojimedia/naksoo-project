@@ -350,15 +350,11 @@ export function FanRanking({
   return (
     <div className="mx-1 mb-3 rounded border border-[#3a3548] bg-[#211e2b] px-2 py-2">
       {liveBroadcastMode ? (
-        <div className="mb-2">
-          <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
-            <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
-              이번 방송 별풍
-            </p>
-            <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
-              {formatNumber(todayBalloons)}
-            </p>
-          </div>
+        <div className="mb-2 flex items-center justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1.5">
+          <p className="text-[12px] font-semibold text-[#a8a2b8]">오늘 별풍선</p>
+          <p className="text-[13px] font-bold tabular-nums text-[#e5e7eb]">
+            {formatNumber(todayBalloons)}
+          </p>
         </div>
       ) : (
         <div className="mb-2 grid grid-cols-[0.9fr_1.35fr_0.9fr] gap-1">
