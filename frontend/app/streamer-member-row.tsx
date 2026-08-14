@@ -111,15 +111,15 @@ function FanRow({ fan }: { fan: Fan }) {
 
   return (
     <div
-      className={`grid min-h-[27px] grid-cols-[30px_minmax(0,1fr)_104px] items-center gap-1 rounded border-t border-[#3a3548]/70 px-0.5 py-0.5 text-[15px] first:border-t-0 ${tone.row}`}
+      className={`grid min-h-[27px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 rounded border-t border-[#3a3548]/70 px-0.5 py-0.5 text-[15px] first:border-t-0 ${tone.row}`}
     >
-      <p className={`text-center text-xs font-extrabold tabular-nums ${tone.muted}`}>
+      <p className={`shrink-0 text-center text-xs font-extrabold tabular-nums ${tone.muted}`}>
         {fan.rank}
       </p>
-      <p className={`min-w-0 truncate text-sm font-semibold ${tone.name}`}>
+      <p className={`min-w-0 break-words font-semibold ${tone.name}`}>
         {fan.nickname}
       </p>
-      <p className={`text-right text-[13px] font-bold tabular-nums ${tone.score}`}>
+      <p className={`shrink-0 text-right text-[13px] font-bold whitespace-nowrap tabular-nums ${tone.score}`}>
         {formatNumber(fan.balloons)}
       </p>
     </div>

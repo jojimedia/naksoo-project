@@ -138,7 +138,7 @@ export default function LiveThumbnailCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-1.5">
-                <p className="truncate text-[14px] font-bold text-[#e5e7eb]">
+                <p className="break-words text-[14px] font-bold text-[#e5e7eb]">
                   {member.nickname}
                 </p>
                 <span
