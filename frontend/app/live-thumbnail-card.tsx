@@ -166,7 +166,7 @@ export default function LiveThumbnailCard({
         >
           {expanded
             ? "후원자 접기"
-            : `이번 방송 후원자보기(${donors.length}명)`}
+            : `오늘 방송 후원자보기(${donors.length}명)`}
         </button>
 
         <div
@@ -183,7 +183,7 @@ export default function LiveThumbnailCard({
                 changeRate={member.change_rate}
                 todayBalloons={broadcastBalloons}
                 liveBroadcastMode={liveBroadcastMode}
-                fanPanelTitle="이번 방송 후원자"
+                fanPanelTitle="오늘 방송 후원자"
               />
             </div>
           </div>
