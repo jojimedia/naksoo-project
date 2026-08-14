@@ -26,23 +26,30 @@ function offlineEntry(userId: string): LiveStatusEntry {
 }
 
 function parseSoopDateTime(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value > 1e12 ? value : value * 1000;
+  }
+
   if (typeof value !== "string") {
     return null;
   }
 
-  const match = value
-    .trim()
-    .match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+  const trimmed = value.trim();
+  const match = trimmed.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/,
+  );
 
   if (!match) {
     return null;
   }
 
-  const ms = Date.parse(
-    `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}+09:00`,
-  );
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(trimmed);
+  const iso = hasZone
+    ? trimmed.replace(" ", "T")
+    : `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}+09:00`;
+  const ms = Date.parse(iso);
 
-  return Number.isFinite(ms) ? ms : null;
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
 }
 
 const defaultHeaders = {
@@ -86,9 +93,11 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
         broad_title?: string;
         current_sum_viewer?: number | string;
         is_password?: boolean;
+        broad_start?: string;
       } | null;
       station?: {
         broad_start?: string;
+        broadStart?: string;
       } | null;
     };
     const broad = data.broad;
@@ -107,7 +116,9 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
       title: broad.broad_title?.trim() || null,
       viewer_count: Number.isFinite(viewerCount) ? viewerCount : null,
       broad_no: Number.isFinite(broadNo) && broadNo > 0 ? broadNo : null,
-      broad_start_ms: parseSoopDateTime(data.station?.broad_start),
+      broad_start_ms: parseSoopDateTime(
+        data.station?.broad_start ?? data.station?.broadStart ?? broad.broad_start,
+      ),
     };
   } catch {
     return offlineEntry(trimmed);

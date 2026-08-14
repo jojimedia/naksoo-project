@@ -4,6 +4,7 @@ import { jsonError } from "@/lib/api-utils";
 import { fetchLiveStatuses } from "@/lib/live-status";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
@@ -25,7 +26,12 @@ export async function POST(request: Request) {
           title: entry.title,
           viewer_count: entry.viewer_count,
           broad_no: entry.broad_no,
-          broad_start_ms: entry.broad_start_ms,
+          broad_start_ms:
+            typeof entry.broad_start_ms === "number" &&
+            Number.isFinite(entry.broad_start_ms) &&
+            entry.broad_start_ms > 0
+              ? entry.broad_start_ms
+              : null,
         })),
     });
   } catch (error) {

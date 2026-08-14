@@ -58,6 +58,33 @@ type LiveBroadcastPanel = {
   }>;
 };
 
+type LiveStatusPayloadEntry = {
+  user_id?: string;
+  thumbnail_url?: string | null;
+  title?: string | null;
+  viewer_count?: number | null;
+  broad_no?: number | null;
+  broad_start_ms?: number | null;
+};
+
+function toLiveStreamInfo(entry: LiveStatusPayloadEntry): LiveStreamInfo {
+  const viewerCount = Number(entry.viewer_count);
+  const broadStartMs = entry.broad_start_ms;
+
+  return {
+    thumbnailUrl: entry.thumbnail_url ?? null,
+    title: entry.title ?? null,
+    viewerCount: Number.isFinite(viewerCount) ? viewerCount : null,
+    broadNo: Number(entry.broad_no) > 0 ? Number(entry.broad_no) : null,
+    broadStartMs:
+      typeof broadStartMs === "number" &&
+      Number.isFinite(broadStartMs) &&
+      broadStartMs > 0
+        ? broadStartMs
+        : null,
+  };
+}
+
 type UpdateStatus = {
   label: string;
   className: string;
@@ -584,7 +611,7 @@ function LiveRankingCard({
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <h2 className="text-[23px] font-semibold leading-7">LIVE</h2>
-            {updatedAt ? (
+            {updatedAt && !loading ? (
               <p className="text-[11px] font-medium text-white/80">
                 {updatedAt.toLocaleTimeString("ko-KR", {
                   hour: "2-digit",
@@ -627,7 +654,7 @@ function LiveRankingCard({
           </p>
         </div>
 
-        {filterMode === "crew" ? (
+        {filterMode === "crew" && !loading ? (
           <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-white/15 pt-2.5">
             {crewOptions.map((crew) => (
               <button
@@ -649,7 +676,11 @@ function LiveRankingCard({
         ) : null}
       </div>
 
-      {rows.length > 0 ? (
+      {loading ? (
+        <p className="rounded-xl border border-[#3a3548] bg-[#211e2b] px-3 py-10 text-center text-sm font-bold text-[#a8a2b8]">
+          로딩중
+        </p>
+      ) : rows.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {rows.map((row) => {
             const userId = row.member.user_id.toLowerCase();
@@ -671,11 +702,9 @@ function LiveRankingCard({
         </div>
       ) : (
         <p className="rounded-xl border border-[#3a3548] bg-[#211e2b] px-3 py-10 text-center text-sm font-bold text-[#a8a2b8]">
-          {loading
-            ? "로딩중"
-            : filterMode === "crew" && !crewFilter
-              ? "크루를 선택해 주세요."
-              : "라이브 중인 스트리머가 없습니다."}
+          {filterMode === "crew" && !crewFilter
+            ? "크루를 선택해 주세요."
+            : "라이브 중인 스트리머가 없습니다."}
         </p>
       )}
     </section>
@@ -743,7 +772,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [liveByUserId, setLiveByUserId] = useState<
     ReadonlyMap<string, LiveStreamInfo>
   >(() => new Map());
-  const [liveStatusReady, setLiveStatusReady] = useState(false);
+  const [liveTabReady, setLiveTabReady] = useState(false);
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const rankingCrews = useMemo(
@@ -989,7 +1018,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
 
     if (userIds.length === 0) {
       setLiveByUserId(new Map());
-      setLiveStatusReady(true);
       return;
     }
 
@@ -1006,19 +1034,11 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           signal: controller.signal,
         });
         const payload = (await response.json()) as {
-          live?: Array<{
-            user_id?: string;
-            thumbnail_url?: string | null;
-            title?: string | null;
-            viewer_count?: number | null;
-            broad_no?: number | null;
-            broad_start_ms?: number | null;
-          }>;
+          live?: LiveStatusPayloadEntry[];
           error?: string;
         };
 
         if (!response.ok) {
-          setLiveStatusReady(true);
           return;
         }
 
@@ -1031,26 +1051,14 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             continue;
           }
 
-          const viewerCount = Number(entry.viewer_count);
-          const broadStartMs = Number(entry.broad_start_ms);
-
-          next.set(userId, {
-            thumbnailUrl: entry.thumbnail_url ?? null,
-            title: entry.title ?? null,
-            viewerCount: Number.isFinite(viewerCount) ? viewerCount : null,
-            broadNo: Number(entry.broad_no) > 0 ? Number(entry.broad_no) : null,
-            broadStartMs: Number.isFinite(broadStartMs) ? broadStartMs : null,
-          });
+          next.set(userId, toLiveStreamInfo(entry));
         }
 
         setLiveByUserId(next);
-        setLiveStatusReady(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
-
-        setLiveStatusReady(true);
       }
     }
 
@@ -1071,7 +1079,9 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     );
 
     if (userIds.length === 0) {
-      setLiveStatusReady(true);
+      setLiveByUserId(new Map());
+      setLiveBroadcastByUserId(new Map());
+      setLiveTabReady(true);
       return;
     }
 
@@ -1101,19 +1111,12 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           signal: controller.signal,
         });
         const livePayload = (await liveResponse.json()) as {
-          live?: Array<{
-            user_id?: string;
-            thumbnail_url?: string | null;
-            title?: string | null;
-            viewer_count?: number | null;
-            broad_no?: number | null;
-            broad_start_ms?: number | null;
-          }>;
+          live?: LiveStatusPayloadEntry[];
         };
 
         if (!liveResponse.ok || cancelled) {
           if (!cancelled) {
-            setLiveStatusReady(true);
+            setLiveTabReady(true);
           }
           return;
         }
@@ -1129,25 +1132,14 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           }
 
           liveIds.push(userId);
-
-          const viewerCount = Number(entry.viewer_count);
-          const broadStartMs = Number(entry.broad_start_ms);
-
-          nextLive.set(userId, {
-            thumbnailUrl: entry.thumbnail_url ?? null,
-            title: entry.title ?? null,
-            viewerCount: Number.isFinite(viewerCount) ? viewerCount : null,
-            broadNo: Number(entry.broad_no) > 0 ? Number(entry.broad_no) : null,
-            broadStartMs: Number.isFinite(broadStartMs) ? broadStartMs : null,
-          });
+          nextLive.set(userId, toLiveStreamInfo(entry));
         }
 
-        setLiveByUserId(nextLive);
-        setLiveStatusReady(true);
-
         if (liveIds.length === 0) {
+          setLiveByUserId(nextLive);
           setLiveBroadcastByUserId(new Map());
           setLiveStatsUpdatedAt(new Date());
+          setLiveTabReady(true);
           return;
         }
 
@@ -1178,7 +1170,13 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           }>;
         };
 
-        if (!statsResponse.ok || cancelled) {
+        if (cancelled) {
+          return;
+        }
+
+        if (!statsResponse.ok) {
+          setLiveByUserId(nextLive);
+          setLiveTabReady(true);
           return;
         }
 
@@ -1215,20 +1213,22 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           }
 
           for (const userId of merged.keys()) {
-            if (!nextLive.has(userId) && !nextStats.has(userId)) {
+            if (!nextLive.has(userId)) {
               merged.delete(userId);
             }
           }
 
           return merged;
         });
+        setLiveByUserId(nextLive);
         setLiveStatsUpdatedAt(new Date());
+        setLiveTabReady(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
 
-        setLiveStatusReady(true);
+        setLiveTabReady(true);
       } finally {
         inFlight = false;
 
@@ -1417,6 +1417,11 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   setShowFa(false);
                   setLiveFilterMode("all");
                   setLiveCrewFilter(null);
+
+                  if (!showLive) {
+                    setLiveTabReady(false);
+                  }
+
                   setShowLive(true);
                   setSearchMode("members");
                 }}
@@ -1514,7 +1519,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                 rows={filteredLiveRows}
                 liveBroadcastByUserId={liveBroadcastByUserId}
                 updatedAt={liveStatsUpdatedAt}
-                loading={!liveStatusReady}
+                loading={!liveTabReady}
                 filterMode={liveFilterMode}
                 onFilterModeChange={(mode) => {
                   setLiveFilterMode(mode);
