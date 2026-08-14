@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { FanRanking } from "./streamer-member-row";
-import { useLiveInfo } from "./live-status-context";
+import { useLiveInfo, useLiveNowMs } from "./live-status-context";
 
 type Fan = {
   rank: number;
@@ -36,40 +36,12 @@ function pad2(value: number) {
   return String(value).padStart(2, "0");
 }
 
-function formatElapsed(broadStartMs: number) {
-  const minutesTotal = Math.max(
-    0,
-    Math.floor((Date.now() - broadStartMs) / 60_000),
-  );
+function formatElapsed(nowMs: number, broadStartMs: number) {
+  const minutesTotal = Math.max(0, Math.floor((nowMs - broadStartMs) / 60_000));
   const hours = Math.floor(minutesTotal / 60);
   const minutes = minutesTotal % 60;
 
   return `${pad2(hours)}:${pad2(minutes)}`;
-}
-
-function useElapsedLabel(broadStartMs: number | null | undefined) {
-  const [label, setLabel] = useState(() =>
-    broadStartMs != null ? formatElapsed(broadStartMs) : null,
-  );
-
-  useEffect(() => {
-    if (broadStartMs == null) {
-      setLabel(null);
-      return;
-    }
-
-    const startMs = broadStartMs;
-
-    function tick() {
-      setLabel(formatElapsed(startMs));
-    }
-
-    tick();
-    const timerId = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timerId);
-  }, [broadStartMs]);
-
-  return label;
 }
 
 function buildProfileImageUrl(userId: string) {
@@ -93,7 +65,11 @@ export default function LiveThumbnailCard({
   liveBroadcastMode,
 }: LiveThumbnailCardProps) {
   const liveInfo = useLiveInfo(member.user_id);
-  const elapsedLabel = useElapsedLabel(liveInfo?.broadStartMs);
+  const nowMs = useLiveNowMs();
+  const elapsedLabel =
+    liveInfo?.broadStartMs != null
+      ? formatElapsed(nowMs, liveInfo.broadStartMs)
+      : null;
   const [expanded, setExpanded] = useState(false);
   const streamUrl = `https://play.sooplive.co.kr/${encodeURIComponent(member.user_id)}`;
   const profileUrl = buildProfileImageUrl(member.user_id);

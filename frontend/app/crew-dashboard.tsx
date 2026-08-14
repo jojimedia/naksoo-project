@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AdminLoginModal from "./admin-login-modal";
 import AdminPanelModal from "./admin-panel-modal";
 import MemberRequestModal from "./member-request-modal";
@@ -12,6 +12,7 @@ import CrewCard, {
   type CrewCardData,
 } from "./crew-card";
 import {
+  LiveClockProvider,
   LiveStatusProvider,
   type LiveStreamInfo,
 } from "./live-status-context";
@@ -83,6 +84,147 @@ function toLiveStreamInfo(entry: LiveStatusPayloadEntry): LiveStreamInfo {
         ? broadStartMs
         : null,
   };
+}
+
+type LiveStatsPayloadEntry = {
+  user_id?: string;
+  day_balloons?: number;
+  source?: "bcraping" | "poongtu";
+  donors?: Array<{
+    user_id?: string;
+    nickname?: string;
+    balloons?: number;
+  }>;
+};
+
+function getActiveUserIds(crews: CrewCardData[]) {
+  return crews.flatMap((crew) =>
+    crew.members
+      .filter((member) => !member.is_on_leave)
+      .map((member) => member.user_id),
+  );
+}
+
+function parseLiveStatusMap(entries: LiveStatusPayloadEntry[] | undefined) {
+  const next = new Map<string, LiveStreamInfo>();
+
+  for (const entry of entries ?? []) {
+    const userId = entry.user_id?.trim().toLowerCase();
+
+    if (!userId) {
+      continue;
+    }
+
+    next.set(userId, toLiveStreamInfo(entry));
+  }
+
+  return next;
+}
+
+function parseLiveStatsMap(entries: LiveStatsPayloadEntry[] | undefined) {
+  const next = new Map<string, LiveBroadcastPanel>();
+
+  for (const entry of entries ?? []) {
+    const userId = entry.user_id?.trim().toLowerCase();
+
+    if (!userId) {
+      continue;
+    }
+
+    const donors = (entry.donors ?? []).map((donor, index) => ({
+      rank: index + 1,
+      user_id: donor.user_id?.trim().toLowerCase() || "",
+      nickname: donor.nickname?.trim() || donor.user_id?.trim() || "",
+      balloons: Number(donor.balloons) || 0,
+    }));
+
+    next.set(userId, {
+      day_balloons: Number(entry.day_balloons) || 0,
+      source: entry.source === "bcraping" ? "bcraping" : "poongtu",
+      donors,
+    });
+  }
+
+  return next;
+}
+
+function mergeLiveBroadcastStats(
+  current: ReadonlyMap<string, LiveBroadcastPanel>,
+  nextLive: ReadonlyMap<string, LiveStreamInfo>,
+  nextStats: ReadonlyMap<string, LiveBroadcastPanel>,
+) {
+  const merged = new Map(current);
+
+  for (const [userId, panel] of nextStats) {
+    merged.set(userId, panel);
+  }
+
+  for (const userId of merged.keys()) {
+    if (!nextLive.has(userId)) {
+      merged.delete(userId);
+    }
+  }
+
+  return merged;
+}
+
+async function requestLiveStatusMap(
+  userIds: string[],
+  signal: AbortSignal,
+) {
+  const response = await fetch("/api/live-status", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ user_ids: userIds }),
+    signal,
+  });
+  const payload = (await response.json()) as {
+    live?: LiveStatusPayloadEntry[];
+  };
+
+  if (!response.ok) {
+    throw new Error("live-status");
+  }
+
+  return parseLiveStatusMap(payload.live);
+}
+
+async function requestLiveStatsMap(
+  nextLive: ReadonlyMap<string, LiveStreamInfo>,
+  skipFallback: boolean,
+  signal: AbortSignal,
+) {
+  const liveIds = Array.from(nextLive.keys());
+
+  if (liveIds.length === 0) {
+    return new Map<string, LiveBroadcastPanel>();
+  }
+
+  const response = await fetch("/api/live-stats", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      streams: liveIds.map((userId) => ({
+        user_id: userId,
+        station_id: nextLive.get(userId)?.broadNo ?? null,
+      })),
+      skip_fallback: skipFallback,
+    }),
+    signal,
+  });
+  const payload = (await response.json()) as {
+    stats?: LiveStatsPayloadEntry[];
+  };
+
+  if (!response.ok) {
+    throw new Error("live-stats");
+  }
+
+  return parseLiveStatsMap(payload.stats);
 }
 
 const LIVE_CREW_FILTER_KEY = "naksoo_live_crew_filter";
@@ -708,25 +850,27 @@ function LiveRankingCard({
           로딩중
         </p>
       ) : rows.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {rows.map((row) => {
-            const userId = row.member.user_id.toLowerCase();
-            const broadcast = liveBroadcastByUserId.get(userId);
-            const isBcraping = broadcast?.source === "bcraping";
+        <LiveClockProvider>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {rows.map((row) => {
+              const userId = row.member.user_id.toLowerCase();
+              const broadcast = liveBroadcastByUserId.get(userId);
+              const isBcraping = broadcast?.source === "bcraping";
 
-            return (
-              <LiveThumbnailCard
-                key={`${row.crewName}-${row.member.user_id}`}
-                member={row.member}
-                crewName={row.crewName}
-                crewColor={row.crewColor}
-                broadcastBalloons={isBcraping ? broadcast.day_balloons : 0}
-                donors={isBcraping ? broadcast.donors : []}
-                liveBroadcastMode
-              />
-            );
-          })}
-        </div>
+              return (
+                <LiveThumbnailCard
+                  key={`${row.crewName}-${row.member.user_id}`}
+                  member={row.member}
+                  crewName={row.crewName}
+                  crewColor={row.crewColor}
+                  broadcastBalloons={isBcraping ? broadcast.day_balloons : 0}
+                  donors={isBcraping ? broadcast.donors : []}
+                  liveBroadcastMode
+                />
+              );
+            })}
+          </div>
+        </LiveClockProvider>
       ) : (
         <p className="rounded-xl border border-[#3a3548] bg-[#211e2b] px-3 py-10 text-center text-sm font-bold text-[#a8a2b8]">
           {filterMode === "crew" && !crewFilter
@@ -799,7 +943,10 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [liveByUserId, setLiveByUserId] = useState<
     ReadonlyMap<string, LiveStreamInfo>
   >(() => new Map());
-  const [liveTabReady, setLiveTabReady] = useState(false);
+  const [liveStatusFetched, setLiveStatusFetched] = useState(false);
+  const [liveStatsFetched, setLiveStatsFetched] = useState(false);
+  const skipLiveStatsFallbackRef = useRef(false);
+  const liveTabReady = liveStatusFetched && liveStatsFetched;
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const rankingCrews = useMemo(
@@ -1055,90 +1202,78 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   }, []);
 
   useEffect(() => {
-    if (showLive) {
-      return;
-    }
-
-    // 크루 카드 + FA 탭에 보이는 모든 활성 멤버를 페이지 오픈 시 조회한다.
-    const userIds = rankingCrews.flatMap((crew) =>
-      crew.members
-        .filter((member) => !member.is_on_leave)
-        .map((member) => member.user_id),
-    );
+    const userIds = getActiveUserIds(rankingCrews);
 
     if (userIds.length === 0) {
       setLiveByUserId(new Map());
+      setLiveBroadcastByUserId(new Map());
+      setLiveStatusFetched(true);
+      setLiveStatsFetched(true);
       return;
     }
 
     const controller = new AbortController();
+    let cancelled = false;
 
-    async function loadLiveStatus() {
+    async function bootstrapLive() {
       try {
-        const response = await fetch("/api/live-status", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ user_ids: userIds }),
-          signal: controller.signal,
-        });
-        const payload = (await response.json()) as {
-          live?: LiveStatusPayloadEntry[];
-          error?: string;
-        };
+        const nextLive = await requestLiveStatusMap(userIds, controller.signal);
 
-        if (!response.ok) {
+        if (cancelled) {
           return;
         }
 
-        const next = new Map<string, LiveStreamInfo>();
+        setLiveByUserId(nextLive);
+        setLiveStatusFetched(true);
 
-        for (const entry of payload.live ?? []) {
-          const userId = entry.user_id?.trim().toLowerCase();
+        const nextStats = await requestLiveStatsMap(
+          nextLive,
+          skipLiveStatsFallbackRef.current,
+          controller.signal,
+        );
 
-          if (!userId) {
-            continue;
-          }
-
-          next.set(userId, toLiveStreamInfo(entry));
+        if (cancelled) {
+          return;
         }
 
-        setLiveByUserId(next);
+        skipLiveStatsFallbackRef.current = true;
+        setLiveBroadcastByUserId((current) =>
+          mergeLiveBroadcastStats(current, nextLive, nextStats),
+        );
+        setLiveStatsUpdatedAt(new Date());
+        setLiveStatsFetched(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
+
+        setLiveStatusFetched(true);
+        setLiveStatsFetched(true);
       }
     }
 
-    void loadLiveStatus();
+    void bootstrapLive();
 
-    return () => controller.abort();
-  }, [rankingCrews, showLive]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [rankingCrews]);
 
   useEffect(() => {
     if (!showLive) {
       return;
     }
 
-    const userIds = rankingCrews.flatMap((crew) =>
-      crew.members
-        .filter((member) => !member.is_on_leave)
-        .map((member) => member.user_id),
-    );
+    const userIds = getActiveUserIds(rankingCrews);
 
     if (userIds.length === 0) {
-      setLiveByUserId(new Map());
-      setLiveBroadcastByUserId(new Map());
-      setLiveTabReady(true);
       return;
     }
 
     let cancelled = false;
     let inFlight = false;
     let timerId = 0;
-    let skipFallback = false;
     const pollController = { current: new AbortController() };
 
     async function refreshLiveTab() {
@@ -1152,133 +1287,37 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       pollController.current = controller;
 
       try {
-        const liveResponse = await fetch("/api/live-status", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ user_ids: userIds }),
-          signal: controller.signal,
-        });
-        const livePayload = (await liveResponse.json()) as {
-          live?: LiveStatusPayloadEntry[];
-        };
-
-        if (!liveResponse.ok || cancelled) {
-          if (!cancelled) {
-            setLiveTabReady(true);
-          }
-          return;
-        }
-
-        const nextLive = new Map<string, LiveStreamInfo>();
-        const liveIds: string[] = [];
-
-        for (const entry of livePayload.live ?? []) {
-          const userId = entry.user_id?.trim().toLowerCase();
-
-          if (!userId) {
-            continue;
-          }
-
-          liveIds.push(userId);
-          nextLive.set(userId, toLiveStreamInfo(entry));
-        }
-
-        if (liveIds.length === 0) {
-          setLiveByUserId(nextLive);
-          setLiveBroadcastByUserId(new Map());
-          setLiveStatsUpdatedAt(new Date());
-          setLiveTabReady(true);
-          return;
-        }
-
-        const statsResponse = await fetch("/api/live-stats", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            streams: liveIds.map((userId) => ({
-              user_id: userId,
-              station_id: nextLive.get(userId)?.broadNo ?? null,
-            })),
-            skip_fallback: skipFallback,
-          }),
-          signal: controller.signal,
-        });
-        const statsPayload = (await statsResponse.json()) as {
-          stats?: Array<{
-            user_id?: string;
-            day_balloons?: number;
-            source?: "bcraping" | "poongtu";
-            donors?: Array<{
-              user_id?: string;
-              nickname?: string;
-              balloons?: number;
-            }>;
-          }>;
-        };
+        const nextLive = await requestLiveStatusMap(userIds, controller.signal);
 
         if (cancelled) {
           return;
         }
 
-        if (!statsResponse.ok) {
-          setLiveByUserId(nextLive);
-          setLiveTabReady(true);
+        const nextStats = await requestLiveStatsMap(
+          nextLive,
+          skipLiveStatsFallbackRef.current,
+          controller.signal,
+        );
+
+        if (cancelled) {
           return;
         }
 
-        skipFallback = true;
-
-        const nextStats = new Map<string, LiveBroadcastPanel>();
-
-        for (const entry of statsPayload.stats ?? []) {
-          const userId = entry.user_id?.trim().toLowerCase();
-
-          if (!userId) {
-            continue;
-          }
-
-          const donors = (entry.donors ?? []).map((donor, index) => ({
-            rank: index + 1,
-            user_id: donor.user_id?.trim().toLowerCase() || "",
-            nickname: donor.nickname?.trim() || donor.user_id?.trim() || "",
-            balloons: Number(donor.balloons) || 0,
-          }));
-
-          nextStats.set(userId, {
-            day_balloons: Number(entry.day_balloons) || 0,
-            source: entry.source === "bcraping" ? "bcraping" : "poongtu",
-            donors,
-          });
-        }
-
-        setLiveBroadcastByUserId((current) => {
-          const merged = new Map(current);
-
-          for (const [userId, panel] of nextStats) {
-            merged.set(userId, panel);
-          }
-
-          for (const userId of merged.keys()) {
-            if (!nextLive.has(userId)) {
-              merged.delete(userId);
-            }
-          }
-
-          return merged;
-        });
+        skipLiveStatsFallbackRef.current = true;
+        setLiveBroadcastByUserId((current) =>
+          mergeLiveBroadcastStats(current, nextLive, nextStats),
+        );
         setLiveByUserId(nextLive);
         setLiveStatsUpdatedAt(new Date());
-        setLiveTabReady(true);
+        setLiveStatusFetched(true);
+        setLiveStatsFetched(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
 
-        setLiveTabReady(true);
+        setLiveStatusFetched(true);
+        setLiveStatsFetched(true);
       } finally {
         inFlight = false;
 
@@ -1290,7 +1329,9 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       }
     }
 
-    void refreshLiveTab();
+    timerId = window.setTimeout(() => {
+      void refreshLiveTab();
+    }, 20_000);
 
     return () => {
       cancelled = true;
@@ -1465,11 +1506,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   setShowKings(false);
                   setShowFa(false);
                   setLiveFilterMode("all");
-
-                  if (!showLive) {
-                    setLiveTabReady(false);
-                  }
-
                   setShowLive(true);
                   setSearchMode("members");
                 }}
