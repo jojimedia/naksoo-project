@@ -566,6 +566,7 @@ function LiveRankingCard({
   onCrewFilterChange,
   crewOptions,
   updatedAt,
+  loading,
 }: {
   rows: OverallMember[];
   liveBroadcastByUserId: ReadonlyMap<string, LiveBroadcastPanel>;
@@ -575,6 +576,7 @@ function LiveRankingCard({
   onCrewFilterChange: (crewName: string) => void;
   crewOptions: Array<{ name: string; color: string; liveCount: number }>;
   updatedAt: Date | null;
+  loading: boolean;
 }) {
   return (
     <section className="w-full">
@@ -621,7 +623,7 @@ function LiveRankingCard({
             </div>
           </div>
           <p className="shrink-0 rounded bg-black/10 px-2.5 py-1.5 text-[12px] font-bold">
-            {rows.length}명
+            {loading ? "로딩중" : `${rows.length}명`}
           </p>
         </div>
 
@@ -669,9 +671,11 @@ function LiveRankingCard({
         </div>
       ) : (
         <p className="rounded-xl border border-[#3a3548] bg-[#211e2b] px-3 py-10 text-center text-sm font-bold text-[#a8a2b8]">
-          {filterMode === "crew" && !crewFilter
-            ? "크루를 선택해 주세요."
-            : "라이브 중인 스트리머가 없습니다."}
+          {loading
+            ? "로딩중"
+            : filterMode === "crew" && !crewFilter
+              ? "크루를 선택해 주세요."
+              : "라이브 중인 스트리머가 없습니다."}
         </p>
       )}
     </section>
@@ -739,6 +743,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [liveByUserId, setLiveByUserId] = useState<
     ReadonlyMap<string, LiveStreamInfo>
   >(() => new Map());
+  const [liveStatusReady, setLiveStatusReady] = useState(false);
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const rankingCrews = useMemo(
@@ -984,6 +989,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
 
     if (userIds.length === 0) {
       setLiveByUserId(new Map());
+      setLiveStatusReady(true);
       return;
     }
 
@@ -1012,6 +1018,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         };
 
         if (!response.ok) {
+          setLiveStatusReady(true);
           return;
         }
 
@@ -1037,10 +1044,13 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         }
 
         setLiveByUserId(next);
+        setLiveStatusReady(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
+
+        setLiveStatusReady(true);
       }
     }
 
@@ -1061,6 +1071,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     );
 
     if (userIds.length === 0) {
+      setLiveStatusReady(true);
       return;
     }
 
@@ -1101,6 +1112,9 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         };
 
         if (!liveResponse.ok || cancelled) {
+          if (!cancelled) {
+            setLiveStatusReady(true);
+          }
           return;
         }
 
@@ -1129,6 +1143,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         }
 
         setLiveByUserId(nextLive);
+        setLiveStatusReady(true);
 
         if (liveIds.length === 0) {
           setLiveBroadcastByUserId(new Map());
@@ -1212,6 +1227,8 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
+
+        setLiveStatusReady(true);
       } finally {
         inFlight = false;
 
@@ -1497,6 +1514,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                 rows={filteredLiveRows}
                 liveBroadcastByUserId={liveBroadcastByUserId}
                 updatedAt={liveStatsUpdatedAt}
+                loading={!liveStatusReady}
                 filterMode={liveFilterMode}
                 onFilterModeChange={(mode) => {
                   setLiveFilterMode(mode);
