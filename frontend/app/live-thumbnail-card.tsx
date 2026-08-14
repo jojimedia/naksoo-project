@@ -58,8 +58,10 @@ function useElapsedLabel(broadStartMs: number | null | undefined) {
       return;
     }
 
+    const startMs = broadStartMs;
+
     function tick() {
-      setLabel(formatElapsed(broadStartMs));
+      setLabel(formatElapsed(startMs));
     }
 
     tick();
