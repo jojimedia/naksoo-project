@@ -9,6 +9,7 @@ export type LiveStatusEntry = {
   thumbnail_url: string | null;
   title: string | null;
   viewer_count: number | null;
+  broad_no: number | null;
 };
 
 function offlineEntry(userId: string): LiveStatusEntry {
@@ -18,6 +19,7 @@ function offlineEntry(userId: string): LiveStatusEntry {
     thumbnail_url: null,
     title: null,
     viewer_count: null,
+    broad_no: null,
   };
 }
 
@@ -71,6 +73,7 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
     }
 
     const viewerCount = Number(broad.current_sum_viewer);
+    const broadNo = Number(broad.broad_no);
 
     return {
       user_id: trimmed,
@@ -78,6 +81,7 @@ async function fetchOneLiveStatus(userId: string): Promise<LiveStatusEntry> {
       thumbnail_url: buildLiveThumbnailUrl(broad.broad_no),
       title: broad.broad_title?.trim() || null,
       viewer_count: Number.isFinite(viewerCount) ? viewerCount : null,
+      broad_no: Number.isFinite(broadNo) && broadNo > 0 ? broadNo : null,
     };
   } catch {
     return offlineEntry(trimmed);

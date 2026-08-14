@@ -327,58 +327,77 @@ function LiveBadge({
   );
 }
 
-function FanRanking({
+export function FanRanking({
   fans,
   previousBalloons,
   changeBalloons,
   changeRate,
   todayBalloons,
+  liveBroadcastMode = false,
+  fanPanelTitle = "이달의 후원자",
 }: {
   fans: Fan[];
   previousBalloons: number;
   changeBalloons: number;
   changeRate: number;
   todayBalloons: number;
+  liveBroadcastMode?: boolean;
+  fanPanelTitle?: string;
 }) {
   const changeColor =
     changeBalloons >= 0 ? "text-[#059669]" : "text-[#dc2626]";
 
   return (
     <div className="mx-1 mb-3 rounded border border-[#3a3548] bg-[#211e2b] px-2 py-2">
-      <div className="mb-2 grid grid-cols-[0.9fr_1.35fr_0.9fr] gap-1">
-        <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
-          <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
-            전월 별풍
-          </p>
-          <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
-            {formatNumber(previousBalloons)}
-          </p>
+      {liveBroadcastMode ? (
+        <div className="mb-2">
+          <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
+            <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
+              이번 방송 별풍
+            </p>
+            <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
+              {formatNumber(todayBalloons)}
+            </p>
+          </div>
         </div>
-        <div className="flex min-h-[44px] min-w-0 flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-1.5 py-1">
-          <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
-            증감(증감률)
-          </p>
-          <p
-            className={`h-4 whitespace-nowrap text-[11px] font-semibold leading-4 tabular-nums ${changeColor}`}
-          >
-            {formatSignedNumber(changeBalloons)}{" "}
-            <span className="text-[9px]">
-              ({formatSignedPercent(changeRate)})
-            </span>
-          </p>
+      ) : (
+        <div className="mb-2 grid grid-cols-[0.9fr_1.35fr_0.9fr] gap-1">
+          <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
+            <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
+              전월 별풍
+            </p>
+            <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
+              {formatNumber(previousBalloons)}
+            </p>
+          </div>
+          <div className="flex min-h-[44px] min-w-0 flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-1.5 py-1">
+            <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
+              증감(증감률)
+            </p>
+            <p
+              className={`h-4 whitespace-nowrap text-[11px] font-semibold leading-4 tabular-nums ${changeColor}`}
+            >
+              {formatSignedNumber(changeBalloons)}{" "}
+              <span className="text-[9px]">
+                ({formatSignedPercent(changeRate)})
+              </span>
+            </p>
+          </div>
+          <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
+            <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
+              오늘
+            </p>
+            <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
+              {formatNumber(todayBalloons)}
+            </p>
+          </div>
         </div>
-        <div className="flex min-h-[44px] flex-col justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1">
-          <p className="h-3 text-[10px] font-semibold leading-3 text-[#a8a2b8]">
-            오늘
-          </p>
-          <p className="h-4 text-xs font-semibold leading-4 tabular-nums text-[#e5e7eb]">
-            {formatNumber(todayBalloons)}
-          </p>
-        </div>
-      </div>
+      )}
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-extrabold text-[#e5e7eb]">이달의 후원자</p>
-        <p className="text-xs font-bold text-[#a8a2b8]">TOP 10</p>
+        <p className="text-sm font-extrabold text-[#e5e7eb]">{fanPanelTitle}</p>
+        <p className="text-xs font-bold text-[#a8a2b8]">
+          {liveBroadcastMode ? `${fans.length}명` : "TOP 10"}
+        </p>
       </div>
 
       {fans.length > 0 ? (
@@ -404,6 +423,13 @@ export default function StreamerMemberRow({
   crewName,
   crewColor,
   disableScoreTone = false,
+  scoreOverride,
+  scoreToneValue,
+  scoreSubLabel,
+  fansOverride,
+  fanPanelTitle,
+  liveBroadcastMode = false,
+  todayBalloonsOverride,
 }: {
   member: CrewMember;
   defaultOpen?: boolean;
@@ -412,6 +438,13 @@ export default function StreamerMemberRow({
   crewName?: string;
   crewColor?: string;
   disableScoreTone?: boolean;
+  scoreOverride?: number;
+  scoreToneValue?: number;
+  scoreSubLabel?: string;
+  fansOverride?: Fan[];
+  fanPanelTitle?: string;
+  liveBroadcastMode?: boolean;
+  todayBalloonsOverride?: number;
 }) {
   const [isManuallyOpen, setIsManuallyOpen] = useState(false);
   const isLive = useIsLive(member.user_id);
@@ -419,6 +452,11 @@ export default function StreamerMemberRow({
   const isOnLeave = member.is_on_leave === true;
   const showLive = !isOnLeave && isLive;
   const isOpen = !isOnLeave && (defaultOpen || isManuallyOpen);
+  const panelFans = fansOverride ?? member.monthly_top_fans;
+  const panelTodayBalloons =
+    todayBalloonsOverride ?? member.display_day_balloons;
+  const scoreValue = scoreOverride ?? member.current_balloons;
+  const toneSource = scoreToneValue ?? scoreOverride ?? member.current_balloons;
   const tone =
     disableScoreTone || isOnLeave
       ? {
@@ -427,7 +465,7 @@ export default function StreamerMemberRow({
           name: isOnLeave ? "text-[#fbbf24]" : "text-[#e5e7eb]",
           score: "text-[#a8a2b8]",
         }
-      : getScoreTone(member.current_balloons);
+      : getScoreTone(toneSource);
   const rowColumns = showCrew
     ? "grid-cols-[34px_92px_minmax(0,1fr)_78px]"
     : "grid-cols-[30px_minmax(0,1fr)_112px]";
@@ -479,9 +517,18 @@ export default function StreamerMemberRow({
             ) : null}
           </div>
         )}
-        <p className={`text-right font-bold whitespace-nowrap tabular-nums ${tone.score}`}>
-          {isOnLeave ? "—" : formatNumber(member.current_balloons)}
-        </p>
+        <div className="text-right">
+          <p
+            className={`font-bold whitespace-nowrap tabular-nums ${tone.score}`}
+          >
+            {isOnLeave ? "—" : formatNumber(scoreValue)}
+          </p>
+          {!isOnLeave && scoreSubLabel ? (
+            <p className="text-[10px] font-semibold leading-tight tabular-nums text-[#8d879c]">
+              {scoreSubLabel}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {!isOnLeave ? (
@@ -492,11 +539,16 @@ export default function StreamerMemberRow({
       >
         <div className="overflow-hidden">
           <FanRanking
-            fans={member.monthly_top_fans}
+            fans={panelFans}
             previousBalloons={member.previous_balloons}
             changeBalloons={member.change_balloons}
             changeRate={member.change_rate}
-            todayBalloons={member.display_day_balloons}
+            todayBalloons={panelTodayBalloons}
+            liveBroadcastMode={liveBroadcastMode}
+            fanPanelTitle={
+              fanPanelTitle ??
+              (liveBroadcastMode ? "오늘 방송 후원자" : "이달의 후원자")
+            }
           />
         </div>
       </div>

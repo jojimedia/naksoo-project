@@ -6,6 +6,7 @@ export type LiveStreamInfo = {
   thumbnailUrl: string | null;
   title: string | null;
   viewerCount: number | null;
+  broadNo: number | null;
 };
 
 const LiveStatusContext = createContext<ReadonlyMap<string, LiveStreamInfo>>(

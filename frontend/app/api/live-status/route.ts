@@ -24,6 +24,7 @@ export async function POST(request: Request) {
           thumbnail_url: entry.thumbnail_url,
           title: entry.title,
           viewer_count: entry.viewer_count,
+          broad_no: entry.broad_no,
         })),
     });
   } catch (error) {
