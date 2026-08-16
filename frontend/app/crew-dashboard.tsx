@@ -19,10 +19,16 @@ import {
 import StreamerMemberRow from "./streamer-member-row";
 import LiveThumbnailCard from "./live-thumbnail-card";
 import {
+  getGuestbookPreview,
   hasUnreadGuestbook,
   loadGuestbookReads,
   saveGuestbookRead,
 } from "./fa-guestbook-panel";
+import {
+  getGuestbookPosts,
+  previewsFromPosts,
+  type GuestbookPost,
+} from "@/lib/guestbook-shared";
 
 type CrewDashboardData = {
   created_date: string;
@@ -887,6 +893,8 @@ function LiveRankingCard({
   );
 }
 
+const EMPTY_GUESTBOOK_POSTS: GuestbookPost[] = [];
+
 function FaRankingCard({
   rows,
   isAdmin,
@@ -894,36 +902,47 @@ function FaRankingCard({
   rows: OverallMember[];
   isAdmin: boolean;
 }) {
-  const [latestByUserId, setLatestByUserId] = useState<Record<string, string>>(
-    {},
-  );
+  const [postsByUserId, setPostsByUserId] = useState<
+    Record<string, GuestbookPost[]> | null
+  >(null);
   const [readAtByUserId, setReadAtByUserId] = useState<Record<string, string>>(
     {},
   );
+  const previewByUserId = previewsFromPosts(postsByUserId ?? {});
+  const prefetching = postsByUserId === null;
 
   useEffect(() => {
     setReadAtByUserId(loadGuestbookReads());
-
-    async function loadSummary() {
-      try {
-        const response = await fetch("/api/guestbook/summary");
-        const data = (await response.json()) as {
-          latest?: Record<string, string>;
-        };
-
-        if (response.ok && data.latest) {
-          setLatestByUserId(data.latest);
-        }
-      } catch {
-        setLatestByUserId({});
-      }
-    }
-
-    void loadSummary();
+    void prefetchGuestbook();
   }, []);
 
+  async function prefetchGuestbook() {
+    try {
+      const response = await fetch("/api/guestbook/summary", {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as {
+        posts?: Record<string, GuestbookPost[]>;
+      };
+
+      setPostsByUserId((current) => ({
+        ...(response.ok && data.posts ? data.posts : {}),
+        ...(current ?? {}),
+      }));
+    } catch {
+      setPostsByUserId((current) => current ?? {});
+    }
+  }
+
+  function updateStreamerPosts(userId: string, posts: GuestbookPost[]) {
+    setPostsByUserId((current) => ({
+      ...(current ?? {}),
+      [userId.toLowerCase()]: posts,
+    }));
+  }
+
   return (
-    <section className="w-full max-w-[520px] overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm">
+    <section className="w-full min-w-0 max-w-[760px] overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm">
       <div className="bg-[#0F766E] p-3 text-white">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-[23px] font-semibold leading-7">FA</h2>
@@ -932,15 +951,16 @@ function FaRankingCard({
           </p>
         </div>
         <p className="mt-1 text-[11px] font-semibold text-white/80">
-          닉네임은 후원자, 빈 곳은 크루 의견
+          스트리머에게 적합한 크루를 추천해주세요
         </p>
       </div>
 
-      <div className="bg-[#17151f] p-1">
-        <div className="grid min-h-6 grid-cols-[30px_minmax(0,1fr)_112px] items-center gap-x-0.5 border-b border-[#3a3548] px-0.5 py-0.5 text-[14px] font-semibold tracking-tight text-[#a8a2b8]">
+      <div className="min-w-0 bg-[#17151f] p-1">
+        <div className="grid min-h-6 grid-cols-[22px_minmax(0,1fr)_minmax(58px,max-content)_minmax(0,1.05fr)] items-center gap-x-1 border-b border-[#3a3548] px-0.5 py-0.5 text-[12px] font-semibold tracking-tight text-[#a8a2b8] sm:grid-cols-[28px_minmax(88px,0.8fr)_86px_minmax(0,1.6fr)] sm:gap-x-1.5 sm:text-[14px]">
           <p>순위</p>
           <p>닉네임</p>
           <p className="text-right">별풍선</p>
+          <p className="text-center">메모</p>
         </div>
 
         {rows.length > 0 ? (
@@ -953,13 +973,30 @@ function FaRankingCard({
               disableScoreTone
               guestbookEnabled
               isAdmin={isAdmin}
+              guestbookPreview={getGuestbookPreview(
+                row.member.user_id,
+                previewByUserId,
+              )}
+              guestbookPosts={
+                postsByUserId
+                  ? (getGuestbookPosts(row.member.user_id, postsByUserId) ??
+                    EMPTY_GUESTBOOK_POSTS)
+                  : undefined
+              }
+              guestbookPrefetching={prefetching}
               hasNewGuestbook={hasUnreadGuestbook(
                 row.member.user_id,
-                latestByUserId,
+                previewByUserId,
                 readAtByUserId,
               )}
               onGuestbookOpened={() => {
                 setReadAtByUserId(saveGuestbookRead(row.member.user_id));
+              }}
+              onGuestbookPosted={() => {
+                setReadAtByUserId(saveGuestbookRead(row.member.user_id));
+              }}
+              onGuestbookPostsChange={(posts) => {
+                updateStreamerPosts(row.member.user_id, posts);
               }}
             />
           ))
@@ -1643,9 +1680,11 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             className={`mx-auto gap-3 ${
               showLive && !isSearching
                 ? "flex w-full max-w-[1600px] flex-col items-stretch"
-                : isSearching || showOverall || showKings || showFa
-                  ? "flex max-w-[520px] flex-col items-center"
-                  : "grid max-w-[420px] grid-cols-1 md:max-w-[820px] md:grid-cols-3 lg:max-w-none lg:grid-cols-5"
+                : showFa && !isSearching
+                  ? "flex w-full min-w-0 max-w-[760px] flex-col items-center"
+                  : isSearching || showOverall || showKings
+                    ? "flex max-w-[520px] flex-col items-center"
+                    : "grid max-w-[420px] grid-cols-1 md:max-w-[820px] md:grid-cols-3 lg:max-w-none lg:grid-cols-5"
             }`}
           >
             {showOverall && !isSearching ? (

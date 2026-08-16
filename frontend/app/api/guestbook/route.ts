@@ -1,7 +1,8 @@
+import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getSessionFromCookies } from "@/lib/admin-session";
-import { jsonError, getRequestIp } from "@/lib/api-utils";
+import { jsonError, jsonNoStore, getRequestIp } from "@/lib/api-utils";
 import { isFaCrew } from "@/lib/crews";
 import {
   appendGuestbookEntry,
@@ -9,6 +10,7 @@ import {
   findGuestbookEntry,
   findMemberByUserId,
   listGuestbookEntries,
+  updateGuestbookVote,
 } from "@/lib/google-sheets";
 import {
   assertGuestbookBody,
@@ -16,11 +18,12 @@ import {
   assertGuestbookPassword,
   createGuestbookCookieValue,
   createGuestbookId,
-  createPasswordSalt,
   getGuestbookCookieOptions,
   guestbookPasswordsMatch,
+  guestbookVoteCookie,
+  resolveGuestbookVoter,
   GUESTBOOK_COOKIE_NAME,
-  hashGuestbookPassword,
+  GUESTBOOK_VOTE_COOKIE_NAME,
   markGuestbookPosted,
   maskIp,
   sanitizeGuestbookBody,
@@ -30,6 +33,7 @@ import {
 } from "@/lib/guestbook";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 async function assertFaStreamer(userId: string) {
   const member = await findMemberByUserId(userId);
@@ -41,7 +45,7 @@ async function assertFaStreamer(userId: string) {
   return member;
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const userId = new URL(request.url).searchParams.get("user_id")?.trim() ?? "";
 
@@ -50,11 +54,16 @@ export async function GET(request: Request) {
     }
 
     await assertFaStreamer(userId);
+    const voter = resolveGuestbookVoter(
+      request.cookies.get(GUESTBOOK_VOTE_COOKIE_NAME)?.value,
+      request.headers.get("user-agent"),
+    );
     const entries = await listGuestbookEntries(userId);
-
-    return NextResponse.json({
-      posts: threadGuestbookEntries(entries),
+    const response = jsonNoStore({
+      posts: threadGuestbookEntries(entries, voter.voterKey),
     });
+    response.cookies.set(guestbookVoteCookie(voter.cookieValue));
+    return response;
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "방명록을 불러오지 못했습니다.";
@@ -75,7 +84,7 @@ export async function POST(request: NextRequest) {
     const password = validateGuestbookPassword(body.password);
     const parentId = body.parent_id?.trim() ?? "";
     const userAgent = request.headers.get("user-agent");
-    const ip = getRequestIp(request);
+    const ip = getRequestIp(request, await headers());
 
     if (!userId) {
       return jsonError("user_id가 필요합니다.");
@@ -104,7 +113,6 @@ export async function POST(request: NextRequest) {
     }
 
     const now = Date.now();
-    const salt = createPasswordSalt();
     const entry = {
       id: createGuestbookId(),
       streamer_id: userId,
@@ -112,8 +120,7 @@ export async function POST(request: NextRequest) {
       author: maskIp(ip),
       body: text,
       created_at: new Date(now).toISOString(),
-      password_salt: salt,
-      password_hash: hashGuestbookPassword(password, salt),
+      password,
     };
 
     await appendGuestbookEntry(entry);
@@ -122,6 +129,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       post: toPublicGuestbookPost(entry),
     });
+    response.headers.set("Cache-Control", "no-store, max-age=0");
     response.cookies.set({
       ...getGuestbookCookieOptions(),
       value: createGuestbookCookieValue(userAgent),
@@ -166,8 +174,8 @@ export async function DELETE(request: NextRequest) {
       if (
         !guestbookPasswordsMatch(
           password,
+          entry.password,
           entry.password_salt,
-          entry.password_hash,
         )
       ) {
         return jsonError("비밀번호가 일치하지 않습니다.", 403);
@@ -175,10 +183,48 @@ export async function DELETE(request: NextRequest) {
     }
 
     await deleteGuestbookEntries(id);
-    return NextResponse.json({ ok: true, streamer_id: entry.streamer_id });
+    return jsonNoStore({ ok: true, streamer_id: entry.streamer_id });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "글 삭제에 실패했습니다.";
     return jsonError(message, 400);
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = (await request.json()) as {
+      id?: string;
+      vote?: string;
+    };
+    const id = body.id?.trim() ?? "";
+    const vote = body.vote === "like" || body.vote === "dislike" ? body.vote : "";
+
+    if (!id) {
+      return jsonError("id가 필요합니다.");
+    }
+
+    if (!vote) {
+      return jsonError("좋아요 또는 싫어요를 선택해주세요.");
+    }
+
+    const voter = resolveGuestbookVoter(
+      request.cookies.get(GUESTBOOK_VOTE_COOKIE_NAME)?.value,
+      request.headers.get("user-agent"),
+    );
+    const entry = await updateGuestbookVote(id, voter.voterKey, vote);
+    const response = jsonNoStore({
+      post: toPublicGuestbookPost(entry, [], voter.voterKey),
+    });
+    response.cookies.set(guestbookVoteCookie(voter.cookieValue));
+    return response;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "투표에 실패했습니다.";
+    const status =
+      error instanceof Error && error.name === "GuestbookAlreadyVotedError"
+        ? 409
+        : 400;
+    return jsonError(message, status);
   }
 }

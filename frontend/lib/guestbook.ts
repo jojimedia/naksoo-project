@@ -3,16 +3,19 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import {
   GUESTBOOK_BODY_MAX,
   GUESTBOOK_COOKIE_NAME,
+  GUESTBOOK_VOTE_COOKIE_NAME,
   GUESTBOOK_COOLDOWN_MS,
   GUESTBOOK_PASSWORD_MAX,
   GUESTBOOK_PASSWORD_MIN,
   GUESTBOOK_TOP_LIMIT,
+  parseVoterList,
   type GuestbookPost,
 } from "./guestbook-shared";
 
 export {
   GUESTBOOK_BODY_MAX,
   GUESTBOOK_COOKIE_NAME,
+  GUESTBOOK_VOTE_COOKIE_NAME,
   GUESTBOOK_COOLDOWN_MS,
   GUESTBOOK_PASSWORD_MAX,
   GUESTBOOK_PASSWORD_MIN,
@@ -34,24 +37,40 @@ export function hashUserAgent(userAgent: string | null) {
 }
 
 export function maskIp(ip: string | null) {
-  const raw = (ip ?? "").trim();
+  const raw = normalizeClientIp(ip);
 
-  if (!raw) {
+  if (!raw || raw === "::1" || raw === "::") {
     return "0.0.*.*";
   }
 
-  const v4Mapped = raw.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  const v4Mapped = raw.match(/(?:^|:)(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/i);
 
   if (v4Mapped) {
     return maskIpv4(v4Mapped[1]);
   }
 
   if (raw.includes(":")) {
-    const parts = raw.split(":");
-    return `${parts[0] || "0"}:${parts[1] || "0"}:*:*`;
+    return maskIpv6(raw);
   }
 
   return maskIpv4(raw);
+}
+
+function normalizeClientIp(ip: string | null) {
+  let raw = (ip ?? "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  if (raw.startsWith("[")) {
+    const end = raw.indexOf("]");
+    raw = end >= 0 ? raw.slice(1, end) : raw.replace(/^\[|\]$/g, "");
+  } else if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(raw)) {
+    raw = raw.slice(0, raw.lastIndexOf(":"));
+  }
+
+  return raw.split("%")[0]?.trim() ?? "";
 }
 
 function maskIpv4(ip: string) {
@@ -59,26 +78,47 @@ function maskIpv4(ip: string) {
   return `${parts[0] || "0"}.${parts[1] || "0"}.*.*`;
 }
 
+function maskIpv6(ip: string) {
+  const [head, tail] = ip.split("::");
+  const headParts = head ? head.split(":").filter(Boolean) : [];
+  const tailParts = tail ? tail.split(":").filter(Boolean) : [];
+  const missing = Math.max(0, 8 - headParts.length - tailParts.length);
+  const parts = [
+    ...headParts,
+    ...Array.from({ length: missing }, () => "0"),
+    ...tailParts,
+  ];
+
+  return `${parts[0] || "0"}:${parts[1] || "0"}:*:*`;
+}
+
 export function createGuestbookId() {
   return randomBytes(6).toString("hex");
 }
 
-export function createPasswordSalt() {
-  return randomBytes(8).toString("hex");
-}
-
-export function hashGuestbookPassword(password: string, salt: string) {
-  return createHash("sha256").update(`${salt}:${password}`).digest("hex");
-}
-
 export function guestbookPasswordsMatch(
   password: string,
-  salt: string,
-  hash: string,
+  stored: string,
+  salt = "",
 ) {
-  const actual = hashGuestbookPassword(password, salt);
-  const left = Buffer.from(actual);
-  const right = Buffer.from(hash);
+  if (!stored) {
+    return false;
+  }
+
+  if (salt) {
+    const hashed = createHash("sha256")
+      .update(`${salt}:${password}`)
+      .digest("hex");
+    const left = Buffer.from(hashed);
+    const right = Buffer.from(stored);
+
+    if (left.length === right.length && timingSafeEqual(left, right)) {
+      return true;
+    }
+  }
+
+  const left = Buffer.from(password);
+  const right = Buffer.from(stored);
 
   if (left.length !== right.length) {
     return false;
@@ -132,9 +172,19 @@ export function toPublicGuestbookPost(
     author: string;
     body: string;
     created_at: string;
+    likes?: number;
+    dislikes?: number;
+    like_voters?: string;
+    dislike_voters?: string;
   },
   replies: GuestbookPost[] = [],
+  voterKey = "",
 ): GuestbookPost {
+  const likeVoters = parseVoterList(entry.like_voters);
+  const dislikeVoters = parseVoterList(entry.dislike_voters);
+  const likes = likeVoters.size || Math.max(0, entry.likes ?? 0);
+  const dislikes = dislikeVoters.size || Math.max(0, entry.dislikes ?? 0);
+
   return {
     id: entry.id,
     streamer_id: entry.streamer_id,
@@ -142,7 +192,57 @@ export function toPublicGuestbookPost(
     author: entry.author,
     body: entry.body,
     created_at: entry.created_at,
+    likes,
+    dislikes,
+    my_vote: likeVoters.has(voterKey)
+      ? "like"
+      : dislikeVoters.has(voterKey)
+        ? "dislike"
+        : "",
     replies,
+  };
+}
+
+export function resolveGuestbookVoter(
+  _cookieValue: string | undefined,
+  userAgent: string | null,
+) {
+  const uaHash = hashUserAgent(userAgent);
+  const voterKey = createHash("sha256")
+    .update(`${getGuestbookSecret()}:vote-ua:${uaHash}`)
+    .digest("hex")
+    .slice(0, 16);
+  const cookieValue = `${uaHash}.${voterKey}.${signVote(uaHash, voterKey)}`;
+
+  return {
+    voterKey,
+    cookieValue,
+    isNew: false,
+  };
+}
+
+function signVote(uaHash: string, voterId: string) {
+  return createHash("sha256")
+    .update(`${getGuestbookSecret()}:vote:${uaHash}:${voterId}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
+export function getGuestbookVoteCookieOptions() {
+  return {
+    name: GUESTBOOK_VOTE_COOKIE_NAME,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  };
+}
+
+export function guestbookVoteCookie(cookieValue: string) {
+  return {
+    ...getGuestbookVoteCookieOptions(),
+    value: cookieValue,
   };
 }
 
@@ -253,7 +353,12 @@ export function threadGuestbookEntries(
     author: string;
     body: string;
     created_at: string;
+    likes?: number;
+    dislikes?: number;
+    like_voters?: string;
+    dislike_voters?: string;
   }>,
+  voterKey = "",
 ) {
   const topLevel = entries
     .filter((entry) => !entry.parent_id)
@@ -268,7 +373,7 @@ export function threadGuestbookEntries(
     }
 
     const replies = repliesByParent.get(entry.parent_id) ?? [];
-    replies.push(toPublicGuestbookPost(entry));
+    replies.push(toPublicGuestbookPost(entry, [], voterKey));
     repliesByParent.set(entry.parent_id, replies);
   }
 
@@ -277,6 +382,43 @@ export function threadGuestbookEntries(
   }
 
   return topLevel.map((entry) =>
-    toPublicGuestbookPost(entry, repliesByParent.get(entry.id) ?? []),
+    toPublicGuestbookPost(
+      entry,
+      repliesByParent.get(entry.id) ?? [],
+      voterKey,
+    ),
   );
+}
+
+export function bundleGuestbookByStreamer(
+  entries: Array<{
+    id: string;
+    streamer_id: string;
+    parent_id: string;
+    author: string;
+    body: string;
+    created_at: string;
+    likes?: number;
+    dislikes?: number;
+    like_voters?: string;
+    dislike_voters?: string;
+  }>,
+  voterKey = "",
+) {
+  const grouped = new Map<string, typeof entries>();
+
+  for (const entry of entries) {
+    const key = entry.streamer_id.toLowerCase();
+    const list = grouped.get(key) ?? [];
+    list.push(entry);
+    grouped.set(key, list);
+  }
+
+  const posts: Record<string, GuestbookPost[]> = {};
+
+  for (const [key, group] of grouped) {
+    posts[key] = threadGuestbookEntries(group, voterKey);
+  }
+
+  return posts;
 }

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { useIsLive, useLiveInfo } from "./live-status-context";
 import FaGuestbookPanel from "./fa-guestbook-panel";
+import type { GuestbookPost, GuestbookPreview } from "@/lib/guestbook-shared";
 
 type Fan = {
   rank: number;
@@ -430,7 +431,12 @@ export default function StreamerMemberRow({
   guestbookEnabled = false,
   isAdmin = false,
   hasNewGuestbook = false,
+  guestbookPreview,
+  guestbookPosts,
+  guestbookPrefetching = false,
   onGuestbookOpened,
+  onGuestbookPosted,
+  onGuestbookPostsChange,
 }: {
   member: CrewMember;
   defaultOpen?: boolean;
@@ -449,7 +455,12 @@ export default function StreamerMemberRow({
   guestbookEnabled?: boolean;
   isAdmin?: boolean;
   hasNewGuestbook?: boolean;
+  guestbookPreview?: GuestbookPreview;
+  guestbookPosts?: GuestbookPost[];
+  guestbookPrefetching?: boolean;
   onGuestbookOpened?: () => void;
+  onGuestbookPosted?: (body: string) => void;
+  onGuestbookPostsChange?: (posts: GuestbookPost[]) => void;
 }) {
   const [isManuallyOpen, setIsManuallyOpen] = useState(false);
   const [isGuestbookOpen, setIsGuestbookOpen] = useState(false);
@@ -474,33 +485,43 @@ export default function StreamerMemberRow({
       : getScoreTone(toneSource);
   const rowColumns = showCrew
     ? "grid-cols-[34px_92px_minmax(0,1fr)_78px]"
-    : "grid-cols-[30px_minmax(0,1fr)_112px]";
-  const rowGap = showCrew ? "gap-x-3" : "gap-x-0.5";
+    : guestbookEnabled
+      ? "grid-cols-[22px_minmax(0,1fr)_minmax(58px,max-content)_minmax(0,1.05fr)] sm:grid-cols-[28px_minmax(88px,0.8fr)_86px_minmax(0,1.6fr)]"
+      : "grid-cols-[30px_minmax(0,1fr)_112px]";
+  const rowGap = showCrew ? "gap-x-3" : guestbookEnabled ? "gap-x-1 sm:gap-x-1.5" : "gap-x-0.5";
+
+  function toggleFans() {
+    if (isOnLeave) {
+      return;
+    }
+
+    setIsManuallyOpen((current) => !current);
+    setIsGuestbookOpen(false);
+  }
 
   function toggleGuestbook() {
     if (!guestbookEnabled || isOnLeave) {
       return;
     }
 
-    setIsGuestbookOpen((current) => {
-      const next = !current;
-
-      if (next) {
-        onGuestbookOpened?.();
-      }
-
-      return next;
-    });
+    const next = !isGuestbookOpen;
+    setIsGuestbookOpen(next);
     setIsManuallyOpen(false);
+
+    if (next) {
+      onGuestbookOpened?.();
+    }
   }
 
   return (
     <div className="border-b border-[#3a3548]/70">
       <div
-        className={`grid min-h-[27px] ${rowColumns} ${rowGap} items-center rounded px-0.5 py-0.5 text-[16px] tracking-tight transition hover:ring-1 hover:ring-white/35 ${
-          guestbookEnabled && !isOnLeave ? "cursor-pointer" : ""
+        className={`grid min-h-[27px] ${rowColumns} ${rowGap} items-center rounded px-0.5 py-0.5 ${
+          guestbookEnabled ? "text-[14px] sm:text-[16px]" : "text-[16px]"
+        } tracking-tight transition hover:ring-1 hover:ring-white/35 ${
+          isOnLeave ? "" : "cursor-pointer"
         } ${tone.row}`}
-        onClick={toggleGuestbook}
+        onClick={toggleFans}
       >
         <p className={`font-semibold tabular-nums ${tone.muted}`}>
           {isOnLeave ? "—" : member.rank}
@@ -530,13 +551,12 @@ export default function StreamerMemberRow({
               aria-label={`${member.nickname}${showLive ? " 방송중" : ""} 이달의 후원자 ${isFanOpen ? "접기" : "열기"}`}
               onClick={(event) => {
                 event.stopPropagation();
-                setIsManuallyOpen((current) => !current);
-                setIsGuestbookOpen(false);
+                toggleFans();
               }}
             >
               <HighlightText text={member.nickname} query={searchQuery} />
             </button>
-            {hasNewGuestbook ? (
+            {hasNewGuestbook && !guestbookEnabled ? (
               <span className="shrink-0 rounded bg-[#ef4444] px-1 py-px text-[9px] font-black leading-none tracking-wide text-white">
                 NEW
               </span>
@@ -557,9 +577,11 @@ export default function StreamerMemberRow({
             ) : null}
           </div>
         )}
-        <div className="text-right">
+        <div className="min-w-0 text-right">
           <p
-            className={`font-bold whitespace-nowrap tabular-nums ${tone.score}`}
+            className={`font-bold whitespace-nowrap tabular-nums ${
+              guestbookEnabled ? "text-[12px] sm:text-[16px]" : ""
+            } ${tone.score}`}
           >
             {isOnLeave ? "—" : formatNumber(scoreValue)}
           </p>
@@ -569,6 +591,34 @@ export default function StreamerMemberRow({
             </p>
           ) : null}
         </div>
+        {guestbookEnabled ? (
+          isOnLeave ? (
+            <p className="min-w-0 truncate text-center text-[11px] font-semibold text-[#8d879c] sm:text-[12px]">
+              —
+            </p>
+          ) : (
+            <button
+              type="button"
+              className="flex min-w-0 items-center justify-center gap-1 text-center"
+              title={guestbookPreview?.body}
+              aria-expanded={isGuestbookOpen}
+              aria-label={`${member.nickname} 크루 의견 ${isGuestbookOpen ? "접기" : "열기"}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleGuestbook();
+              }}
+            >
+              {hasNewGuestbook ? (
+                <span className="shrink-0 rounded bg-[#ef4444] px-1 py-px text-[8px] font-black leading-none tracking-wide text-white sm:text-[9px]">
+                  NEW
+                </span>
+              ) : null}
+              <span className="min-w-0 truncate text-[11px] font-semibold text-[#c4bfce] hover:underline sm:text-[12px]">
+                {guestbookPreview?.body || "—"}
+              </span>
+            </button>
+          )
+        ) : null}
       </div>
 
       {!isOnLeave ? (
@@ -608,7 +658,13 @@ export default function StreamerMemberRow({
                 userId={member.user_id}
                 nickname={member.nickname}
                 isAdmin={isAdmin}
-                onPosted={onGuestbookOpened}
+                cachedPosts={guestbookPosts}
+                prefetching={guestbookPrefetching}
+                onPosted={(body) => {
+                  onGuestbookPosted?.(body);
+                  onGuestbookOpened?.();
+                }}
+                onPostsChange={onGuestbookPostsChange}
               />
             ) : null}
           </div>
