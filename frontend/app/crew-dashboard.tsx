@@ -956,7 +956,7 @@ function FaRankingCard({
       </div>
 
       <div className="min-w-0 bg-[#17151f] p-1">
-        <div className="grid min-h-6 grid-cols-[22px_minmax(0,1fr)_minmax(58px,max-content)_minmax(0,1.05fr)] items-center gap-x-1 border-b border-[#3a3548] px-0.5 py-0.5 text-[12px] font-semibold tracking-tight text-[#a8a2b8] sm:grid-cols-[28px_minmax(88px,0.8fr)_86px_minmax(0,1.6fr)] sm:gap-x-1.5 sm:text-[14px]">
+        <div className="grid min-h-6 grid-cols-[20px_minmax(0,0.62fr)_auto_minmax(0,1.7fr)] items-center gap-x-0.5 border-b border-[#3a3548] px-0.5 py-0.5 text-[12px] font-semibold tracking-tight text-[#a8a2b8] sm:grid-cols-[28px_minmax(88px,0.8fr)_86px_minmax(0,1.6fr)] sm:gap-x-1.5 sm:text-[14px]">
           <p>순위</p>
           <p>닉네임</p>
           <p className="text-right">별풍선</p>
