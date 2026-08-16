@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useIsLive, useLiveInfo } from "./live-status-context";
+import FaGuestbookPanel from "./fa-guestbook-panel";
 
 type Fan = {
   rank: number;
@@ -426,6 +427,10 @@ export default function StreamerMemberRow({
   fanPanelTitle,
   liveBroadcastMode = false,
   todayBalloonsOverride,
+  guestbookEnabled = false,
+  isAdmin = false,
+  hasNewGuestbook = false,
+  onGuestbookOpened,
 }: {
   member: CrewMember;
   defaultOpen?: boolean;
@@ -441,13 +446,18 @@ export default function StreamerMemberRow({
   fanPanelTitle?: string;
   liveBroadcastMode?: boolean;
   todayBalloonsOverride?: number;
+  guestbookEnabled?: boolean;
+  isAdmin?: boolean;
+  hasNewGuestbook?: boolean;
+  onGuestbookOpened?: () => void;
 }) {
   const [isManuallyOpen, setIsManuallyOpen] = useState(false);
+  const [isGuestbookOpen, setIsGuestbookOpen] = useState(false);
   const isLive = useIsLive(member.user_id);
   const liveInfo = useLiveInfo(member.user_id);
   const isOnLeave = member.is_on_leave === true;
   const showLive = !isOnLeave && isLive;
-  const isOpen = !isOnLeave && (defaultOpen || isManuallyOpen);
+  const isFanOpen = !isOnLeave && (defaultOpen || isManuallyOpen);
   const panelFans = fansOverride ?? member.monthly_top_fans;
   const panelTodayBalloons =
     todayBalloonsOverride ?? member.display_day_balloons;
@@ -467,10 +477,30 @@ export default function StreamerMemberRow({
     : "grid-cols-[30px_minmax(0,1fr)_112px]";
   const rowGap = showCrew ? "gap-x-3" : "gap-x-0.5";
 
+  function toggleGuestbook() {
+    if (!guestbookEnabled || isOnLeave) {
+      return;
+    }
+
+    setIsGuestbookOpen((current) => {
+      const next = !current;
+
+      if (next) {
+        onGuestbookOpened?.();
+      }
+
+      return next;
+    });
+    setIsManuallyOpen(false);
+  }
+
   return (
     <div className="border-b border-[#3a3548]/70">
       <div
-        className={`grid min-h-[27px] ${rowColumns} ${rowGap} items-center rounded px-0.5 py-0.5 text-[16px] tracking-tight transition hover:ring-1 hover:ring-white/35 ${tone.row}`}
+        className={`grid min-h-[27px] ${rowColumns} ${rowGap} items-center rounded px-0.5 py-0.5 text-[16px] tracking-tight transition hover:ring-1 hover:ring-white/35 ${
+          guestbookEnabled && !isOnLeave ? "cursor-pointer" : ""
+        } ${tone.row}`}
+        onClick={toggleGuestbook}
       >
         <p className={`font-semibold tabular-nums ${tone.muted}`}>
           {isOnLeave ? "—" : member.rank}
@@ -496,20 +526,34 @@ export default function StreamerMemberRow({
             <button
               type="button"
               className={`min-w-0 truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff] ${tone.name}`}
-              aria-expanded={isOpen}
-              aria-label={`${member.nickname}${showLive ? " 방송중" : ""} 이달의 후원자 ${isOpen ? "접기" : "열기"}`}
-              onClick={() => setIsManuallyOpen((current) => !current)}
+              aria-expanded={isFanOpen}
+              aria-label={`${member.nickname}${showLive ? " 방송중" : ""} 이달의 후원자 ${isFanOpen ? "접기" : "열기"}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsManuallyOpen((current) => !current);
+                setIsGuestbookOpen(false);
+              }}
             >
               <HighlightText text={member.nickname} query={searchQuery} />
             </button>
+            {hasNewGuestbook ? (
+              <span className="shrink-0 rounded bg-[#ef4444] px-1 py-px text-[9px] font-black leading-none tracking-wide text-white">
+                NEW
+              </span>
+            ) : null}
             {showLive ? (
-              <LiveBadge
-                userId={member.user_id}
-                nickname={member.nickname}
-                thumbnailUrl={liveInfo?.thumbnailUrl ?? null}
-                title={liveInfo?.title ?? null}
-                viewerCount={liveInfo?.viewerCount ?? null}
-              />
+              <span
+                className="shrink-0"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <LiveBadge
+                  userId={member.user_id}
+                  nickname={member.nickname}
+                  thumbnailUrl={liveInfo?.thumbnailUrl ?? null}
+                  title={liveInfo?.title ?? null}
+                  viewerCount={liveInfo?.viewerCount ?? null}
+                />
+              </span>
             ) : null}
           </div>
         )}
@@ -530,7 +574,7 @@ export default function StreamerMemberRow({
       {!isOnLeave ? (
       <div
         className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
-          isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          isFanOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
         }`}
       >
         <div className="overflow-hidden">
@@ -548,6 +592,27 @@ export default function StreamerMemberRow({
           />
         </div>
       </div>
+      ) : null}
+
+      {!isOnLeave && guestbookEnabled ? (
+        <div
+          className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+            isGuestbookOpen
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="overflow-hidden">
+            {isGuestbookOpen ? (
+              <FaGuestbookPanel
+                userId={member.user_id}
+                nickname={member.nickname}
+                isAdmin={isAdmin}
+                onPosted={onGuestbookOpened}
+              />
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </div>
   );

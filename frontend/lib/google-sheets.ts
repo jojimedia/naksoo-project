@@ -51,6 +51,18 @@ const ADMINS_SHEET = "admins";
 const DEFAULT_SHEET_ID = "1w-hCArIqriowgLawxlAwZ1xOmGvGw32ics0ZGRHmwQs";
 const MEMBERS_CACHE_TTL_MS = 45_000;
 const META_CACHE_TTL_MS = 5 * 60_000;
+const GUESTBOOK_CACHE_TTL_MS = 5_000;
+const GUESTBOOK_SHEET = "guestbook";
+const GUESTBOOK_HEADERS = [
+  "id",
+  "streamer_id",
+  "parent_id",
+  "author",
+  "body",
+  "created_at",
+  "password_salt",
+  "password_hash",
+] as const;
 
 type SheetTable = {
   sheetName: string;
@@ -321,7 +333,10 @@ async function ensureMemberAddHeaders(sheetName: string, headers: string[]) {
   invalidateSheetsCache();
 }
 
-async function getSheetTable(sheetName: string): Promise<SheetTable> {
+async function getSheetTable(
+  sheetName: string,
+  ttlMs = MEMBERS_CACHE_TTL_MS,
+): Promise<SheetTable> {
   const cached = readCache(sheetCache.tables.get(sheetName));
 
   if (cached) {
@@ -349,7 +364,7 @@ async function getSheetTable(sheetName: string): Promise<SheetTable> {
             .map((row) => row.map((cell) => String(cell ?? ""))),
         };
 
-  sheetCache.tables.set(sheetName, writeCache(table, MEMBERS_CACHE_TTL_MS));
+  sheetCache.tables.set(sheetName, writeCache(table, ttlMs));
   return table;
 }
 
@@ -1095,4 +1110,226 @@ export async function getMemberRequestsByRowIndexes(
   const wanted = new Set(rowIndexes);
   const all = await listMemberRequests();
   return all.filter((entry) => wanted.has(entry.rowIndex));
+}
+
+type SheetGuestbookRow = {
+  rowIndex: number;
+  id: string;
+  streamer_id: string;
+  parent_id: string;
+  author: string;
+  body: string;
+  created_at: string;
+  password_salt: string;
+  password_hash: string;
+};
+
+async function addSheetTab(title: string) {
+  const sheets = getSheetsClient();
+
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: getSheetId(),
+      requestBody: {
+        requests: [
+          {
+            addSheet: {
+              properties: { title },
+            },
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+
+    if (!message.toLowerCase().includes("already")) {
+      throw error;
+    }
+  }
+
+  invalidateSheetsCache();
+}
+
+async function resolveGuestbookSheetName() {
+  return process.env.GOOGLE_GUESTBOOK_SHEET_NAME?.trim() || GUESTBOOK_SHEET;
+}
+
+async function ensureGuestbookSheet() {
+  const sheetName = await resolveGuestbookSheetName();
+  const titles = await listSheetTitles();
+
+  if (!titles.includes(sheetName)) {
+    await addSheetTab(sheetName);
+  }
+
+  const table = await getSheetTable(sheetName, GUESTBOOK_CACHE_TTL_MS);
+
+  if (table.headers.length === 0) {
+    const sheets = getSheetsClient();
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: getSheetId(),
+      range: `${sheetName}!A1:H1`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [Array.from(GUESTBOOK_HEADERS)],
+      },
+    });
+    invalidateSheetsCache();
+  }
+
+  return sheetName;
+}
+
+function parseGuestbookRow(
+  headers: string[],
+  row: string[],
+  rowIndex: number,
+): SheetGuestbookRow | null {
+  const id = getCell(row, getColumnIndex(headers, "id"));
+  const streamer_id = getCell(row, getColumnIndex(headers, "streamer_id"));
+  const body = getCell(row, getColumnIndex(headers, "body"));
+
+  if (!id || !streamer_id || !body) {
+    return null;
+  }
+
+  return {
+    rowIndex,
+    id,
+    streamer_id,
+    parent_id: getCell(row, getColumnIndex(headers, "parent_id")),
+    author: getCell(row, getColumnIndex(headers, "author")) || "0.0.*.*",
+    body,
+    created_at: getCell(row, getColumnIndex(headers, "created_at")),
+    password_salt: getCell(row, getColumnIndex(headers, "password_salt")),
+    password_hash: getCell(row, getColumnIndex(headers, "password_hash")),
+  };
+}
+
+async function listGuestbookRows(): Promise<SheetGuestbookRow[]> {
+  const sheetName = await ensureGuestbookSheet();
+  const table = await getSheetTable(sheetName, GUESTBOOK_CACHE_TTL_MS);
+
+  return table.rows
+    .map((row, index) => parseGuestbookRow(table.headers, row, index + 2))
+    .filter((entry): entry is SheetGuestbookRow => entry !== null);
+}
+
+export async function listGuestbookEntries(streamerId?: string) {
+  const normalized = streamerId?.trim().toLowerCase() ?? "";
+  const rows = await listGuestbookRows();
+
+  if (!normalized) {
+    return rows;
+  }
+
+  return rows.filter(
+    (entry) => entry.streamer_id.toLowerCase() === normalized,
+  );
+}
+
+export async function listGuestbookSummary() {
+  const latest = new Map<string, string>();
+
+  for (const entry of await listGuestbookRows()) {
+    const key = entry.streamer_id.toLowerCase();
+    const current = latest.get(key);
+
+    if (!current || entry.created_at > current) {
+      latest.set(key, entry.created_at);
+    }
+  }
+
+  return Object.fromEntries(latest);
+}
+
+export async function findGuestbookEntry(id: string) {
+  const wanted = id.trim();
+
+  if (!wanted) {
+    return null;
+  }
+
+  return (
+    (await listGuestbookRows()).find((entry) => entry.id === wanted) ?? null
+  );
+}
+
+export async function appendGuestbookEntry(input: {
+  id: string;
+  streamer_id: string;
+  parent_id: string;
+  author: string;
+  body: string;
+  created_at: string;
+  password_salt: string;
+  password_hash: string;
+}) {
+  const sheetName = await ensureGuestbookSheet();
+  const sheets = getSheetsClient();
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: getSheetId(),
+    range: `${sheetName}!A:H`,
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: {
+      values: [
+        [
+          input.id,
+          input.streamer_id,
+          input.parent_id,
+          input.author,
+          input.body,
+          input.created_at,
+          input.password_salt,
+          input.password_hash,
+        ],
+      ],
+    },
+  });
+
+  invalidateSheetsCache();
+}
+
+export async function deleteGuestbookEntries(id: string) {
+  const rows = await listGuestbookRows();
+  const target = rows.find((entry) => entry.id === id);
+
+  if (!target) {
+    throw new Error("글을 찾을 수 없습니다.");
+  }
+
+  const rowIndexes = rows
+    .filter(
+      (entry) =>
+        entry.id === target.id ||
+        (!target.parent_id && entry.parent_id === target.id),
+    )
+    .map((entry) => entry.rowIndex)
+    .sort((left, right) => right - left);
+
+  const sheetName = await ensureGuestbookSheet();
+  const sheets = getSheetsClient();
+  const sheetId = await getSheetIdByTitle(sheetName);
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: getSheetId(),
+    requestBody: {
+      requests: rowIndexes.map((rowIndex) => ({
+        deleteDimension: {
+          range: {
+            sheetId,
+            dimension: "ROWS",
+            startIndex: rowIndex - 1,
+            endIndex: rowIndex,
+          },
+        },
+      })),
+    },
+  });
+
+  invalidateSheetsCache();
+  return target;
 }
