@@ -486,9 +486,9 @@ export default function StreamerMemberRow({
   const rowColumns = showCrew
     ? "grid-cols-[34px_92px_minmax(0,1fr)_78px]"
     : guestbookEnabled
-      ? "grid-cols-[22px_minmax(0,1fr)_minmax(58px,max-content)_minmax(0,1.05fr)] sm:grid-cols-[28px_minmax(88px,0.8fr)_86px_minmax(0,1.6fr)]"
+      ? "grid-cols-[20px_minmax(0,0.62fr)_auto_minmax(0,1.7fr)] sm:grid-cols-[28px_minmax(88px,0.8fr)_86px_minmax(0,1.6fr)]"
       : "grid-cols-[30px_minmax(0,1fr)_112px]";
-  const rowGap = showCrew ? "gap-x-3" : guestbookEnabled ? "gap-x-1 sm:gap-x-1.5" : "gap-x-0.5";
+  const rowGap = showCrew ? "gap-x-3" : guestbookEnabled ? "gap-x-0.5 sm:gap-x-1.5" : "gap-x-0.5";
 
   function toggleFans() {
     if (isOnLeave) {
