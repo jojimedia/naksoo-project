@@ -18,6 +18,11 @@ import {
 } from "./live-status-context";
 import StreamerMemberRow from "./streamer-member-row";
 import LiveThumbnailCard from "./live-thumbnail-card";
+import {
+  hasUnreadGuestbook,
+  loadGuestbookReads,
+  saveGuestbookRead,
+} from "./fa-guestbook-panel";
 
 type CrewDashboardData = {
   created_date: string;
@@ -882,7 +887,41 @@ function LiveRankingCard({
   );
 }
 
-function FaRankingCard({ rows }: { rows: OverallMember[] }) {
+function FaRankingCard({
+  rows,
+  isAdmin,
+}: {
+  rows: OverallMember[];
+  isAdmin: boolean;
+}) {
+  const [latestByUserId, setLatestByUserId] = useState<Record<string, string>>(
+    {},
+  );
+  const [readAtByUserId, setReadAtByUserId] = useState<Record<string, string>>(
+    {},
+  );
+
+  useEffect(() => {
+    setReadAtByUserId(loadGuestbookReads());
+
+    async function loadSummary() {
+      try {
+        const response = await fetch("/api/guestbook/summary");
+        const data = (await response.json()) as {
+          latest?: Record<string, string>;
+        };
+
+        if (response.ok && data.latest) {
+          setLatestByUserId(data.latest);
+        }
+      } catch {
+        setLatestByUserId({});
+      }
+    }
+
+    void loadSummary();
+  }, []);
+
   return (
     <section className="w-full max-w-[520px] overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm">
       <div className="bg-[#0F766E] p-3 text-white">
@@ -892,6 +931,9 @@ function FaRankingCard({ rows }: { rows: OverallMember[] }) {
             {rows.length}명
           </p>
         </div>
+        <p className="mt-1 text-[11px] font-semibold text-white/80">
+          닉네임은 후원자, 빈 곳은 크루 의견
+        </p>
       </div>
 
       <div className="bg-[#17151f] p-1">
@@ -909,6 +951,16 @@ function FaRankingCard({ rows }: { rows: OverallMember[] }) {
               crewName={row.crewName}
               crewColor={row.crewColor}
               disableScoreTone
+              guestbookEnabled
+              isAdmin={isAdmin}
+              hasNewGuestbook={hasUnreadGuestbook(
+                row.member.user_id,
+                latestByUserId,
+                readAtByUserId,
+              )}
+              onGuestbookOpened={() => {
+                setReadAtByUserId(saveGuestbookRead(row.member.user_id));
+              }}
             />
           ))
         ) : (
@@ -1616,7 +1668,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             ) : showKings && !isSearching ? (
               <KingsRankingCard rows={kingRows} />
             ) : showFa && !isSearching ? (
-              <FaRankingCard rows={faRows} />
+              <FaRankingCard rows={faRows} isAdmin={Boolean(adminSession)} />
             ) : searchMode === "donors" && isSearching ? (
               donorResults.map((donor, donorIndex) => (
                 <DonorResultCard
