@@ -1263,7 +1263,7 @@ function parseGuestbookRow(
     id,
     streamer_id,
     parent_id: getCell(row, getColumnIndex(headers, "parent_id")),
-    author: getCell(row, getColumnIndex(headers, "author")) || "0.0.*.*",
+    author: getCell(row, getColumnIndex(headers, "author")) || "0.0",
     body,
     created_at: getCell(row, getColumnIndex(headers, "created_at")),
     password:

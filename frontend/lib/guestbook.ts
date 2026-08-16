@@ -40,7 +40,7 @@ export function maskIp(ip: string | null) {
   const raw = normalizeClientIp(ip);
 
   if (!raw || raw === "::1" || raw === "::") {
-    return "0.0.*.*";
+    return "0.0";
   }
 
   const v4Mapped = raw.match(/(?:^|:)(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/i);
@@ -75,7 +75,7 @@ function normalizeClientIp(ip: string | null) {
 
 function maskIpv4(ip: string) {
   const parts = ip.split(".");
-  return `${parts[0] || "0"}.${parts[1] || "0"}.*.*`;
+  return `${parts[0] || "0"}.${parts[1] || "0"}`;
 }
 
 function maskIpv6(ip: string) {
@@ -89,7 +89,17 @@ function maskIpv6(ip: string) {
     ...tailParts,
   ];
 
-  return `${parts[0] || "0"}:${parts[1] || "0"}:*:*`;
+  return `${parts[0] || "0"}:${parts[1] || "0"}`;
+}
+
+function formatGuestbookAuthor(author: string) {
+  const value = author.trim();
+
+  if (!value) {
+    return "0.0";
+  }
+
+  return value.replace(/\.\*\.\*$/, "").replace(/:\*:\*$/, "") || "0.0";
 }
 
 export function createGuestbookId() {
@@ -189,7 +199,7 @@ export function toPublicGuestbookPost(
     id: entry.id,
     streamer_id: entry.streamer_id,
     parent_id: entry.parent_id,
-    author: entry.author,
+    author: formatGuestbookAuthor(entry.author),
     body: entry.body,
     created_at: entry.created_at,
     likes,
