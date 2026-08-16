@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { google, sheets_v4 } from "googleapis";
 
 import { FA_CREW_NAME, isFaCrew, withFaCrew } from "./crews";
+import { applyGuestbookVote, type GuestbookVote } from "./guestbook-shared";
 
 export type SheetMember = {
   rowIndex: number;
@@ -51,7 +52,7 @@ const ADMINS_SHEET = "admins";
 const DEFAULT_SHEET_ID = "1w-hCArIqriowgLawxlAwZ1xOmGvGw32ics0ZGRHmwQs";
 const MEMBERS_CACHE_TTL_MS = 45_000;
 const META_CACHE_TTL_MS = 5 * 60_000;
-const GUESTBOOK_CACHE_TTL_MS = 5_000;
+const GUESTBOOK_CACHE_TTL_MS = 0;
 const GUESTBOOK_SHEET = "guestbook";
 const GUESTBOOK_HEADERS = [
   "id",
@@ -60,8 +61,11 @@ const GUESTBOOK_HEADERS = [
   "author",
   "body",
   "created_at",
-  "password_salt",
-  "password_hash",
+  "password",
+  "likes",
+  "dislikes",
+  "like_voters",
+  "dislike_voters",
 ] as const;
 
 type SheetTable = {
@@ -141,6 +145,24 @@ function normalizeHeader(value: string) {
 
 function getColumnIndex(headers: string[], name: string) {
   return headers.findIndex((header) => header === normalizeHeader(name));
+}
+
+function columnA1(index: number) {
+  let n = index + 1;
+  let label = "";
+
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    label = String.fromCharCode(65 + rem) + label;
+    n = Math.floor((n - 1) / 26);
+  }
+
+  return label;
+}
+
+function parseCount(value: string) {
+  const count = Number.parseInt(value, 10);
+  return Number.isFinite(count) && count > 0 ? count : 0;
 }
 
 function getCell(row: string[], index: number) {
@@ -337,10 +359,12 @@ async function getSheetTable(
   sheetName: string,
   ttlMs = MEMBERS_CACHE_TTL_MS,
 ): Promise<SheetTable> {
-  const cached = readCache(sheetCache.tables.get(sheetName));
+  if (ttlMs > 0) {
+    const cached = readCache(sheetCache.tables.get(sheetName));
 
-  if (cached) {
-    return cached;
+    if (cached) {
+      return cached;
+    }
   }
 
   const sheets = getSheetsClient();
@@ -364,7 +388,12 @@ async function getSheetTable(
             .map((row) => row.map((cell) => String(cell ?? ""))),
         };
 
-  sheetCache.tables.set(sheetName, writeCache(table, ttlMs));
+  if (ttlMs > 0) {
+    sheetCache.tables.set(sheetName, writeCache(table, ttlMs));
+  } else {
+    sheetCache.tables.delete(sheetName);
+  }
+
   return table;
 }
 
@@ -1120,8 +1149,12 @@ type SheetGuestbookRow = {
   author: string;
   body: string;
   created_at: string;
+  password: string;
   password_salt: string;
-  password_hash: string;
+  likes: number;
+  dislikes: number;
+  like_voters: string;
+  dislike_voters: string;
 };
 
 async function addSheetTab(title: string) {
@@ -1164,15 +1197,46 @@ async function ensureGuestbookSheet() {
   }
 
   const table = await getSheetTable(sheetName, GUESTBOOK_CACHE_TTL_MS);
+  const sheets = getSheetsClient();
 
   if (table.headers.length === 0) {
-    const sheets = getSheetsClient();
     await sheets.spreadsheets.values.update({
       spreadsheetId: getSheetId(),
-      range: `${sheetName}!A1:H1`,
+      range: `${sheetName}!A1:${columnA1(GUESTBOOK_HEADERS.length - 1)}1`,
       valueInputOption: "USER_ENTERED",
       requestBody: {
         values: [Array.from(GUESTBOOK_HEADERS)],
+      },
+    });
+    invalidateSheetsCache();
+    return sheetName;
+  }
+
+  const headers = [...table.headers];
+  const hashIndex = getColumnIndex(headers, "password_hash");
+
+  if (hashIndex >= 0 && getColumnIndex(headers, "password") < 0) {
+    headers[hashIndex] = "password";
+  }
+
+  const missing = [
+    "likes",
+    "dislikes",
+    "like_voters",
+    "dislike_voters",
+  ].filter((name) => getColumnIndex(headers, name) < 0);
+
+  if (missing.length > 0) {
+    headers.push(...missing);
+  }
+
+  if (headers.join("\n") !== table.headers.join("\n")) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: getSheetId(),
+      range: `${sheetName}!A1:${columnA1(headers.length - 1)}1`,
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [headers],
       },
     });
     invalidateSheetsCache();
@@ -1202,8 +1266,14 @@ function parseGuestbookRow(
     author: getCell(row, getColumnIndex(headers, "author")) || "0.0.*.*",
     body,
     created_at: getCell(row, getColumnIndex(headers, "created_at")),
+    password:
+      getCell(row, getColumnIndex(headers, "password")) ||
+      getCell(row, getColumnIndex(headers, "password_hash")),
     password_salt: getCell(row, getColumnIndex(headers, "password_salt")),
-    password_hash: getCell(row, getColumnIndex(headers, "password_hash")),
+    likes: parseCount(getCell(row, getColumnIndex(headers, "likes"))),
+    dislikes: parseCount(getCell(row, getColumnIndex(headers, "dislikes"))),
+    like_voters: getCell(row, getColumnIndex(headers, "like_voters")),
+    dislike_voters: getCell(row, getColumnIndex(headers, "dislike_voters")),
   };
 }
 
@@ -1230,14 +1300,21 @@ export async function listGuestbookEntries(streamerId?: string) {
 }
 
 export async function listGuestbookSummary() {
-  const latest = new Map<string, string>();
+  const latest = new Map<string, { created_at: string; body: string }>();
 
   for (const entry of await listGuestbookRows()) {
+    if (entry.parent_id) {
+      continue;
+    }
+
     const key = entry.streamer_id.toLowerCase();
     const current = latest.get(key);
 
-    if (!current || entry.created_at > current) {
-      latest.set(key, entry.created_at);
+    if (!current || entry.created_at > current.created_at) {
+      latest.set(key, {
+        created_at: entry.created_at,
+        body: entry.body,
+      });
     }
   }
 
@@ -1263,34 +1340,91 @@ export async function appendGuestbookEntry(input: {
   author: string;
   body: string;
   created_at: string;
-  password_salt: string;
-  password_hash: string;
+  password: string;
 }) {
   const sheetName = await ensureGuestbookSheet();
+  const table = await getSheetTable(sheetName, GUESTBOOK_CACHE_TTL_MS);
+  const headers =
+    table.headers.length > 0 ? table.headers : Array.from(GUESTBOOK_HEADERS);
   const sheets = getSheetsClient();
+  const values = headers.map((header) => {
+    if (header === "id") return input.id;
+    if (header === "streamer_id") return input.streamer_id;
+    if (header === "parent_id") return input.parent_id;
+    if (header === "author") return input.author;
+    if (header === "body") return input.body;
+    if (header === "created_at") return input.created_at;
+    if (header === "password" || header === "password_hash") return input.password;
+    if (header === "likes" || header === "dislikes") return "0";
+    return "";
+  });
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: getSheetId(),
-    range: `${sheetName}!A:H`,
-    valueInputOption: "USER_ENTERED",
+    range: `${sheetName}!A:L`,
+    valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
     requestBody: {
-      values: [
-        [
-          input.id,
-          input.streamer_id,
-          input.parent_id,
-          input.author,
-          input.body,
-          input.created_at,
-          input.password_salt,
-          input.password_hash,
-        ],
-      ],
+      values: [values],
     },
   });
 
   invalidateSheetsCache();
+}
+
+export async function updateGuestbookVote(
+  id: string,
+  voterKey: string,
+  vote: GuestbookVote,
+) {
+  const sheetName = await ensureGuestbookSheet();
+  const table = await getSheetTable(sheetName, GUESTBOOK_CACHE_TTL_MS);
+  const rows = await listGuestbookRows();
+  const target = rows.find((entry) => entry.id === id);
+
+  if (!target) {
+    throw new Error("글을 찾을 수 없습니다.");
+  }
+
+  const next = applyGuestbookVote(target, voterKey, vote);
+  const sheets = getSheetsClient();
+  const data = [
+    ["likes", String(next.likes)],
+    ["dislikes", String(next.dislikes)],
+    ["like_voters", next.like_voters],
+    ["dislike_voters", next.dislike_voters],
+  ]
+    .map(([header, value]) => {
+      const column = getColumnIndex(table.headers, header);
+
+      if (column < 0) {
+        return null;
+      }
+
+      return {
+        range: `${sheetName}!${columnA1(column)}${target.rowIndex}`,
+        values: [[value]],
+      };
+    })
+    .filter((item): item is { range: string; values: string[][] } => item !== null);
+
+  if (data.length === 0) {
+    throw new Error("좋아요 열을 찾을 수 없습니다.");
+  }
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: getSheetId(),
+    requestBody: {
+      valueInputOption: "RAW",
+      data,
+    },
+  });
+
+  invalidateSheetsCache();
+  return {
+    ...target,
+    ...next,
+  };
 }
 
 export async function deleteGuestbookEntries(id: string) {
