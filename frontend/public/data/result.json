@@ -1,8 +1,8 @@
 {
   "project": "naksoo",
-  "created_at": "2026-08-17T20:41:44.111923+09:00",
+  "created_at": "2026-08-17T20:52:07.279765+09:00",
   "created_date": "2026-08-17",
-  "created_time": "20:41:44",
+  "created_time": "20:52:07",
   "timezone": "Asia/Seoul",
   "current_period": {
     "year": 2026,
@@ -12355,7 +12355,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ep/epsthddus/epsthddus.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-15 16:48:19",
+      "broadcast_start": "2026-08-17 20:45:29",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -33853,6 +33853,33 @@
       "success": true
     },
     {
+      "crew_name": "FA",
+      "user_id": "yui0902",
+      "nickname": "원영님♥",
+      "profile_image_url": null,
+      "broadcast_start": null,
+      "is_live": false,
+      "is_password_broadcast": false,
+      "note": "휴직",
+      "is_on_leave": true,
+      "current_month_used_fallback": false,
+      "current_month": {
+        "year": 2026,
+        "month": 8,
+        "total_balloons": 0,
+        "daily_balloons": [],
+        "fans": []
+      },
+      "previous_month": {
+        "year": 2026,
+        "month": 7,
+        "total_balloons": 0,
+        "daily_balloons": [],
+        "fans": []
+      },
+      "success": true
+    },
+    {
       "crew_name": "GD컴퍼니",
       "user_id": "haniiya1004",
       "nickname": "하니야♡",
@@ -54524,9 +54551,9 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/be/bel0204/bel0204.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": null,
-      "is_live": false,
-      "is_password_broadcast": true,
+      "broadcast_start": "2026-08-17 20:25:42",
+      "is_live": true,
+      "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
@@ -55337,33 +55364,6 @@
           }
         ],
         "data_source": "detail"
-      },
-      "success": true
-    },
-    {
-      "crew_name": "광우상사",
-      "user_id": "yui0902",
-      "nickname": "원영님♥",
-      "profile_image_url": null,
-      "broadcast_start": null,
-      "is_live": false,
-      "is_password_broadcast": false,
-      "note": "휴직",
-      "is_on_leave": true,
-      "current_month_used_fallback": false,
-      "current_month": {
-        "year": 2026,
-        "month": 8,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": []
-      },
-      "previous_month": {
-        "year": 2026,
-        "month": 7,
-        "total_balloons": 0,
-        "daily_balloons": [],
-        "fans": []
       },
       "success": true
     },
@@ -76537,7 +76537,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ba/banghyo9724/banghyo9724.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-16 23:05:27",
+      "broadcast_start": "2026-08-17 20:48:31",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -78976,9 +78976,9 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ka/kariveal/kariveal.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-17 17:00:46",
-      "is_live": true,
-      "is_password_broadcast": false,
+      "broadcast_start": null,
+      "is_live": false,
+      "is_password_broadcast": true,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
