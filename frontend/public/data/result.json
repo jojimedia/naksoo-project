@@ -1,8 +1,8 @@
 {
   "project": "naksoo",
-  "created_at": "2026-08-21T13:54:50.926431+09:00",
+  "created_at": "2026-08-21T14:48:41.551904+09:00",
   "created_date": "2026-08-21",
-  "created_time": "13:54:50",
+  "created_time": "14:48:41",
   "timezone": "Asia/Seoul",
   "current_period": {
     "year": 2026,
@@ -8681,7 +8681,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/bo/bombbi/bombbi.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-19 22:46:56",
+      "broadcast_start": "2026-08-21 14:05:38",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -26597,7 +26597,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/yu/yunyeson3015/yunyeson3015.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-20 16:00:57",
+      "broadcast_start": "2026-08-21 14:02:14",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -35684,10 +35684,7 @@
         ],
         "data_source": "detail"
       },
-      "success": true,
-      "is_stale": true,
-      "stale_reason": "poong fallback empty",
-      "stale_source": "github_result"
+      "success": true
     },
     {
       "crew_name": "FA",
@@ -36192,10 +36189,7 @@
         ],
         "data_source": "detail"
       },
-      "success": true,
-      "is_stale": true,
-      "stale_reason": "poong fallback empty",
-      "stale_source": "github_result"
+      "success": true
     },
     {
       "crew_name": "FA",
@@ -36224,10 +36218,7 @@
         "fans": [],
         "data_source": "chart_ranking"
       },
-      "success": true,
-      "is_stale": true,
-      "stale_reason": "poong fallback empty",
-      "stale_source": "github_result"
+      "success": true
     },
     {
       "crew_name": "GD컴퍼니",
@@ -42364,10 +42355,7 @@
         "fans": [],
         "data_source": "chart_ranking"
       },
-      "success": true,
-      "is_stale": true,
-      "stale_reason": "poong fallback empty",
-      "stale_source": "github_result"
+      "success": true
     },
     {
       "crew_name": "GD컴퍼니",
@@ -42648,10 +42636,7 @@
         ],
         "data_source": "detail"
       },
-      "success": true,
-      "is_stale": true,
-      "stale_reason": "poong fallback empty",
-      "stale_source": "github_result"
+      "success": true
     },
     {
       "crew_name": "광우사관학교",
@@ -63268,7 +63253,7 @@
       "current_month": {
         "year": 2026,
         "month": 8,
-        "total_balloons": 121499,
+        "total_balloons": 122077,
         "daily_balloons": [
           {
             "day": 1,
@@ -63352,7 +63337,7 @@
           },
           {
             "day": 21,
-            "balloons": 3200
+            "balloons": 3778
           }
         ],
         "fans": [
@@ -63413,6 +63398,14 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ho/homataeng/homataeng.jpg"
           },
           {
+            "user_id": "etic302",
+            "nickname": "쌤스",
+            "balloons": 3308,
+            "count": 30,
+            "avg_balloons": 110,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/et/etic302/etic302.jpg"
+          },
+          {
             "user_id": "annminwoo",
             "nickname": "[K]꼬이케추",
             "balloons": 3083,
@@ -63427,14 +63420,6 @@
             "count": 13,
             "avg_balloons": 235,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/sp/specialistk/specialistk.jpg"
-          },
-          {
-            "user_id": "etic302",
-            "nickname": "쌤스",
-            "balloons": 2813,
-            "count": 25,
-            "avg_balloons": 112,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/et/etic302/etic302.jpg"
           },
           {
             "user_id": "aable12",
@@ -63469,20 +63454,20 @@
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/27/27joomyung/27joomyung.jpg"
           },
           {
-            "user_id": "hj1201",
-            "nickname": "잠실!",
-            "balloons": 1700,
-            "count": 17,
-            "avg_balloons": 100,
-            "profile_image_url": "https://profile.img.sooplive.com/LOGO/hj/hj1201/hj1201.jpg"
-          },
-          {
             "user_id": "ifreey",
             "nickname": "엄마백원만!",
             "balloons": 1700,
             "count": 8,
             "avg_balloons": 212,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/if/ifreey/ifreey.jpg"
+          },
+          {
+            "user_id": "hj1201",
+            "nickname": "잠실!",
+            "balloons": 1700,
+            "count": 17,
+            "avg_balloons": 100,
+            "profile_image_url": "https://profile.img.sooplive.com/LOGO/hj/hj1201/hj1201.jpg"
           },
           {
             "user_id": "niceaq",
@@ -63575,9 +63560,9 @@
           {
             "user_id": "kobebryant31",
             "nickname": "[댕]클라우드",
-            "balloons": 792,
-            "count": 23,
-            "avg_balloons": 34,
+            "balloons": 875,
+            "count": 25,
+            "avg_balloons": 35,
             "profile_image_url": "https://profile.img.sooplive.com/LOGO/ko/kobebryant31/kobebryant31.jpg"
           },
           {
@@ -82459,10 +82444,7 @@
         ],
         "data_source": "detail"
       },
-      "success": true,
-      "is_stale": true,
-      "stale_reason": "poong fallback empty",
-      "stale_source": "github_result"
+      "success": true
     },
     {
       "crew_name": "정선컴퍼니",
@@ -85444,7 +85426,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ll/lllloq/lllloq.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-20 20:32:27",
+      "broadcast_start": "2026-08-21 14:07:21",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -92373,7 +92355,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/yu/yuyu0929/yuyu0929.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-20 20:02:23",
+      "broadcast_start": "2026-08-21 14:32:36",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
