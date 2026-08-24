@@ -18,6 +18,7 @@ import {
 } from "./live-status-context";
 import StreamerMemberRow from "./streamer-member-row";
 import LiveThumbnailCard from "./live-thumbnail-card";
+import type { ExternalLiveSummary } from "./external-live-summary-modal";
 import {
   getGuestbookPreview,
   hasUnreadGuestbook,
@@ -294,6 +295,25 @@ function normalizeDonorKey(userId: string, nickname: string) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
+}
+
+function getLiveScoreboardSlug(updatedAt: string) {
+  const date = new Date(updatedAt);
+  const datePart = Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(date)
+    : new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+
+  return `광우상사-${datePart}`;
 }
 
 function getScoreTone(value: number) {
@@ -1033,6 +1053,9 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     ReadonlyMap<string, LiveStreamInfo>
   >(() => new Map());
   const [liveStatusFetched, setLiveStatusFetched] = useState(false);
+  const [externalLiveSummary, setExternalLiveSummary] =
+    useState<ExternalLiveSummary | null>(null);
+  const [externalLiveConnection, setExternalLiveConnection] = useState(0);
   const [liveStatsFetched, setLiveStatsFetched] = useState(false);
   const skipLiveStatsFallbackRef = useRef(false);
   const liveTabReady = liveStatusFetched && liveStatsFetched;
@@ -1042,6 +1065,44 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     () => (data.fa_crew ? [...data.crews, data.fa_crew] : data.crews),
     [data.crews, data.fa_crew],
   );
+
+  useEffect(() => {
+    const events = new EventSource("/api/external-live-summary/events");
+
+    function applySnapshot(event: MessageEvent<string>) {
+      try {
+        const snapshot = JSON.parse(event.data) as ExternalLiveSummary;
+        if (snapshot.session?.status === "live") {
+          setExternalLiveSummary(snapshot);
+        }
+      } catch {
+        // Ignore malformed upstream SSE frames and preserve the last snapshot.
+      }
+    }
+
+    events.onmessage = applySnapshot;
+    events.addEventListener("snapshot", (event) => applySnapshot(event as MessageEvent<string>));
+    events.addEventListener("live_summary", (event) => applySnapshot(event as MessageEvent<string>));
+    events.addEventListener("waiting", () => {
+      setExternalLiveSummary(null);
+    });
+    events.addEventListener("broadcast_ended", () => {
+      setExternalLiveSummary(null);
+    });
+    events.onerror = () => {
+      // EventSource reconnects automatically. Keep the most recent valid state.
+    };
+
+    const reconnectTimer = window.setTimeout(() => {
+      events.close();
+      setExternalLiveConnection((current) => current + 1);
+    }, 240_000);
+
+    return () => {
+      window.clearTimeout(reconnectTimer);
+      events.close();
+    };
+  }, [externalLiveConnection]);
   const crews = useMemo(() => {
     // 홈/검색 카드에는 소속 크루만 표시한다. FA는 카드로 넣지 않는다.
     const sourceCrews = data.crews;
@@ -1728,6 +1789,21 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                     membersOnly={isSearching}
                     expandMembers={isSearching}
                     searchQuery={query}
+                    liveSummary={crew.crew_name === "광우상사" ? externalLiveSummary : null}
+                    onOpenLiveSummary={() => {
+                      if (!externalLiveSummary) {
+                        return;
+                      }
+
+                      const slug = encodeURIComponent(
+                        getLiveScoreboardSlug(externalLiveSummary.updatedAt),
+                      );
+                      window.open(
+                        `/live-scoreboard/${slug}`,
+                        "naksoo-live-scoreboard",
+                        "popup=yes,width=560,height=940,resizable=yes,scrollbars=yes",
+                      );
+                    }}
                   />
                 </div>
               ))
