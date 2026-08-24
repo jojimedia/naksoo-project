@@ -18,8 +18,9 @@ export default function MobileCrewCard({
 
   return (
     <section className="w-full min-w-0 overflow-hidden rounded-xl border border-[#3a3548] bg-[#17151f] shadow-sm [overflow-anchor:none] md:hidden">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         className="block w-full cursor-pointer text-left [-webkit-tap-highlight-color:transparent]"
         aria-expanded={shouldShowBody}
         onClick={() => {
@@ -27,9 +28,18 @@ export default function MobileCrewCard({
             setIsOpen((current) => !current);
           }
         }}
+        onKeyDown={(event) => {
+          if (
+            !forceOpen &&
+            (event.key === "Enter" || event.key === " ")
+          ) {
+            event.preventDefault();
+            setIsOpen((current) => !current);
+          }
+        }}
       >
         {header}
-      </button>
+      </div>
       <div
         className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
           shouldShowBody

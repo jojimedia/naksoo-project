@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import MobileCrewCard from "./mobile-crew-card";
 import StreamerMemberRow from "./streamer-member-row";
+import type { ExternalLiveSummary } from "./external-live-summary-modal";
 
 type DailyBalloons = {
   day: number;
@@ -295,18 +296,25 @@ function TrimmedAverageStat({ value }: { value: number }) {
 function CrewCardHeader({
   crew,
   headerColor,
+  liveSummary,
+  onOpenLiveSummary,
 }: {
   crew: CrewCardData;
   headerColor: string;
+  liveSummary?: ExternalLiveSummary | null;
+  onOpenLiveSummary?: () => void;
 }) {
   const style = { "--crew-header": headerColor } as CSSProperties;
 
   return (
     <div className="bg-[var(--crew-header)] p-2.5 text-white" style={style}>
       <div className="mb-1.5 flex items-center justify-between">
-        <h2 className="truncate text-[22px] font-semibold leading-7 text-white">
-          {crew.crew_name}
-        </h2>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h2 className="truncate text-[22px] font-semibold leading-7 text-white">{crew.crew_name}</h2>
+          {liveSummary && onOpenLiveSummary ? (
+            <button type="button" className="shrink-0 rounded border border-white/70 bg-[#dc2626] px-1.5 py-0.5 text-[10px] font-black leading-none shadow-sm animate-pulse" onClick={(event) => { event.stopPropagation(); onOpenLiveSummary(); }} aria-label="광우상사 라이브 점수판 열기">LIVE</button>
+          ) : null}
+        </div>
         <div className="rounded bg-white/20 px-2 py-0.5 text-[10px] font-semibold leading-4 text-white tabular-nums">
           TOP {crew.rank}
         </div>
@@ -558,15 +566,19 @@ export default function CrewCard({
   membersOnly = false,
   expandMembers = false,
   searchQuery = "",
+  liveSummary,
+  onOpenLiveSummary,
 }: {
   crew: CrewCardData;
   index: number;
   membersOnly?: boolean;
   expandMembers?: boolean;
   searchQuery?: string;
+  liveSummary?: ExternalLiveSummary | null;
+  onOpenLiveSummary?: () => void;
 }) {
   const headerColor = getCrewHeaderColor(index);
-  const header = <CrewCardHeader crew={crew} headerColor={headerColor} />;
+  const header = <CrewCardHeader crew={crew} headerColor={headerColor} liveSummary={liveSummary} onOpenLiveSummary={onOpenLiveSummary} />;
   const body = (
     <CrewCardBody
       crew={crew}
