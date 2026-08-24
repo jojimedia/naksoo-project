@@ -1,8 +1,8 @@
 {
   "project": "naksoo",
-  "created_at": "2026-08-24T19:04:23.900869+09:00",
+  "created_at": "2026-08-24T19:54:02.585871+09:00",
   "created_date": "2026-08-24",
-  "created_time": "19:04:23",
+  "created_time": "19:54:02",
   "timezone": "Asia/Seoul",
   "current_period": {
     "year": 2026,
@@ -56260,9 +56260,9 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/ia/iamhaum/iamhaum.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": null,
-      "is_live": false,
-      "is_password_broadcast": true,
+      "broadcast_start": "2026-08-24 18:04:28",
+      "is_live": true,
+      "is_password_broadcast": false,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
@@ -74243,7 +74243,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/aa/aay2014/aay2014.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-23 19:10:43",
+      "broadcast_start": "2026-08-24 19:10:22",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -75197,7 +75197,7 @@
       "current_month": {
         "year": 2026,
         "month": 8,
-        "total_balloons": 192718,
+        "total_balloons": 192719,
         "daily_balloons": [
           {
             "day": 1,
@@ -75293,7 +75293,7 @@
           },
           {
             "day": 24,
-            "balloons": 0
+            "balloons": 1
           }
         ],
         "fans": [
@@ -81477,7 +81477,7 @@
           },
           {
             "user_id": "teness0022",
-            "nickname": "멍,",
+            "nickname": "알바,",
             "balloons": 1056,
             "count": 11,
             "avg_balloons": 96,
