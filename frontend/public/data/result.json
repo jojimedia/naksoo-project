@@ -1,8 +1,8 @@
 {
   "project": "naksoo",
-  "created_at": "2026-08-25T16:08:19.051716+09:00",
+  "created_at": "2026-08-25T16:58:24.408609+09:00",
   "created_date": "2026-08-25",
-  "created_time": "16:08:19",
+  "created_time": "16:58:24",
   "timezone": "Asia/Seoul",
   "current_period": {
     "year": 2026,
@@ -57691,7 +57691,7 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/mi/miso0309xx/miso0309xx.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-24 16:28:59",
+      "broadcast_start": "2026-08-25 16:44:00",
       "is_live": true,
       "is_password_broadcast": false,
       "current_month_used_fallback": false,
@@ -85258,9 +85258,9 @@
       "profile_image_url": "https://profile.img.sooplive.com/LOGO/wh/whdbstn7/whdbstn7.jpg",
       "note": "",
       "is_on_leave": false,
-      "broadcast_start": "2026-08-24 23:47:49",
-      "is_live": true,
-      "is_password_broadcast": false,
+      "broadcast_start": null,
+      "is_live": false,
+      "is_password_broadcast": true,
       "current_month_used_fallback": false,
       "current_month": {
         "year": 2026,
