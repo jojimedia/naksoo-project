@@ -1,9 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-
-import { useIsLive, useLiveInfo } from "./live-status-context";
+import { useState } from "react";
 import FaGuestbookPanel from "./fa-guestbook-panel";
 import type { GuestbookPost, GuestbookPreview } from "@/lib/guestbook-shared";
 
@@ -125,207 +122,6 @@ function FanRow({ fan }: { fan: Fan }) {
         {formatNumber(fan.balloons)}
       </p>
     </div>
-  );
-}
-
-function LiveBadge({
-  userId,
-  nickname,
-  thumbnailUrl,
-  title,
-  viewerCount,
-}: {
-  userId: string;
-  nickname: string;
-  thumbnailUrl: string | null;
-  title: string | null;
-  viewerCount: number | null;
-}) {
-  const streamUrl = `https://play.sooplive.co.kr/${encodeURIComponent(userId)}`;
-  const badgeRef = useRef<HTMLAnchorElement>(null);
-  const previewRef = useRef<HTMLAnchorElement>(null);
-  const closeTimerRef = useRef<number | null>(null);
-  const [preview, setPreview] = useState<{
-    top: number;
-    left: number;
-    src: string;
-  } | null>(null);
-
-  function clearCloseTimer() {
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }
-
-  function hidePreview() {
-    clearCloseTimer();
-    setPreview(null);
-  }
-
-  function scheduleHidePreview() {
-    clearCloseTimer();
-    closeTimerRef.current = window.setTimeout(() => {
-      setPreview(null);
-      closeTimerRef.current = null;
-    }, 120);
-  }
-
-  function openPreview() {
-    if (!thumbnailUrl || !badgeRef.current) {
-      return;
-    }
-
-    clearCloseTimer();
-    const rect = badgeRef.current.getBoundingClientRect();
-    const previewHeight = title || viewerCount != null ? 188 : 132;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const top =
-      spaceBelow < previewHeight && rect.top > previewHeight
-        ? rect.top - previewHeight - 8
-        : rect.bottom + 8;
-    const left = Math.min(
-      Math.max(rect.left + rect.width / 2, 118),
-      window.innerWidth - 118,
-    );
-
-    setPreview({
-      top,
-      left,
-      src: `${thumbnailUrl}?t=${Date.now()}`,
-    });
-  }
-
-  function supportsHoverPreview() {
-    return (
-      typeof window !== "undefined" &&
-      window.matchMedia("(hover: hover) and (pointer: fine)").matches
-    );
-  }
-
-  useEffect(() => {
-    if (!preview) {
-      return;
-    }
-
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node | null;
-
-      if (
-        badgeRef.current?.contains(target) ||
-        previewRef.current?.contains(target)
-      ) {
-        return;
-      }
-
-      hidePreview();
-    }
-
-    function handleViewportChange() {
-      hidePreview();
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("scroll", handleViewportChange, true);
-    window.addEventListener("resize", handleViewportChange);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("scroll", handleViewportChange, true);
-      window.removeEventListener("resize", handleViewportChange);
-    };
-  }, [preview]);
-
-  useEffect(() => {
-    return () => clearCloseTimer();
-  }, []);
-
-  return (
-    <>
-      <a
-        ref={badgeRef}
-        href={streamUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex shrink-0 items-center rounded border border-white/85 px-1 py-px text-[9px] font-semibold leading-none tracking-wide text-white/90 no-underline hover:bg-white/10"
-        aria-label={`${nickname} 라이브 미리보기`}
-        aria-expanded={Boolean(preview)}
-        onClick={(event) => {
-          if (!thumbnailUrl) {
-            return;
-          }
-
-          // 모바일/터치: 첫 탭은 프리뷰, 두 번째 탭(뱃지)은 닫기.
-          // 데스크톱 호버는 유지하고, 클릭해도 방송으로 바로 가지 않게 한다.
-          event.preventDefault();
-
-          if (preview) {
-            hidePreview();
-            return;
-          }
-
-          openPreview();
-        }}
-        onMouseEnter={() => {
-          if (supportsHoverPreview()) {
-            openPreview();
-          }
-        }}
-        onMouseLeave={() => {
-          if (supportsHoverPreview()) {
-            scheduleHidePreview();
-          }
-        }}
-      >
-        LIVE
-      </a>
-      {preview
-        ? createPortal(
-            <a
-              ref={previewRef}
-              href={streamUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="fixed z-[80] w-[220px] -translate-x-1/2 overflow-hidden rounded-lg border border-[#4b455c] bg-[#17151f] shadow-xl shadow-black/50 no-underline outline-none focus-visible:ring-2 focus-visible:ring-[#a99cff]"
-              style={{ top: preview.top, left: preview.left }}
-              aria-label={`${nickname} 방송 보기`}
-              onMouseEnter={() => {
-                if (supportsHoverPreview()) {
-                  clearCloseTimer();
-                }
-              }}
-              onMouseLeave={() => {
-                if (supportsHoverPreview()) {
-                  scheduleHidePreview();
-                }
-              }}
-              onClick={() => {
-                hidePreview();
-              }}
-            >
-              <div className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={preview.src}
-                  alt={`${nickname} 라이브 썸네일`}
-                  className="aspect-video w-full bg-[#111018] object-cover"
-                />
-                {viewerCount != null ? (
-                  <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
-                    {formatNumber(viewerCount)}명
-                  </span>
-                ) : null}
-              </div>
-              {title ? (
-                <p className="line-clamp-2 px-2 py-1.5 text-[11px] font-semibold leading-snug text-[#e5e7eb]">
-                  {title}
-                </p>
-              ) : null}
-            </a>,
-            document.body,
-          )
-        : null}
-    </>
   );
 }
 
@@ -464,10 +260,7 @@ export default function StreamerMemberRow({
 }) {
   const [isManuallyOpen, setIsManuallyOpen] = useState(false);
   const [isGuestbookOpen, setIsGuestbookOpen] = useState(false);
-  const isLive = useIsLive(member.user_id);
-  const liveInfo = useLiveInfo(member.user_id);
   const isOnLeave = member.is_on_leave === true;
-  const showLive = !isOnLeave && isLive;
   const isFanOpen = !isOnLeave && (defaultOpen || isManuallyOpen);
   const panelFans = fansOverride ?? member.monthly_top_fans;
   const panelTodayBalloons =
@@ -548,7 +341,7 @@ export default function StreamerMemberRow({
               type="button"
               className={`min-w-0 truncate text-left font-semibold hover:underline hover:decoration-current hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff] ${tone.name}`}
               aria-expanded={isFanOpen}
-              aria-label={`${member.nickname}${showLive ? " 방송중" : ""} 이달의 후원자 ${isFanOpen ? "접기" : "열기"}`}
+              aria-label={`${member.nickname} 이달의 후원자 ${isFanOpen ? "접기" : "열기"}`}
               onClick={(event) => {
                 event.stopPropagation();
                 toggleFans();
@@ -559,20 +352,6 @@ export default function StreamerMemberRow({
             {hasNewGuestbook && !guestbookEnabled ? (
               <span className="shrink-0 rounded bg-[#ef4444] px-1 py-px text-[9px] font-black leading-none tracking-wide text-white">
                 NEW
-              </span>
-            ) : null}
-            {showLive ? (
-              <span
-                className="shrink-0"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <LiveBadge
-                  userId={member.user_id}
-                  nickname={member.nickname}
-                  thumbnailUrl={liveInfo?.thumbnailUrl ?? null}
-                  title={liveInfo?.title ?? null}
-                  viewerCount={liveInfo?.viewerCount ?? null}
-                />
               </span>
             ) : null}
           </div>

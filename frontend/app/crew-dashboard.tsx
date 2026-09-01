@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLoginModal from "./admin-login-modal";
 import AdminPanelModal from "./admin-panel-modal";
 import MemberRequestModal from "./member-request-modal";
@@ -11,14 +11,7 @@ import CrewCard, {
   getCrewHeaderColor,
   type CrewCardData,
 } from "./crew-card";
-import {
-  LiveClockProvider,
-  LiveStatusProvider,
-  type LiveStreamInfo,
-} from "./live-status-context";
 import StreamerMemberRow from "./streamer-member-row";
-import LiveThumbnailCard from "./live-thumbnail-card";
-import type { ExternalLiveSummary } from "./external-live-summary-modal";
 import {
   getGuestbookPreview,
   hasUnreadGuestbook,
@@ -60,212 +53,6 @@ type OverallMember = {
   member: CrewCardData["members"][number];
 };
 
-type LiveBroadcastPanel = {
-  day_balloons: number;
-  source: "bcraping" | "poongtu";
-  donors: Array<{
-    rank: number;
-    user_id: string;
-    nickname: string;
-    balloons: number;
-  }>;
-};
-
-type LiveStatusPayloadEntry = {
-  user_id?: string;
-  thumbnail_url?: string | null;
-  title?: string | null;
-  viewer_count?: number | null;
-  broad_no?: number | null;
-  broad_start_ms?: number | null;
-};
-
-function toLiveStreamInfo(entry: LiveStatusPayloadEntry): LiveStreamInfo {
-  const viewerCount = Number(entry.viewer_count);
-  const broadStartMs = entry.broad_start_ms;
-
-  return {
-    thumbnailUrl: entry.thumbnail_url ?? null,
-    title: entry.title ?? null,
-    viewerCount: Number.isFinite(viewerCount) ? viewerCount : null,
-    broadNo: Number(entry.broad_no) > 0 ? Number(entry.broad_no) : null,
-    broadStartMs:
-      typeof broadStartMs === "number" &&
-      Number.isFinite(broadStartMs) &&
-      broadStartMs > 0
-        ? broadStartMs
-        : null,
-  };
-}
-
-type LiveStatsPayloadEntry = {
-  user_id?: string;
-  day_balloons?: number;
-  source?: "bcraping" | "poongtu";
-  donors?: Array<{
-    user_id?: string;
-    nickname?: string;
-    balloons?: number;
-  }>;
-};
-
-function getActiveUserIds(crews: CrewCardData[]) {
-  return crews.flatMap((crew) =>
-    crew.members
-      .filter((member) => !member.is_on_leave)
-      .map((member) => member.user_id),
-  );
-}
-
-function parseLiveStatusMap(entries: LiveStatusPayloadEntry[] | undefined) {
-  const next = new Map<string, LiveStreamInfo>();
-
-  for (const entry of entries ?? []) {
-    const userId = entry.user_id?.trim().toLowerCase();
-
-    if (!userId) {
-      continue;
-    }
-
-    next.set(userId, toLiveStreamInfo(entry));
-  }
-
-  return next;
-}
-
-function parseLiveStatsMap(entries: LiveStatsPayloadEntry[] | undefined) {
-  const next = new Map<string, LiveBroadcastPanel>();
-
-  for (const entry of entries ?? []) {
-    const userId = entry.user_id?.trim().toLowerCase();
-
-    if (!userId) {
-      continue;
-    }
-
-    const donors = (entry.donors ?? []).map((donor, index) => ({
-      rank: index + 1,
-      user_id: donor.user_id?.trim().toLowerCase() || "",
-      nickname: donor.nickname?.trim() || donor.user_id?.trim() || "",
-      balloons: Number(donor.balloons) || 0,
-    }));
-
-    next.set(userId, {
-      day_balloons: Number(entry.day_balloons) || 0,
-      source: entry.source === "bcraping" ? "bcraping" : "poongtu",
-      donors,
-    });
-  }
-
-  return next;
-}
-
-function mergeLiveBroadcastStats(
-  current: ReadonlyMap<string, LiveBroadcastPanel>,
-  nextLive: ReadonlyMap<string, LiveStreamInfo>,
-  nextStats: ReadonlyMap<string, LiveBroadcastPanel>,
-) {
-  const merged = new Map(current);
-
-  for (const [userId, panel] of nextStats) {
-    merged.set(userId, panel);
-  }
-
-  for (const userId of merged.keys()) {
-    if (!nextLive.has(userId)) {
-      merged.delete(userId);
-    }
-  }
-
-  return merged;
-}
-
-async function requestLiveStatusMap(
-  userIds: string[],
-  signal: AbortSignal,
-) {
-  const response = await fetch("/api/live-status", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ user_ids: userIds }),
-    signal,
-  });
-  const payload = (await response.json()) as {
-    live?: LiveStatusPayloadEntry[];
-  };
-
-  if (!response.ok) {
-    throw new Error("live-status");
-  }
-
-  return parseLiveStatusMap(payload.live);
-}
-
-async function requestLiveStatsMap(
-  nextLive: ReadonlyMap<string, LiveStreamInfo>,
-  skipFallback: boolean,
-  signal: AbortSignal,
-) {
-  const liveIds = Array.from(nextLive.keys());
-
-  if (liveIds.length === 0) {
-    return new Map<string, LiveBroadcastPanel>();
-  }
-
-  const response = await fetch("/api/live-stats", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      streams: liveIds.map((userId) => ({
-        user_id: userId,
-        station_id: nextLive.get(userId)?.broadNo ?? null,
-      })),
-      skip_fallback: skipFallback,
-    }),
-    signal,
-  });
-  const payload = (await response.json()) as {
-    stats?: LiveStatsPayloadEntry[];
-  };
-
-  if (!response.ok) {
-    throw new Error("live-stats");
-  }
-
-  return parseLiveStatsMap(payload.stats);
-}
-
-const LIVE_CREW_FILTER_KEY = "naksoo_live_crew_filter";
-
-function readStoredLiveCrew() {
-  try {
-    const value = window.localStorage.getItem(LIVE_CREW_FILTER_KEY)?.trim();
-    return value || null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredLiveCrew(crewName: string) {
-  try {
-    window.localStorage.setItem(LIVE_CREW_FILTER_KEY, crewName);
-  } catch {
-    // private mode or quota — keep the in-memory selection
-  }
-}
-
-function clearStoredLiveCrew() {
-  try {
-    window.localStorage.removeItem(LIVE_CREW_FILTER_KEY);
-  } catch {
-    // ignore
-  }
-}
-
 type UpdateStatus = {
   label: string;
   className: string;
@@ -295,25 +82,6 @@ function normalizeDonorKey(userId: string, nickname: string) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
-}
-
-function getLiveScoreboardSlug(updatedAt: string) {
-  const date = new Date(updatedAt);
-  const datePart = Number.isFinite(date.getTime())
-    ? new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Seoul",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(date)
-    : new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Seoul",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date());
-
-  return `광우상사-${datePart}`;
 }
 
 function getScoreTone(value: number) {
@@ -784,135 +552,6 @@ function PeriodRankingCard({
   );
 }
 
-function LiveRankingCard({
-  rows,
-  liveBroadcastByUserId,
-  filterMode,
-  onFilterModeChange,
-  crewFilter,
-  onCrewFilterChange,
-  crewOptions,
-  updatedAt,
-  loading,
-}: {
-  rows: OverallMember[];
-  liveBroadcastByUserId: ReadonlyMap<string, LiveBroadcastPanel>;
-  filterMode: "all" | "crew";
-  onFilterModeChange: (mode: "all" | "crew") => void;
-  crewFilter: string | null;
-  onCrewFilterChange: (crewName: string) => void;
-  crewOptions: Array<{ name: string; color: string; liveCount: number }>;
-  updatedAt: Date | null;
-  loading: boolean;
-}) {
-  return (
-    <section className="w-full">
-      <div className="mb-3 rounded-xl border border-[#3a3548] bg-[#DC2626] p-3 text-white shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-            <h2 className="text-[23px] font-semibold leading-7">LIVE</h2>
-            {updatedAt && !loading ? (
-              <p className="text-[11px] font-medium text-white/80">
-                {updatedAt.toLocaleTimeString("ko-KR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                  hourCycle: "h23",
-                })}{" "}
-                갱신
-              </p>
-            ) : null}
-            <div className="inline-flex rounded-full bg-black/15 p-0.5">
-              <button
-                type="button"
-                className={`rounded-full px-3 py-1 text-[12px] font-semibold transition ${
-                  filterMode === "all"
-                    ? "bg-white/20 text-white"
-                    : "text-white/75 hover:text-white"
-                }`}
-                aria-pressed={filterMode === "all"}
-                onClick={() => onFilterModeChange("all")}
-              >
-                전체
-              </button>
-              <button
-                type="button"
-                className={`rounded-full px-3 py-1 text-[12px] font-semibold transition ${
-                  filterMode === "crew"
-                    ? "bg-white/20 text-white"
-                    : "text-white/75 hover:text-white"
-                }`}
-                aria-pressed={filterMode === "crew"}
-                onClick={() => onFilterModeChange("crew")}
-              >
-                크루별
-              </button>
-            </div>
-          </div>
-          <p className="shrink-0 rounded bg-black/10 px-2.5 py-1.5 text-[12px] font-bold">
-            {loading ? "로딩중" : `${rows.length}명`}
-          </p>
-        </div>
-
-        {filterMode === "crew" && !loading ? (
-          <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-white/15 pt-2.5">
-            {crewOptions.map((crew) => (
-              <button
-                key={crew.name}
-                type="button"
-                className={`rounded-full px-2.5 py-1 text-[12px] font-semibold transition ${
-                  crewFilter === crew.name
-                    ? "ring-2 ring-white/80 ring-offset-1 ring-offset-[#DC2626]"
-                    : "opacity-90 hover:opacity-100"
-                }`}
-                style={{ backgroundColor: crew.color }}
-                aria-pressed={crewFilter === crew.name}
-                onClick={() => onCrewFilterChange(crew.name)}
-              >
-                {crew.name} ({crew.liveCount})
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {loading ? (
-        <p className="rounded-xl border border-[#3a3548] bg-[#211e2b] px-3 py-10 text-center text-sm font-bold text-[#a8a2b8]">
-          로딩중
-        </p>
-      ) : rows.length > 0 ? (
-        <LiveClockProvider>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {rows.map((row) => {
-              const userId = row.member.user_id.toLowerCase();
-              const broadcast = liveBroadcastByUserId.get(userId);
-              const isBcraping = broadcast?.source === "bcraping";
-
-              return (
-                <LiveThumbnailCard
-                  key={`${row.crewName}-${row.member.user_id}`}
-                  member={row.member}
-                  crewName={row.crewName}
-                  crewColor={row.crewColor}
-                  broadcastBalloons={isBcraping ? broadcast.day_balloons : 0}
-                  donors={isBcraping ? broadcast.donors : []}
-                  liveBroadcastMode
-                />
-              );
-            })}
-          </div>
-        </LiveClockProvider>
-      ) : (
-        <p className="rounded-xl border border-[#3a3548] bg-[#211e2b] px-3 py-10 text-center text-sm font-bold text-[#a8a2b8]">
-          {filterMode === "crew" && !crewFilter
-            ? "크루를 선택해 주세요."
-            : "라이브 중인 스트리머가 없습니다."}
-        </p>
-      )}
-    </section>
-  );
-}
-
 const EMPTY_GUESTBOOK_POSTS: GuestbookPost[] = [];
 
 function FaRankingCard({
@@ -1036,29 +675,10 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [showOverall, setShowOverall] = useState(false);
   const [showKings, setShowKings] = useState(false);
   const [showFa, setShowFa] = useState(false);
-  const [showLive, setShowLive] = useState(false);
-  const [liveFilterMode, setLiveFilterMode] = useState<"all" | "crew">("all");
-  const [liveCrewFilter, setLiveCrewFilter] = useState<string | null>(null);
-  const [liveBroadcastByUserId, setLiveBroadcastByUserId] = useState<
-    ReadonlyMap<string, LiveBroadcastPanel>
-  >(() => new Map());
-  const [liveStatsUpdatedAt, setLiveStatsUpdatedAt] = useState<Date | null>(
-    null,
-  );
   const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showMemberRequestModal, setShowMemberRequestModal] = useState(false);
-  const [liveByUserId, setLiveByUserId] = useState<
-    ReadonlyMap<string, LiveStreamInfo>
-  >(() => new Map());
-  const [liveStatusFetched, setLiveStatusFetched] = useState(false);
-  const [externalLiveSummary, setExternalLiveSummary] =
-    useState<ExternalLiveSummary | null>(null);
-  const [externalLiveConnection, setExternalLiveConnection] = useState(0);
-  const [liveStatsFetched, setLiveStatsFetched] = useState(false);
-  const skipLiveStatsFallbackRef = useRef(false);
-  const liveTabReady = liveStatusFetched && liveStatsFetched;
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const rankingCrews = useMemo(
@@ -1066,43 +686,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     [data.crews, data.fa_crew],
   );
 
-  useEffect(() => {
-    const events = new EventSource("/api/external-live-summary/events");
-
-    function applySnapshot(event: MessageEvent<string>) {
-      try {
-        const snapshot = JSON.parse(event.data) as ExternalLiveSummary;
-        if (snapshot.session?.status === "live") {
-          setExternalLiveSummary(snapshot);
-        }
-      } catch {
-        // Ignore malformed upstream SSE frames and preserve the last snapshot.
-      }
-    }
-
-    events.onmessage = applySnapshot;
-    events.addEventListener("snapshot", (event) => applySnapshot(event as MessageEvent<string>));
-    events.addEventListener("live_summary", (event) => applySnapshot(event as MessageEvent<string>));
-    events.addEventListener("waiting", () => {
-      setExternalLiveSummary(null);
-    });
-    events.addEventListener("broadcast_ended", () => {
-      setExternalLiveSummary(null);
-    });
-    events.onerror = () => {
-      // EventSource reconnects automatically. Keep the most recent valid state.
-    };
-
-    const reconnectTimer = window.setTimeout(() => {
-      events.close();
-      setExternalLiveConnection((current) => current + 1);
-    }, 240_000);
-
-    return () => {
-      window.clearTimeout(reconnectTimer);
-      events.close();
-    };
-  }, [externalLiveConnection]);
   const crews = useMemo(() => {
     // 홈/검색 카드에는 소속 크루만 표시한다. FA는 카드로 넣지 않는다.
     const sourceCrews = data.crews;
@@ -1167,7 +750,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       }));
   }, [data.fa_crew]);
   const hasResults =
-    (showOverall || showKings || showFa || showLive) && !isSearching
+    (showOverall || showKings || showFa) && !isSearching
       ? true
       : searchMode === "donors" && isSearching
         ? donorResults.length > 0
@@ -1202,131 +785,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     [rankingCrews],
   );
 
-  const liveRows = useMemo(
-    () =>
-      rankingCrews
-        .flatMap((crew, crewIndex) =>
-          crew.members
-            .filter((member) => !member.is_on_leave)
-            .filter((member) =>
-              liveByUserId.has(member.user_id.toLowerCase()),
-            )
-            .map((member) => {
-              const userId = member.user_id.toLowerCase();
-              const broadcast = liveBroadcastByUserId.get(userId);
-
-              return {
-                crewName: isFaCrew(crew.crew_name)
-                  ? FA_CREW_NAME
-                  : crew.crew_name,
-                crewColor: isFaCrew(crew.crew_name)
-                  ? "#0F766E"
-                  : getCrewHeaderColor(crewIndex),
-                member: {
-                  ...member,
-                  display_day_balloons:
-                    broadcast?.source === "bcraping"
-                      ? broadcast.day_balloons
-                      : 0,
-                },
-              };
-            }),
-        )
-        .sort((a, b) => {
-          const scoreDiff =
-            b.member.display_day_balloons - a.member.display_day_balloons;
-
-          if (scoreDiff !== 0) {
-            return scoreDiff;
-          }
-
-          const aViewers =
-            liveByUserId.get(a.member.user_id.toLowerCase())?.viewerCount ?? 0;
-          const bViewers =
-            liveByUserId.get(b.member.user_id.toLowerCase())?.viewerCount ?? 0;
-
-          return bViewers - aViewers;
-        })
-        .map((row, index) => ({
-          ...row,
-          member: {
-            ...row.member,
-            rank: index + 1,
-          },
-        })),
-    [rankingCrews, liveByUserId, liveBroadcastByUserId],
-  );
-
-  const liveCrewOptions = useMemo(() => {
-    const liveCountByCrew = new Map<string, number>();
-
-    for (const row of liveRows) {
-      liveCountByCrew.set(
-        row.crewName,
-        (liveCountByCrew.get(row.crewName) ?? 0) + 1,
-      );
-    }
-
-    const options = data.crews.map((crew, index) => ({
-      name: crew.crew_name,
-      color: getCrewHeaderColor(index),
-      liveCount: liveCountByCrew.get(crew.crew_name) ?? 0,
-    }));
-
-    if (data.fa_crew) {
-      options.push({
-        name: FA_CREW_NAME,
-        color: "#0F766E",
-        liveCount: liveCountByCrew.get(FA_CREW_NAME) ?? 0,
-      });
-    }
-
-    return options;
-  }, [data.crews, data.fa_crew, liveRows]);
-
-  useEffect(() => {
-    const saved = readStoredLiveCrew();
-
-    if (!saved) {
-      return;
-    }
-
-    setLiveCrewFilter(saved);
-  }, []);
-
-  useEffect(() => {
-    if (!liveCrewFilter) {
-      return;
-    }
-
-    const exists = liveCrewOptions.some((crew) => crew.name === liveCrewFilter);
-
-    if (!exists) {
-      setLiveCrewFilter(null);
-      clearStoredLiveCrew();
-    }
-  }, [liveCrewFilter, liveCrewOptions]);
-
-  const filteredLiveRows = useMemo(() => {
-    let rows = liveRows;
-
-    if (liveFilterMode === "crew") {
-      if (!liveCrewFilter) {
-        rows = [];
-      } else {
-        rows = liveRows.filter((row) => row.crewName === liveCrewFilter);
-      }
-    }
-
-    return rows.map((row, index) => ({
-      ...row,
-      member: {
-        ...row.member,
-        rank: index + 1,
-      },
-    }));
-  }, [liveRows, liveFilterMode, liveCrewFilter]);
-
   useEffect(() => {
     async function loadSession() {
       try {
@@ -1351,153 +809,12 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     void loadSession();
   }, []);
 
-  useEffect(() => {
-    const userIds = getActiveUserIds(rankingCrews);
-
-    if (userIds.length === 0) {
-      setLiveByUserId(new Map());
-      setLiveBroadcastByUserId(new Map());
-      setLiveStatusFetched(true);
-      setLiveStatsFetched(true);
-      return;
-    }
-
-    const controller = new AbortController();
-    let cancelled = false;
-
-    async function bootstrapLive() {
-      try {
-        const nextLive = await requestLiveStatusMap(userIds, controller.signal);
-
-        if (cancelled) {
-          return;
-        }
-
-        setLiveByUserId(nextLive);
-        setLiveStatusFetched(true);
-
-        const nextStats = await requestLiveStatsMap(
-          nextLive,
-          skipLiveStatsFallbackRef.current,
-          controller.signal,
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        skipLiveStatsFallbackRef.current = true;
-        setLiveBroadcastByUserId((current) =>
-          mergeLiveBroadcastStats(current, nextLive, nextStats),
-        );
-        setLiveStatsUpdatedAt(new Date());
-        setLiveStatsFetched(true);
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-
-        setLiveStatusFetched(true);
-        setLiveStatsFetched(true);
-      }
-    }
-
-    void bootstrapLive();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [rankingCrews]);
-
-  useEffect(() => {
-    if (!showLive) {
-      return;
-    }
-
-    const userIds = getActiveUserIds(rankingCrews);
-
-    if (userIds.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-    let inFlight = false;
-    let timerId = 0;
-    const pollController = { current: new AbortController() };
-
-    async function refreshLiveTab() {
-      if (cancelled || inFlight) {
-        return;
-      }
-
-      inFlight = true;
-      pollController.current.abort();
-      const controller = new AbortController();
-      pollController.current = controller;
-
-      try {
-        const nextLive = await requestLiveStatusMap(userIds, controller.signal);
-
-        if (cancelled) {
-          return;
-        }
-
-        const nextStats = await requestLiveStatsMap(
-          nextLive,
-          skipLiveStatsFallbackRef.current,
-          controller.signal,
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        skipLiveStatsFallbackRef.current = true;
-        setLiveBroadcastByUserId((current) =>
-          mergeLiveBroadcastStats(current, nextLive, nextStats),
-        );
-        setLiveByUserId(nextLive);
-        setLiveStatsUpdatedAt(new Date());
-        setLiveStatusFetched(true);
-        setLiveStatsFetched(true);
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-
-        setLiveStatusFetched(true);
-        setLiveStatsFetched(true);
-      } finally {
-        inFlight = false;
-
-        if (!cancelled) {
-          timerId = window.setTimeout(() => {
-            void refreshLiveTab();
-          }, 20_000);
-        }
-      }
-    }
-
-    timerId = window.setTimeout(() => {
-      void refreshLiveTab();
-    }, 20_000);
-
-    return () => {
-      cancelled = true;
-      pollController.current.abort();
-      window.clearTimeout(timerId);
-    };
-  }, [showLive, rankingCrews]);
-
   function resetToHome() {
     setQuery("");
     setSearchMode("members");
     setShowOverall(false);
     setShowKings(false);
     setShowFa(false);
-    setShowLive(false);
-    setLiveFilterMode("all");
     setShowLoginModal(false);
     setShowAdminPanel(false);
     setShowMemberRequestModal(false);
@@ -1513,7 +830,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   }
 
   return (
-    <LiveStatusProvider liveByUserId={liveByUserId}>
     <main className="min-h-screen bg-[#111018] bg-[radial-gradient(#2b2836_1px,transparent_1px)] bg-[length:20px_20px] text-[#e5e7eb]">
       <header className="sticky top-0 z-40 w-full border-b border-[#3a3548] bg-[#111018]/95 backdrop-blur">
         <div className="mx-auto grid min-h-16 w-full max-w-[1920px] grid-cols-1 items-center gap-2 px-3 py-2 md:grid-cols-[minmax(240px,1fr)_minmax(420px,720px)_minmax(240px,1fr)] md:px-8">
@@ -1567,7 +883,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   !showOverall &&
                   !showKings &&
                   !showFa &&
-                  !showLive &&
                   searchMode === "members"
                     ? "bg-[#5b4bdb] text-white"
                     : "text-[#a8a2b8] hover:text-[#d8d4ff]"
@@ -1576,7 +891,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   setShowOverall(false);
                   setShowKings(false);
                   setShowFa(false);
-                  setShowLive(false);
                   setSearchMode("members");
                 }}
               >
@@ -1588,7 +902,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   showKings ||
                   (!showOverall &&
                     !showFa &&
-                    !showLive &&
                     searchMode === "donors")
                     ? "bg-[#5b4bdb] text-white"
                     : "text-[#a8a2b8] hover:text-[#d8d4ff]"
@@ -1598,7 +911,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   setQuery("");
                   setShowOverall(false);
                   setShowFa(false);
-                  setShowLive(false);
                   setShowKings(true);
                   setSearchMode("donors");
                 }}
@@ -1617,7 +929,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   setQuery("");
                   setShowOverall(false);
                   setShowKings(false);
-                  setShowLive(false);
                   setShowFa(true);
                   setSearchMode("members");
                 }}
@@ -1636,31 +947,10 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   setQuery("");
                   setShowKings(false);
                   setShowFa(false);
-                  setShowLive(false);
                   setShowOverall((current) => !current);
                 }}
               >
                 전체
-              </button>
-              <button
-                type="button"
-                className={`rounded-full px-2.5 py-1.5 text-[12px] font-semibold transition md:px-4 md:text-sm ${
-                  showLive
-                    ? "bg-[#DC2626] text-white"
-                    : "text-[#a8a2b8] hover:text-[#d8d4ff]"
-                }`}
-                aria-pressed={showLive}
-                onClick={() => {
-                  setQuery("");
-                  setShowOverall(false);
-                  setShowKings(false);
-                  setShowFa(false);
-                  setLiveFilterMode("all");
-                  setShowLive(true);
-                  setSearchMode("members");
-                }}
-              >
-                LIVE
               </button>
             </div>
           </div>
@@ -1739,9 +1029,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         {hasResults ? (
           <div
             className={`mx-auto gap-3 ${
-              showLive && !isSearching
-                ? "flex w-full max-w-[1600px] flex-col items-stretch"
-                : showFa && !isSearching
+              showFa && !isSearching
                   ? "flex w-full min-w-0 max-w-[760px] flex-col items-center"
                   : isSearching || showOverall || showKings
                     ? "flex max-w-[520px] flex-col items-center"
@@ -1750,21 +1038,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           >
             {showOverall && !isSearching ? (
               <OverallRankingCard rows={overallRows} />
-            ) : showLive && !isSearching ? (
-              <LiveRankingCard
-                rows={filteredLiveRows}
-                liveBroadcastByUserId={liveBroadcastByUserId}
-                updatedAt={liveStatsUpdatedAt}
-                loading={!liveTabReady}
-                filterMode={liveFilterMode}
-                onFilterModeChange={setLiveFilterMode}
-                crewFilter={liveCrewFilter}
-                onCrewFilterChange={(crewName) => {
-                  setLiveCrewFilter(crewName);
-                  writeStoredLiveCrew(crewName);
-                }}
-                crewOptions={liveCrewOptions}
-              />
             ) : showKings && !isSearching ? (
               <KingsRankingCard rows={kingRows} />
             ) : showFa && !isSearching ? (
@@ -1789,21 +1062,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                     membersOnly={isSearching}
                     expandMembers={isSearching}
                     searchQuery={query}
-                    liveSummary={crew.crew_name === "광우상사" ? externalLiveSummary : null}
-                    onOpenLiveSummary={() => {
-                      if (!externalLiveSummary) {
-                        return;
-                      }
-
-                      const slug = encodeURIComponent(
-                        getLiveScoreboardSlug(externalLiveSummary.updatedAt),
-                      );
-                      window.open(
-                        `/live-scoreboard/${slug}`,
-                        "naksoo-live-scoreboard",
-                        "popup=yes,width=560,height=940,resizable=yes,scrollbars=yes",
-                      );
-                    }}
                   />
                 </div>
               ))
@@ -1860,6 +1118,5 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         />
       ) : null}
     </main>
-    </LiveStatusProvider>
   );
 }
