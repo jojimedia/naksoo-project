@@ -2,6 +2,7 @@ import { getTrimmedAverage } from "@/lib/stats";
 import { isFaCrew } from "@/lib/crews";
 import {
   getCachedRanking,
+  getCachedRankingVersion,
   getDevelopmentRanking,
   isPostgresConfigured,
 } from "@/lib/ranking-cache";
@@ -15,11 +16,9 @@ declare global {
   // view cache so repeated requests do not re-shape and serialize all ranking
   // data on every page visit.
   var naksooCrewCardMemoryCache:
-    | Map<string, { value: CrewCardData; expiresAt: number }>
+    | Map<string, { value: CrewCardData; version: string | null }>
     | undefined;
 }
-
-const CREW_CARD_MEMORY_CACHE_TTL_MS = 45_000;
 
 type DailyBalloons = {
   day: number;
@@ -839,7 +838,10 @@ async function getCrewCardData(selectedPeriod?: Period) {
     : "current";
   const memoryCache = global.naksooCrewCardMemoryCache ??= new Map();
   const fromMemory = memoryCache.get(cacheKey);
-  if (fromMemory && fromMemory.expiresAt > Date.now()) {
+  const version = isPostgresConfigured()
+    ? await getCachedRankingVersion(cacheKey)
+    : null;
+  if (fromMemory && fromMemory.version === version) {
     return fromMemory.value;
   }
 
@@ -849,7 +851,7 @@ async function getCrewCardData(selectedPeriod?: Period) {
       const data = developmentRanking
         ? makeCrewCardData(normalizeResult(developmentRanking as RawNaksooResult))
         : emptyData();
-      memoryCache.set(cacheKey, { value: data, expiresAt: Date.now() + CREW_CARD_MEMORY_CACHE_TTL_MS });
+      memoryCache.set(cacheKey, { value: data, version });
       return data;
     } catch (error) {
       console.error("Failed to load development ranking API", error);
@@ -858,11 +860,14 @@ async function getCrewCardData(selectedPeriod?: Period) {
   }
 
   try {
-    const cached = await getCachedRanking(cacheKey);
+    const cached = await getCachedRanking(
+      cacheKey,
+      Boolean(fromMemory && fromMemory.version !== version),
+    );
     const data = cached
       ? makeCrewCardData(normalizeResult(cached as RawNaksooResult))
       : emptyData();
-    memoryCache.set(cacheKey, { value: data, expiresAt: Date.now() + CREW_CARD_MEMORY_CACHE_TTL_MS });
+    memoryCache.set(cacheKey, { value: data, version });
     return data;
   } catch (error) {
     console.error("Failed to load PostgreSQL ranking cache", error);

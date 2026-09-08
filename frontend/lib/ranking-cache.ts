@@ -6,9 +6,13 @@ declare global {
   var naksooRankingMemoryCache:
     | Map<string, { value: unknown; expiresAt: number }>
     | undefined;
+  var naksooRankingVersionMemoryCache:
+    | Map<string, { version: string | null; expiresAt: number }>
+    | undefined;
 }
 
 const RANKING_MEMORY_CACHE_TTL_MS = 45_000;
+const RANKING_VERSION_CHECK_TTL_MS = 2_000;
 
 export function getPostgresPool(): Pool | null {
   const password = process.env.PGPASSWORD;
@@ -44,7 +48,10 @@ export function getPostgresPool(): Pool | null {
   return global.naksooPostgresPool;
 }
 
-export async function getCachedRanking(cacheKey = "current"): Promise<unknown | null> {
+export async function getCachedRanking(
+  cacheKey = "current",
+  forceRefresh = false,
+): Promise<unknown | null> {
   const pool = getPostgresPool();
 
   if (!pool) {
@@ -53,7 +60,7 @@ export async function getCachedRanking(cacheKey = "current"): Promise<unknown | 
 
   const cache = global.naksooRankingMemoryCache ??= new Map();
   const fromMemory = cache.get(cacheKey);
-  if (fromMemory && fromMemory.expiresAt > Date.now()) {
+  if (!forceRefresh && fromMemory && fromMemory.expiresAt > Date.now()) {
     return fromMemory.value;
   }
 
@@ -70,6 +77,31 @@ export async function getCachedRanking(cacheKey = "current"): Promise<unknown | 
     });
   }
   return value;
+}
+
+/**
+ * A tiny version query lets the page keep a fully prepared dashboard in
+ * process memory. Only a collector-detected data change causes a full JSON
+ * read and dashboard recalculation.
+ */
+export async function getCachedRankingVersion(cacheKey = "current"): Promise<string | null> {
+  const pool = getPostgresPool();
+  if (!pool) return null;
+
+  const cache = global.naksooRankingVersionMemoryCache ??= new Map();
+  const fromMemory = cache.get(cacheKey);
+  if (fromMemory && fromMemory.expiresAt > Date.now()) {
+    return fromMemory.version;
+  }
+
+  const result = await pool.query<{ generated_at: Date | string }>(
+    "SELECT generated_at FROM ranking_cache WHERE cache_key = $1",
+    [cacheKey],
+  );
+  const generatedAt = result.rows[0]?.generated_at;
+  const version = generatedAt ? new Date(generatedAt).toISOString() : null;
+  cache.set(cacheKey, { version, expiresAt: Date.now() + RANKING_VERSION_CHECK_TTL_MS });
+  return version;
 }
 
 /**

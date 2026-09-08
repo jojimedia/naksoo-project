@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -66,8 +67,11 @@ CREATE TABLE IF NOT EXISTS ranking_cache (
     cache_key TEXT PRIMARY KEY,
     payload_json JSONB NOT NULL,
     generated_at TIMESTAMPTZ NOT NULL,
-    source_max_observed_at TIMESTAMPTZ NOT NULL
+    source_max_observed_at TIMESTAMPTZ NOT NULL,
+    content_hash TEXT
 );
+
+ALTER TABLE ranking_cache ADD COLUMN IF NOT EXISTS content_hash TEXT;
 
 CREATE TABLE IF NOT EXISTS collector_commands (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -122,6 +126,34 @@ def ensure_schema() -> None:
 
 def _as_json(value: Any) -> str:
     return json.dumps(value if value is not None else [], ensure_ascii=False)
+
+
+def _content_hash(value: Any) -> str:
+    """Hash the meaningful cache body, excluding collection timestamps."""
+
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _save_cache(conn, cache_key: str, payload: dict[str, Any], observed_at: datetime) -> None:
+    # `source_max_observed_at` is intentionally not part of the version. A
+    # successful poll with identical data must not invalidate Next.js memory.
+    body = dict(payload)
+    body.pop("source_max_observed_at", None)
+    conn.execute(
+        """
+        INSERT INTO ranking_cache (cache_key, payload_json, generated_at, source_max_observed_at, content_hash)
+        VALUES (%s, %s::jsonb, %s, %s, %s)
+        ON CONFLICT (cache_key) DO UPDATE SET
+          payload_json = EXCLUDED.payload_json,
+          generated_at = EXCLUDED.generated_at,
+          source_max_observed_at = EXCLUDED.source_max_observed_at,
+          content_hash = EXCLUDED.content_hash
+        WHERE ranking_cache.content_hash IS DISTINCT FROM EXCLUDED.content_hash
+        """,
+        (cache_key, _as_json(payload), observed_at, observed_at, _content_hash(body)),
+    )
 
 
 def _as_datetime(value: Any) -> datetime | None:
@@ -258,17 +290,7 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
                 _upsert_month(conn, item, item.get("previous_month") or {}, observed_at)
                 _upsert_month(conn, item, item.get("older_month") or {}, observed_at)
 
-            conn.execute(
-                """
-                INSERT INTO ranking_cache (cache_key, payload_json, generated_at, source_max_observed_at)
-                VALUES ('current', %s::jsonb, %s, %s)
-                ON CONFLICT (cache_key) DO UPDATE SET
-                  payload_json = EXCLUDED.payload_json,
-                  generated_at = EXCLUDED.generated_at,
-                  source_max_observed_at = EXCLUDED.source_max_observed_at
-                """,
-                (_as_json(payload), observed_at, observed_at),
-            )
+            _save_cache(conn, "current", payload, observed_at)
 
             # Keep the same response shape for each selectable month.  The
             # browser therefore only switches PostgreSQL cache keys; it never
@@ -296,17 +318,7 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
                     }
                     for item in payload.get("items") or []
                 ]
-                conn.execute(
-                    """
-                    INSERT INTO ranking_cache (cache_key, payload_json, generated_at, source_max_observed_at)
-                    VALUES (%s, %s::jsonb, %s, %s)
-                    ON CONFLICT (cache_key) DO UPDATE SET
-                      payload_json = EXCLUDED.payload_json,
-                      generated_at = EXCLUDED.generated_at,
-                      source_max_observed_at = EXCLUDED.source_max_observed_at
-                    """,
-                    (f"period:{year}-{month:02d}", _as_json(period_payload), observed_at, observed_at),
-                )
+                _save_cache(conn, f"period:{year}-{month:02d}", period_payload, observed_at)
 
 
 def get_cached_result(cache_key: str = "current") -> dict[str, Any] | None:
