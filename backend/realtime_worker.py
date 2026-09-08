@@ -268,7 +268,6 @@ class RealtimeCollector:
             }
             active_members = [member for member in members if not member.get("is_on_leave")]
             to_collect: list[dict[str, Any]] = []
-            detail_backfill_candidates: list[dict[str, Any]] = []
 
             if requested_refreshes or recovery_due:
                 # An administrator request or the daily sweep refreshes the
@@ -330,19 +329,30 @@ class RealtimeCollector:
                         # Retry only those unresolved rows at a low rate; do
                         # not wait until the next daily recovery sweep.
                         to_collect.append(member)
-                    elif existing and _needs_detail_backfill(existing) and now >= due:
-                        detail_backfill_candidates.append(member)
-
-                if (
-                    detail_backfill_candidates
-                    and (self.next_detail_backfill_at is None or now >= self.next_detail_backfill_at)
-                ):
-                    slots = max(0, DETAIL_BACKFILL_BATCH_SIZE - len(to_collect))
-                    if slots:
-                        to_collect.extend(detail_backfill_candidates[:slots])
-                        self.next_detail_backfill_at = now + timedelta(
-                            seconds=DETAIL_BACKFILL_INTERVAL_SECONDS
+                # Donor-detail backfill is independent of the 2-minute live
+                # status poll. Otherwise offline members would wait for a
+                # status turn before every retry.
+                if self.next_detail_backfill_at is None or now >= self.next_detail_backfill_at:
+                    already_collecting = {
+                        (member["crew_name"], member["user_id"])
+                        for member in to_collect
+                    }
+                    detail_backfill_candidates = [
+                        member
+                        for member in active_members
+                        if (member["crew_name"], member["user_id"]) not in already_collecting
+                        and _needs_detail_backfill(
+                            items_by_key.get((member["crew_name"], member["user_id"])) or {}
                         )
+                        and now >= self.next_detail_at.get((member["crew_name"], member["user_id"]), now)
+                    ]
+                    if detail_backfill_candidates:
+                        slots = max(0, DETAIL_BACKFILL_BATCH_SIZE - len(to_collect))
+                        if slots:
+                            to_collect.extend(detail_backfill_candidates[:slots])
+                            self.next_detail_backfill_at = now + timedelta(
+                                seconds=DETAIL_BACKFILL_INTERVAL_SECONDS
+                            )
 
                 if to_collect:
                     calendar = get_calendar_period(now)
