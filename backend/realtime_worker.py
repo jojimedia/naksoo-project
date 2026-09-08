@@ -48,6 +48,8 @@ WARM_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_WARM_POLL_JITTER_SE
 COLD_POLL_SECONDS = max(120, int(os.environ.get("NAKSOO_COLD_POLL_SECONDS", "600")))
 COLD_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_COLD_POLL_JITTER_SECONDS", "90")))
 UNAVAILABLE_RETRY_SECONDS = max(60, int(os.environ.get("NAKSOO_UNAVAILABLE_RETRY_SECONDS", "300")))
+DETAIL_BACKFILL_BATCH_SIZE = max(1, int(os.environ.get("NAKSOO_DETAIL_BACKFILL_BATCH_SIZE", "2")))
+DETAIL_BACKFILL_INTERVAL_SECONDS = max(30, int(os.environ.get("NAKSOO_DETAIL_BACKFILL_INTERVAL_SECONDS", "60")))
 LOOP_SLEEP_SECONDS = max(5, int(os.environ.get("NAKSOO_WORKER_LOOP_SECONDS", "10")))
 # A cold start or an administrator-triggered full refresh has to collect every
 # active member.  Start quickly in batches, then retry only the members that
@@ -69,6 +71,16 @@ def _interval(base_seconds: int, jitter_seconds: int = 0) -> int:
     """Return a positive collection interval with a one-sided random jitter."""
 
     return base_seconds + random.randint(0, jitter_seconds)
+
+
+def _needs_detail_backfill(item: dict[str, Any]) -> bool:
+    """chart/get has totals but no per-streamer donor list."""
+
+    month = item.get("current_month") or {}
+    return (
+        month.get("data_source") in {"chart_ranking", "unavailable"}
+        and not month.get("fans")
+    )
 
 
 def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
@@ -109,6 +121,7 @@ class RealtimeCollector:
         self.last_change_at: dict[tuple[str, str], datetime] = {}
         self.last_cleanup_date = None
         self.state_restored = False
+        self.next_detail_backfill_at: datetime | None = None
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -253,6 +266,7 @@ class RealtimeCollector:
             }
             active_members = [member for member in members if not member.get("is_on_leave")]
             to_collect: list[dict[str, Any]] = []
+            detail_backfill_candidates: list[dict[str, Any]] = []
 
             if requested_refreshes or recovery_due:
                 # An administrator request or the daily sweep refreshes the
@@ -308,12 +322,25 @@ class RealtimeCollector:
                     elif was_live and not is_live:
                         # One final sample after the broadcast ends.
                         to_collect.append(member)
-                    elif existing and existing.get("current_month_used_fallback") and now >= due:
+                    elif existing and (existing.get("current_month") or {}).get("data_source") == "unavailable" and now >= due:
                         # Newly registered/offline members can also hit a
                         # transient source block during the initial snapshot.
                         # Retry only those unresolved rows at a low rate; do
                         # not wait until the next daily recovery sweep.
                         to_collect.append(member)
+                    elif existing and _needs_detail_backfill(existing) and now >= due:
+                        detail_backfill_candidates.append(member)
+
+                if (
+                    detail_backfill_candidates
+                    and (self.next_detail_backfill_at is None or now >= self.next_detail_backfill_at)
+                ):
+                    slots = max(0, DETAIL_BACKFILL_BATCH_SIZE - len(to_collect))
+                    if slots:
+                        to_collect.extend(detail_backfill_candidates[:slots])
+                        self.next_detail_backfill_at = now + timedelta(
+                            seconds=DETAIL_BACKFILL_INTERVAL_SECONDS
+                        )
 
                 if to_collect:
                     calendar = get_calendar_period(now)
@@ -342,7 +369,7 @@ class RealtimeCollector:
                         if not item.get("success"):
                             continue
                         key = (item["crew_name"], item["user_id"])
-                        if item.get("current_month_used_fallback"):
+                        if (item.get("current_month") or {}).get("data_source") == "unavailable":
                             # Keep the last known monthly total when 풍투 is
                             # temporarily blocked.  This member remains due
                             # for a short retry instead of poisoning the cache
@@ -374,7 +401,15 @@ class RealtimeCollector:
                             current_month["fans"] = previous_month["fans"]
                         previous_total = int(previous_month.get("total_balloons") or 0)
                         current_total = int((item.get("current_month") or {}).get("total_balloons") or 0)
-                        if item.get("is_live"):
+                        if _needs_detail_backfill(item):
+                            # It has a usable monthly total but no donor rows.
+                            # Put this member back in the low-rate backlog.
+                            self.next_detail_at[key] = now + timedelta(
+                                seconds=UNAVAILABLE_RETRY_SECONDS
+                            )
+                            items_by_key[key] = item
+                            continue
+                        elif item.get("is_live"):
                             # A LIVE stream is the user-facing real-time path:
                             # keep checking detail/get every 60–90 seconds,
                             # even during a quiet minute with no new balloons.
