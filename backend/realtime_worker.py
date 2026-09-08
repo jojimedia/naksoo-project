@@ -1,8 +1,4 @@
-"""Long-running, database-backed collector for Cloudtype.
-
-It reuses the proven fetch/parsing functions in ``main.py``.  Google Sheets
-remains the member source for now; only ranking state is moved to PostgreSQL.
-"""
+"""Long-running, database-backed collector for Cloudtype."""
 
 from __future__ import annotations
 
@@ -41,6 +37,13 @@ HOT_POLL_SECONDS = max(30, int(os.environ.get("NAKSOO_HOT_POLL_SECONDS", "60")))
 WARM_POLL_SECONDS = max(60, int(os.environ.get("NAKSOO_WARM_POLL_SECONDS", "180")))
 COLD_POLL_SECONDS = max(120, int(os.environ.get("NAKSOO_COLD_POLL_SECONDS", "600")))
 LOOP_SLEEP_SECONDS = max(5, int(os.environ.get("NAKSOO_WORKER_LOOP_SECONDS", "10")))
+# A cold start or an administrator-triggered full refresh has to collect every
+# active member.  Start quickly in batches, then retry only the members that
+# actually failed with a gentler request rate.  This keeps one slow/blocked
+# source from making the whole dashboard wait serially.
+BOOTSTRAP_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BOOTSTRAP_CONCURRENCY", "10")))
+BOOTSTRAP_RETRY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BOOTSTRAP_RETRY_CONCURRENCY", "2")))
+BOOTSTRAP_RETRY_DELAY_SECONDS = max(0, int(os.environ.get("NAKSOO_BOOTSTRAP_RETRY_DELAY_SECONDS", "15")))
 
 
 def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
@@ -105,20 +108,51 @@ class RealtimeCollector:
             return None
 
     async def _bootstrap(self, members: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
-        """A first-run full snapshot, used only when DB cache is empty."""
+        """Build a full snapshot with a fast pass and a limited retry pass."""
         active = [member for member in members if not member.get("is_on_leave")]
         calendar = get_calendar_period(now)
         period = {"now": now, **calendar, "calendar_current": calendar["current"]}
-        semaphore = asyncio.Semaphore(2)
         fan_cache: dict[str, Any] = {}
         fan_lock = asyncio.Lock()
         fan_semaphore = asyncio.Semaphore(8)
         ranking_cache: dict[str, Any] = {}
         async with httpx.AsyncClient(follow_redirects=True, timeout=15, headers=HEADERS) as client:
+            initial_semaphore = asyncio.Semaphore(BOOTSTRAP_CONCURRENCY)
             items = await asyncio.gather(*(
-                fetch_one_member(client, member, period, ranking_cache, semaphore, fan_cache, fan_lock, fan_semaphore)
+                fetch_one_member(client, member, period, ranking_cache, initial_semaphore, fan_cache, fan_lock, fan_semaphore)
                 for member in active
             ))
+
+            failed_keys = {
+                (str(item.get("crew_name") or ""), str(item.get("user_id") or ""))
+                for item in items
+                if not item.get("success")
+            }
+            if failed_keys:
+                retry_members = [
+                    member for member in active
+                    if (str(member["crew_name"]), str(member["user_id"])) in failed_keys
+                ]
+                print(
+                    f"Bootstrap first pass complete; retrying {len(retry_members)} failed members "
+                    f"at concurrency {BOOTSTRAP_RETRY_CONCURRENCY}."
+                )
+                if BOOTSTRAP_RETRY_DELAY_SECONDS:
+                    await asyncio.sleep(BOOTSTRAP_RETRY_DELAY_SECONDS)
+                retry_semaphore = asyncio.Semaphore(BOOTSTRAP_RETRY_CONCURRENCY)
+                retried_items = await asyncio.gather(*(
+                    fetch_one_member(client, member, period, ranking_cache, retry_semaphore, fan_cache, fan_lock, fan_semaphore)
+                    for member in retry_members
+                ))
+                retry_by_key = {
+                    (str(item.get("crew_name") or ""), str(item.get("user_id") or "")): item
+                    for item in retried_items
+                    if item.get("success")
+                }
+                items = [
+                    retry_by_key.get((str(item.get("crew_name") or ""), str(item.get("user_id") or "")), item)
+                    for item in items
+                ]
         existing = [item for item in items if item.get("success")]
         if not existing:
             raise RuntimeError("Bootstrap failed for every active member.")
