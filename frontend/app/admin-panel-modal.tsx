@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { displayCrewName, isFaCrew } from "@/lib/crews";
+import { displayCrewName, FA_CREW_NAME, isFaCrew } from "@/lib/crews";
 
 type AdminSession = {
   login_id: string;
@@ -253,6 +253,13 @@ export default function AdminPanelModal({
   useEffect(() => {
     void loadPendingRequests();
   }, [loadPendingRequests]);
+
+  useEffect(() => {
+    if (session.login_id !== "admin") return;
+    void fetch("/api/admin/crews").then((response) => response.json()).then((data: { crews?: string[] }) => {
+      if (data.crews) setManagedCrews(data.crews);
+    });
+  }, [session.login_id]);
 
   useEffect(() => {
     if (!selectedCrew) {
@@ -797,6 +804,14 @@ export default function AdminPanelModal({
     setManagedCrews((current) => current.includes(crewName) ? current : [...current, crewName]); setSelectedCrew(crewName); setShowCrewSetup(false); setNewCrewName(""); setRepresentative(null); setRepresentativeCandidates([]); setMessage(`${crewName} 크루를 추가했습니다.`);
   }
 
+  async function handleDeleteCrew() {
+    if (session.login_id !== "admin" || isFaCrew(selectedCrew)) return;
+    if (!window.confirm(`${selectedCrew} 크루를 삭제할까요?\n소속 멤버는 모두 FA(무소속)로 이동합니다.`)) return;
+    const response=await fetch("/api/admin/crews",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({crew_name:selectedCrew})}); const data=await response.json() as {error?:string};
+    if(!response.ok){setError(data.error??"크루 삭제에 실패했습니다.");return;}
+    setManagedCrews((current)=>current.filter((crew)=>crew!==selectedCrew)); setSelectedCrew(FA_CREW_NAME); setMessage(`${selectedCrew} 크루를 삭제하고 멤버를 FA로 이동했습니다.`);
+  }
+
   async function handleTriggerUpdate() {
     if (isUpdateRunning) {
       setError("이미 데이터 갱신이 진행 중입니다.");
@@ -1017,6 +1032,7 @@ export default function AdminPanelModal({
                 </option>
               ))}
             </select>
+            {session.login_id === "admin" && !isFaCrew(selectedCrew) ? <button type="button" onClick={() => void handleDeleteCrew()} className="mt-2 rounded border border-[#dc2626]/50 px-2 py-1 text-xs font-semibold text-[#fca5a5] hover:border-[#dc2626]">현재 크루 삭제 · 멤버는 FA로 이동</button> : null}
           </label>
 
           <section className="rounded-lg border border-[#3a3548] bg-[#111018] p-4">
