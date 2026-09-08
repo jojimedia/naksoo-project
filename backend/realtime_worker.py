@@ -48,8 +48,10 @@ WARM_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_WARM_POLL_JITTER_SE
 COLD_POLL_SECONDS = max(120, int(os.environ.get("NAKSOO_COLD_POLL_SECONDS", "600")))
 COLD_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_COLD_POLL_JITTER_SECONDS", "90")))
 UNAVAILABLE_RETRY_SECONDS = max(60, int(os.environ.get("NAKSOO_UNAVAILABLE_RETRY_SECONDS", "300")))
-DETAIL_BACKFILL_BATCH_SIZE = max(1, int(os.environ.get("NAKSOO_DETAIL_BACKFILL_BATCH_SIZE", "2")))
-DETAIL_BACKFILL_INTERVAL_SECONDS = max(30, int(os.environ.get("NAKSOO_DETAIL_BACKFILL_INTERVAL_SECONDS", "60")))
+# Recover missing donor lists promptly after a temporary source block. The
+# actual monthly requests remain capped by the two-wide detail semaphore.
+DETAIL_BACKFILL_BATCH_SIZE = max(1, int(os.environ.get("NAKSOO_DETAIL_BACKFILL_BATCH_SIZE", "5")))
+DETAIL_BACKFILL_INTERVAL_SECONDS = max(30, int(os.environ.get("NAKSOO_DETAIL_BACKFILL_INTERVAL_SECONDS", "30")))
 LOOP_SLEEP_SECONDS = max(5, int(os.environ.get("NAKSOO_WORKER_LOOP_SECONDS", "10")))
 # A cold start or an administrator-triggered full refresh has to collect every
 # active member.  Start quickly in batches, then retry only the members that
