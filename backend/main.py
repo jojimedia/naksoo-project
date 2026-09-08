@@ -282,7 +282,9 @@ def resolve_live_status(station_data, live_status):
     if live_status["is_password"]:
         return False
 
-    return live_status["is_live"] or bool(station_data.get("broadcast_start"))
+    # `station.broadStart` often remains after 방송 종료. It is display
+    # metadata only and must never promote an offline channel to LIVE.
+    return bool(live_status.get("is_live"))
 
 
 # =========================
