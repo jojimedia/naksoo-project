@@ -88,9 +88,10 @@ function LiveBadge({ member }: { member: CrewMember }) {
         href={streamUrl}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex shrink-0 items-center rounded border border-red-300/90 bg-red-600 px-1 py-px text-[9px] font-black leading-none tracking-wide text-white shadow-sm animate-pulse"
+        className="inline-flex shrink-0 items-center rounded border border-red-300/90 bg-red-600 px-1 py-px text-[9px] font-black leading-none tracking-wide text-white shadow-sm"
         aria-label={`${member.nickname} 라이브 방송 보기`}
         onClick={(event) => {
+          event.stopPropagation();
           if (!thumbnailUrl) return;
           event.preventDefault();
           preview ? hidePreview() : showPreview();
