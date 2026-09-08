@@ -2,6 +2,10 @@ import { pbkdf2Sync, randomBytes, timingSafeEqual } from "crypto";
 
 import { getPostgresPool } from "./ranking-cache";
 
+declare global {
+  var naksooOperationsSchemaPromise: Promise<void> | undefined;
+}
+
 const OPERATIONS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS crews (
   crew_name TEXT PRIMARY KEY,
@@ -60,7 +64,7 @@ CREATE TABLE IF NOT EXISTS operations_migrations (
   details JSONB NOT NULL DEFAULT '{}'::jsonb
 );`;
 
-export async function ensureOperationsSchema() {
+async function initializeOperationsSchema() {
   const pool = getPostgresPool();
   if (!pool) throw new Error("PostgreSQL 연결이 설정되지 않았습니다.");
   await pool.query(OPERATIONS_SCHEMA);
@@ -130,6 +134,21 @@ export async function ensureOperationsSchema() {
   } finally {
     client.release();
   }
+}
+
+/**
+ * DDL and the one-time Sheets copy must run once per app process, not once
+ * for every login/API call. If it fails, drop the promise so a later request
+ * can retry after the connection/configuration issue is fixed.
+ */
+export async function ensureOperationsSchema() {
+  if (!global.naksooOperationsSchemaPromise) {
+    global.naksooOperationsSchemaPromise = initializeOperationsSchema().catch((error) => {
+      global.naksooOperationsSchemaPromise = undefined;
+      throw error;
+    });
+  }
+  return global.naksooOperationsSchemaPromise;
 }
 
 export function hashPassword(password: string) {

@@ -3,7 +3,12 @@ import { Pool } from "pg";
 declare global {
   // Keep one pool per Next.js process during hot reload and normal runtime.
   var naksooPostgresPool: Pool | undefined;
+  var naksooRankingMemoryCache:
+    | Map<string, { value: unknown; expiresAt: number }>
+    | undefined;
 }
+
+const RANKING_MEMORY_CACHE_TTL_MS = 45_000;
 
 export function getPostgresPool(): Pool | null {
   const password = process.env.PGPASSWORD;
@@ -40,12 +45,25 @@ export async function getCachedRanking(cacheKey = "current"): Promise<unknown | 
     return null;
   }
 
+  const cache = global.naksooRankingMemoryCache ??= new Map();
+  const fromMemory = cache.get(cacheKey);
+  if (fromMemory && fromMemory.expiresAt > Date.now()) {
+    return fromMemory.value;
+  }
+
   const result = await pool.query<{ payload_json: unknown }>(
     "SELECT payload_json FROM ranking_cache WHERE cache_key = $1",
     [cacheKey],
   );
 
-  return result.rows[0]?.payload_json ?? null;
+  const value = result.rows[0]?.payload_json ?? null;
+  if (value) {
+    cache.set(cacheKey, {
+      value,
+      expiresAt: Date.now() + RANKING_MEMORY_CACHE_TTL_MS,
+    });
+  }
+  return value;
 }
 
 /**
