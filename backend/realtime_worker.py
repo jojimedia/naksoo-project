@@ -136,8 +136,18 @@ class RealtimeCollector:
             calendar = get_calendar_period(now)
             older = calendar["older"]
             older_cache_key = f"period:{older['year']}-{older['month']:02d}"
-            if requested_refreshes or not cached or not get_cached_result(older_cache_key):
-                print("Bootstrap/administrator refresh requested; rebuilding member ranking cache.")
+            cached_member_keys = {
+                (str(item.get("crew_name") or ""), str(item.get("user_id") or ""))
+                for item in (cached or {}).get("items") or []
+            }
+            database_member_keys = {
+                (str(member.get("crew_name") or ""), str(member.get("user_id") or ""))
+                for member in members
+            }
+            membership_changed = cached_member_keys != database_member_keys
+            if requested_refreshes or membership_changed or not cached or not get_cached_result(older_cache_key):
+                reason = "membership changed" if membership_changed else "bootstrap/administrator refresh requested"
+                print(f"{reason}; rebuilding member ranking cache.")
                 output = await self._bootstrap(members, now)
                 save_result(output, now)
                 complete_refresh_requests(requested_refreshes)
