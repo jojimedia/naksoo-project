@@ -231,29 +231,21 @@ class RealtimeCollector:
                 for member in members
             }
             membership_changed = cached_member_keys != database_member_keys
-            if requested_refreshes or membership_changed or not cached or not get_cached_result(older_cache_key):
-                reason = "membership changed" if membership_changed else "bootstrap/administrator refresh requested"
-                print(f"{reason}; rebuilding member ranking cache.")
+            if not cached or not get_cached_result(older_cache_key):
+                print("Ranking cache is not ready; building initial member snapshot.")
                 output = await self._bootstrap(members, now)
                 save_result(output, now)
                 complete_refresh_requests(requested_refreshes)
                 update_collector_status(now)
                 return
 
-            if recovery_sweep_due(now):
-                print("Daily recovery sweep; rebuilding ranking cache at low concurrency.")
-                output = await self._bootstrap(
-                    members,
-                    now,
-                    concurrency=RECOVERY_CONCURRENCY,
-                    retry_concurrency=RECOVERY_RETRY_CONCURRENCY,
-                    retry_delay_seconds=RECOVERY_RETRY_DELAY_SECONDS,
-                )
-                save_result(output, now)
-                mark_recovery_sweep(now)
-                complete_refresh_requests(requested_refreshes)
-                update_collector_status(now)
-                return
+            recovery_due = recovery_sweep_due(now)
+            if membership_changed:
+                added = database_member_keys - cached_member_keys
+                removed = cached_member_keys - database_member_keys
+                print(f"Membership changed; incremental sync (added={len(added)}, removed={len(removed)}).")
+            if recovery_due:
+                print("Daily recovery sweep; refreshing live status and unresolved members only.")
 
             items_by_key = {
                 (item.get("crew_name"), item.get("user_id")): dict(item)
@@ -262,13 +254,13 @@ class RealtimeCollector:
             active_members = [member for member in members if not member.get("is_on_leave")]
             to_collect: list[dict[str, Any]] = []
 
-            if requested_refreshes:
-                # The administrator requested a refresh.  Force the next status
-                # and detail checks without adding a separate HTTP API to Worker.
+            if requested_refreshes or recovery_due:
+                # An administrator request or the daily sweep refreshes the
+                # status of every registered member.  It intentionally does
+                # not refetch all three monthly periods for every member.
                 for member in active_members:
                     key = (member["crew_name"], member["user_id"])
                     self.next_status_at[key] = now
-                    self.next_detail_at[key] = now
 
             async with httpx.AsyncClient(follow_redirects=True, timeout=15, headers=HEADERS) as client:
                 status_members: list[dict[str, Any]] = []
@@ -291,6 +283,7 @@ class RealtimeCollector:
                     if status is None:
                         continue  # retain the last known state on an API failure
 
+                    key = (member["crew_name"], member["user_id"])
                     is_live, broadcast_start, is_password, broadcast_no, broadcast_title, viewer_count = status
                     # Do not trust a pre-restart cache value for a final sample.
                     # It could have been marked live by an old/stale station API.
@@ -306,7 +299,11 @@ class RealtimeCollector:
                         existing["viewer_count"] = viewer_count if is_live else None
 
                     due = self.next_detail_at.get(key, now)
-                    if is_live and (not was_live or now >= due):
+                    if existing is None:
+                        # A newly added member needs one initial three-month
+                        # snapshot whether or not they are currently LIVE.
+                        to_collect.append(member)
+                    elif is_live and (not was_live or now >= due):
                         to_collect.append(member)
                     elif was_live and not is_live:
                         # One final sample after the broadcast ends.
@@ -356,6 +353,11 @@ class RealtimeCollector:
                                 else UNAVAILABLE_RETRY_SECONDS
                             )
                             self.next_detail_at[key] = now + timedelta(seconds=retry_seconds)
+                            # Keep a newly added member visible and mark it
+                            # unresolved. Existing members retain their last
+                            # normal monthly value instead.
+                            if key not in items_by_key:
+                                items_by_key[key] = item
                             print(f"[{key[0]}/{key[1]}] monthly source unavailable; retaining last known cache.")
                             continue
                         previous_total = int(((items_by_key.get(key) or {}).get("current_month") or {}).get("total_balloons") or 0)
@@ -372,6 +374,8 @@ class RealtimeCollector:
 
             output = make_output(now, members, list(items_by_key.values()))
             save_result(output, now)
+            if recovery_due:
+                mark_recovery_sweep(now)
             complete_refresh_requests(requested_refreshes)
             update_collector_status(now)
             if self.last_cleanup_date != now.date():
