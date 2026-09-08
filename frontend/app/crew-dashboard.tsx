@@ -219,7 +219,9 @@ function aggregateDonors(
 
   for (const crew of crews) {
     for (const member of crew.members) {
-      for (const fan of member.monthly_fans) {
+      // First-page data intentionally carries only the top donors for each
+      // streamer. It keeps normal month navigation lightweight.
+      for (const fan of member.monthly_top_fans) {
         const nickname = normalizeSearch(fan.nickname);
         const userId = normalizeSearch(fan.user_id);
 

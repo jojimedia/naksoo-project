@@ -10,6 +10,17 @@ import CrewDashboard from "./crew-dashboard";
 
 export const dynamic = "force-dynamic";
 
+declare global {
+  // The PostgreSQL JSON is the durable cache. This is a short-lived prepared
+  // view cache so repeated requests do not re-shape and serialize all ranking
+  // data on every page visit.
+  var naksooCrewCardMemoryCache:
+    | Map<string, { value: CrewCardData; expiresAt: number }>
+    | undefined;
+}
+
+const CREW_CARD_MEMORY_CACHE_TTL_MS = 45_000;
+
 type DailyBalloons = {
   day: number;
   balloons: number;
@@ -737,13 +748,11 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             ),
             current_daily_balloons: item.current_month.daily_balloons,
             previous_daily_balloons: item.previous_month.daily_balloons,
-            monthly_fans: (item.current_month.fans ?? []).map((fan, fanIndex) => ({
-              rank: fanIndex + 1,
-              user_id: fan.user_id,
-              nickname: fan.nickname,
-              profile_image_url: fan.profile_image_url,
-              balloons: fan.balloons,
-            })),
+            // Sending every donor of every streamer made the RSC response more
+            // than 2 MB and turned normal page navigation into a 6+ second
+            // server render. The dashboard needs the top donors on first view;
+            // full donor lookup belongs to a dedicated on-demand endpoint.
+            monthly_fans: [],
             monthly_top_fans: getMonthlyTopFans(item),
             is_on_leave: false,
           };
@@ -825,13 +834,23 @@ function getRecentPeriods(now = getKstDateParts()): Period[] {
 
 async function getCrewCardData(selectedPeriod?: Period) {
   const emptyData = () => makeCrewCardData(normalizeResult({ items: [] }));
+  const cacheKey = selectedPeriod
+    ? `period:${selectedPeriod.year}-${String(selectedPeriod.month).padStart(2, "0")}`
+    : "current";
+  const memoryCache = global.naksooCrewCardMemoryCache ??= new Map();
+  const fromMemory = memoryCache.get(cacheKey);
+  if (fromMemory && fromMemory.expiresAt > Date.now()) {
+    return fromMemory.value;
+  }
 
   if (!isPostgresConfigured()) {
     try {
       const developmentRanking = await getDevelopmentRanking();
-      return developmentRanking
+      const data = developmentRanking
         ? makeCrewCardData(normalizeResult(developmentRanking as RawNaksooResult))
         : emptyData();
+      memoryCache.set(cacheKey, { value: data, expiresAt: Date.now() + CREW_CARD_MEMORY_CACHE_TTL_MS });
+      return data;
     } catch (error) {
       console.error("Failed to load development ranking API", error);
       return emptyData();
@@ -839,14 +858,12 @@ async function getCrewCardData(selectedPeriod?: Period) {
   }
 
   try {
-    const cached = await getCachedRanking(
-      selectedPeriod
-        ? `period:${selectedPeriod.year}-${String(selectedPeriod.month).padStart(2, "0")}`
-        : "current",
-    );
-    return cached
+    const cached = await getCachedRanking(cacheKey);
+    const data = cached
       ? makeCrewCardData(normalizeResult(cached as RawNaksooResult))
       : emptyData();
+    memoryCache.set(cacheKey, { value: data, expiresAt: Date.now() + CREW_CARD_MEMORY_CACHE_TTL_MS });
+    return data;
   } catch (error) {
     console.error("Failed to load PostgreSQL ranking cache", error);
     return emptyData();
