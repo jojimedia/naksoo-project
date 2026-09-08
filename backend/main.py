@@ -887,6 +887,7 @@ async def fetch_one_member(
     fan_profile_cache,
     fan_profile_lock,
     fan_profile_semaphore,
+    balloon_semaphore=None,
 ):
     """
     구글시트 멤버 1명에 대해:
@@ -932,60 +933,51 @@ async def fetch_one_member(
 
             await asyncio.sleep(0.5)
 
-            current_month_data, used_month_fallback = await fetch_current_month_data(
-                client,
-                user_id,
-                crew_name,
-                period["calendar_current"],
-                ranking_cache,
-            )
+            async def fetch_months():
+                current_month_data, used_month_fallback = await fetch_current_month_data(
+                    client,
+                    user_id,
+                    crew_name,
+                    period["calendar_current"],
+                    ranking_cache,
+                )
 
-            await asyncio.sleep(0.5)
+                await asyncio.sleep(0.5)
 
-            # 이전달 별풍 데이터 가져오기
-            print(
-                f"[{crew_name}/{user_id}] 별풍 이전달 조회 "
-                f"{previous_year}-{previous_month}"
-            )
-            previous_month_data = await resolve_month_balloon_data(
-                client,
-                user_id,
-                previous_year,
-                previous_month,
-                ranking_cache,
-                crew_name,
-            )
+                print(
+                    f"[{crew_name}/{user_id}] 별풍 이전달 조회 "
+                    f"{previous_year}-{previous_month}"
+                )
+                previous_month_data = await resolve_month_balloon_data(
+                    client, user_id, previous_year, previous_month, ranking_cache, crew_name,
+                )
+                if previous_month_data is None:
+                    previous_month_data = {
+                        "year": previous_year, "month": previous_month,
+                        "total_balloons": 0, "daily_balloons": [], "fans": [],
+                    }
 
-            if previous_month_data is None:
-                previous_month_data = {
-                    "year": previous_year,
-                    "month": previous_month,
-                    "total_balloons": 0,
-                    "daily_balloons": [],
-                    "fans": [],
-                }
+                print(
+                    f"[{crew_name}/{user_id}] 별풍 2개월전 조회 "
+                    f"{older_year}-{older_month}"
+                )
+                older_month_data = await resolve_month_balloon_data(
+                    client, user_id, older_year, older_month, ranking_cache, crew_name,
+                )
+                if older_month_data is None:
+                    older_month_data = {
+                        "year": older_year, "month": older_month,
+                        "total_balloons": 0, "daily_balloons": [], "fans": [],
+                    }
+                return current_month_data, used_month_fallback, previous_month_data, older_month_data
 
-            print(
-                f"[{crew_name}/{user_id}] 별풍 2개월전 조회 "
-                f"{older_year}-{older_month}"
-            )
-            older_month_data = await resolve_month_balloon_data(
-                client,
-                user_id,
-                older_year,
-                older_month,
-                ranking_cache,
-                crew_name,
-            )
-
-            if older_month_data is None:
-                older_month_data = {
-                    "year": older_year,
-                    "month": older_month,
-                    "total_balloons": 0,
-                    "daily_balloons": [],
-                    "fans": [],
-                }
+            # Member work may run ten-wide, but the source's static monthly
+            # endpoints are deliberately narrower to avoid CloudFront bursts.
+            if balloon_semaphore is None:
+                current_month_data, used_month_fallback, previous_month_data, older_month_data = await fetch_months()
+            else:
+                async with balloon_semaphore:
+                    current_month_data, used_month_fallback, previous_month_data, older_month_data = await fetch_months()
 
             current_month_data["fans"] = await enrich_fans_with_profiles(
                 client,

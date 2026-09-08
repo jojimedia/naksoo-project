@@ -53,6 +53,9 @@ LOOP_SLEEP_SECONDS = max(5, int(os.environ.get("NAKSOO_WORKER_LOOP_SECONDS", "10
 # actually failed with a gentler request rate.  This keeps one slow/blocked
 # source from making the whole dashboard wait serially.
 BOOTSTRAP_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BOOTSTRAP_CONCURRENCY", "10")))
+# Keep member/station work responsive while limiting only the static 풍투
+# endpoints, which are more sensitive to burst traffic.
+BALLOON_SOURCE_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BALLOON_SOURCE_CONCURRENCY", "4")))
 BOOTSTRAP_RETRY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BOOTSTRAP_RETRY_CONCURRENCY", "2")))
 BOOTSTRAP_RETRY_DELAY_SECONDS = max(0, int(os.environ.get("NAKSOO_BOOTSTRAP_RETRY_DELAY_SECONDS", "15")))
 RECOVERY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_RECOVERY_CONCURRENCY", "2")))
@@ -157,18 +160,19 @@ class RealtimeCollector:
         fan_cache: dict[str, Any] = {}
         fan_lock = asyncio.Lock()
         fan_semaphore = asyncio.Semaphore(8)
+        balloon_semaphore = asyncio.Semaphore(BALLOON_SOURCE_CONCURRENCY)
         ranking_cache: dict[str, Any] = {}
         async with httpx.AsyncClient(follow_redirects=True, timeout=15, headers=HEADERS) as client:
             initial_semaphore = asyncio.Semaphore(concurrency)
             items = await asyncio.gather(*(
-                fetch_one_member(client, member, period, ranking_cache, initial_semaphore, fan_cache, fan_lock, fan_semaphore)
+                fetch_one_member(client, member, period, ranking_cache, initial_semaphore, fan_cache, fan_lock, fan_semaphore, balloon_semaphore)
                 for member in active
             ))
 
             failed_keys = {
                 (str(item.get("crew_name") or ""), str(item.get("user_id") or ""))
                 for item in items
-                if not item.get("success")
+                if not item.get("success") or item.get("current_month_used_fallback")
             }
             if failed_keys:
                 retry_members = [
@@ -183,13 +187,13 @@ class RealtimeCollector:
                     await asyncio.sleep(retry_delay_seconds)
                 retry_semaphore = asyncio.Semaphore(retry_concurrency)
                 retried_items = await asyncio.gather(*(
-                    fetch_one_member(client, member, period, ranking_cache, retry_semaphore, fan_cache, fan_lock, fan_semaphore)
+                    fetch_one_member(client, member, period, ranking_cache, retry_semaphore, fan_cache, fan_lock, fan_semaphore, balloon_semaphore)
                     for member in retry_members
                 ))
                 retry_by_key = {
                     (str(item.get("crew_name") or ""), str(item.get("user_id") or "")): item
                     for item in retried_items
-                    if item.get("success")
+                    if item.get("success") and not item.get("current_month_used_fallback")
                 }
                 items = [
                     retry_by_key.get((str(item.get("crew_name") or ""), str(item.get("user_id") or "")), item)
@@ -314,6 +318,7 @@ class RealtimeCollector:
                     fan_cache: dict[str, Any] = {}
                     fan_lock = asyncio.Lock()
                     fan_semaphore = asyncio.Semaphore(8)
+                    balloon_semaphore = asyncio.Semaphore(BALLOON_SOURCE_CONCURRENCY)
                     ranking_cache: dict[str, Any] = {}
                     fetched = await asyncio.gather(*(
                         fetch_one_member(
@@ -325,6 +330,7 @@ class RealtimeCollector:
                             fan_cache,
                             fan_lock,
                             fan_semaphore,
+                            balloon_semaphore,
                         )
                         for member in to_collect
                     ))
@@ -332,6 +338,16 @@ class RealtimeCollector:
                         if not item.get("success"):
                             continue
                         key = (item["crew_name"], item["user_id"])
+                        if item.get("current_month_used_fallback"):
+                            # Keep the last known monthly total when 풍투 is
+                            # temporarily blocked.  This member remains due
+                            # for a short retry instead of poisoning the cache
+                            # with an `unavailable` zero.
+                            self.next_detail_at[key] = now + timedelta(
+                                seconds=_interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
+                            )
+                            print(f"[{key[0]}/{key[1]}] monthly source unavailable; retaining last known cache.")
+                            continue
                         previous_total = int(((items_by_key.get(key) or {}).get("current_month") or {}).get("total_balloons") or 0)
                         current_total = int((item.get("current_month") or {}).get("total_balloons") or 0)
                         if current_total > previous_total:
