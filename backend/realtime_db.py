@@ -332,6 +332,25 @@ def get_cached_result(cache_key: str = "current") -> dict[str, Any] | None:
     return row["payload_json"] if row else None
 
 
+def get_collector_members() -> list[dict[str, Any]]:
+    """The collector's membership source of truth is PostgreSQL, not Sheets."""
+
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT crew_name, user_id, nickname, note FROM members ORDER BY crew_name, id"
+        ).fetchall()
+    return [
+        {
+            "crew_name": str(row["crew_name"]),
+            "user_id": str(row["user_id"]),
+            "nickname": str(row["nickname"] or row["user_id"]),
+            "note": str(row["note"] or ""),
+            "is_on_leave": str(row["note"] or "").strip().lower() == "휴직",
+        }
+        for row in rows
+    ]
+
+
 def claim_refresh_requests() -> list[int]:
     """Mark queued manual refreshes as processing and return their ids."""
 

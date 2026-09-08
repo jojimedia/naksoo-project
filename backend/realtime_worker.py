@@ -18,7 +18,6 @@ from main import (
     HEADERS,
     TIMEZONE,
     apply_member_sheet_metadata,
-    fetch_google_sheet_members,
     fetch_live_status,
     fetch_one_member,
     fetch_station,
@@ -31,6 +30,7 @@ from realtime_db import (
     complete_refresh_requests,
     ensure_schema,
     get_cached_result,
+    get_collector_members,
     save_result,
     update_collector_status,
 )
@@ -128,9 +128,9 @@ class RealtimeCollector:
         now = datetime.now(TIMEZONE)
         requested_refreshes = claim_refresh_requests()
         try:
-            members = await fetch_google_sheet_members()
+            members = get_collector_members()
             if not members:
-                raise RuntimeError("Google Sheets returned no members.")
+                raise RuntimeError("PostgreSQL members 테이블이 비어 있습니다.")
 
             cached = get_cached_result()
             calendar = get_calendar_period(now)
