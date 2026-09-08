@@ -311,7 +311,12 @@ class RealtimeCollector:
                 for item in cached.get("items") or []
             }
             active_members = [member for member in members if not member.get("is_on_leave")]
+            # Only brand-new members need the expensive three-month bootstrap.
+            # Existing members are refreshed below with one current-month
+            # detail request, preserving the historical snapshots already in
+            # PostgreSQL.
             to_collect: list[dict[str, Any]] = []
+            quick_collect: list[dict[str, Any]] = []
 
             if requested_refreshes or recovery_due:
                 # An administrator request or the daily sweep refreshes the
@@ -362,17 +367,28 @@ class RealtimeCollector:
                         # A newly added member needs one initial three-month
                         # snapshot whether or not they are currently LIVE.
                         to_collect.append(member)
-                    elif is_live and (not was_live or now >= due):
-                        to_collect.append(member)
                     elif was_live and not is_live:
                         # One final sample after the broadcast ends.
-                        to_collect.append(member)
+                        quick_collect.append(member)
                     elif existing and (existing.get("current_month") or {}).get("data_source") == "unavailable" and now >= due:
                         # Newly registered/offline members can also hit a
                         # transient source block during the initial snapshot.
                         # Retry only those unresolved rows at a low rate; do
                         # not wait until the next daily recovery sweep.
-                        to_collect.append(member)
+                        quick_collect.append(member)
+
+                # Status polling is intentionally slower than live detail
+                # polling. Use the cached live state here so each LIVE member
+                # can be refreshed at its own jittered 60–90 second cadence,
+                # without refetching station/live metadata or old months.
+                quick_keys = {(member["crew_name"], member["user_id"]) for member in quick_collect}
+                for member in active_members:
+                    key = (member["crew_name"], member["user_id"])
+                    if key in quick_keys or key not in items_by_key:
+                        continue
+                    if self.live_states.get(key, False) and now >= self.next_detail_at.get(key, now):
+                        quick_collect.append(member)
+                        quick_keys.add(key)
                 # Donor-detail backfill is independent of the 2-minute live
                 # status poll. Otherwise offline members would wait for a
                 # status turn before every retry.
@@ -380,7 +396,7 @@ class RealtimeCollector:
                 if self.next_detail_backfill_at is None or now >= self.next_detail_backfill_at:
                     already_collecting = {
                         (member["crew_name"], member["user_id"])
-                        for member in to_collect
+                        for member in (to_collect + quick_collect)
                     }
                     detail_backfill_candidates = [
                         member
@@ -409,23 +425,48 @@ class RealtimeCollector:
                             seconds=DETAIL_BACKFILL_INTERVAL_SECONDS
                         )
 
-                if selected_backfills:
+                # Existing LIVE members and missing donor rows use the same
+                # lightweight path: exactly one current-month detail/get
+                # request. Do not re-run the three-month bootstrap or donor
+                # profile lookups for every live refresh.
+                direct_collect = quick_collect + selected_backfills
+                if direct_collect:
                     calendar = get_calendar_period(now)
                     donor_semaphore = asyncio.Semaphore(RECOVERY_CONCURRENCY)
                     recovered_months = await asyncio.gather(*(
                         self._backfill_donors(client, member, calendar["current"], donor_semaphore)
-                        for member in selected_backfills
+                        for member in direct_collect
                     ))
+                    selected_backfill_keys = {
+                        (member["crew_name"], member["user_id"])
+                        for member in selected_backfills
+                    }
                     for key, recovered_month in recovered_months:
                         if recovered_month is None:
+                            # Preserve known data; only the next attempt is
+                            # delayed. This must never turn a good donor list
+                            # into an empty chart fallback.
+                            self.next_detail_at[key] = now + timedelta(
+                                seconds=(
+                                    UNAVAILABLE_RETRY_SECONDS
+                                    if key in selected_backfill_keys
+                                    else _interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
+                                )
+                            )
                             continue
                         existing = items_by_key.get(key)
                         if existing is None:
                             continue
+                        previous_total = int((existing.get("current_month") or {}).get("total_balloons") or 0)
                         existing["current_month"] = recovered_month
                         existing["current_month_used_fallback"] = False
                         items_by_key[key] = existing
                         self.next_donor_backfill_for.pop(key, None)
+                        if self.live_states.get(key, False) or int(recovered_month.get("total_balloons") or 0) > previous_total:
+                            interval = _interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
+                        else:
+                            interval = _interval(COLD_POLL_SECONDS, COLD_POLL_JITTER_SECONDS)
+                        self.next_detail_at[key] = now + timedelta(seconds=interval)
 
                 if to_collect:
                     calendar = get_calendar_period(now)
@@ -521,7 +562,11 @@ class RealtimeCollector:
             if self.last_cleanup_date != now.date():
                 cleanup_expired_data(now)
                 self.last_cleanup_date = now.date()
-            print(f"Cycle saved: live refreshes={len(to_collect)}, total items={output['count']}")
+            print(
+                f"Cycle saved: bootstrap={len(to_collect)}, "
+                f"current-detail={len(quick_collect) + len(selected_backfills)}, "
+                f"total items={output['count']}"
+            )
         except Exception as error:
             complete_refresh_requests(requested_refreshes, str(error))
             update_collector_status(now, str(error))
