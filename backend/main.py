@@ -7,7 +7,6 @@ import os
 import re
 import random
 from collections import Counter
-from html import unescape
 from io import StringIO
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -62,20 +61,6 @@ POONG_HEADERS = {
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
 }
-
-POONGGO_HEADERS = {
-    **HEADERS,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Referer": "https://poonggo.com/",
-    "Origin": "https://poonggo.com",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-}
-
-ENABLE_POONGGO_FALLBACK = (
-    os.environ.get("NAKSOO_ENABLE_POONGGO_FALLBACK", "0") == "1"
-)
-
 
 class SourceRequestError(RuntimeError):
     """Source API failure with enough metadata for a respectful retry."""
@@ -418,131 +403,6 @@ def build_month_data_from_chart(entry, year, month):
     }
 
 
-def parse_int_text(value):
-    """쉼표/기호가 섞인 텍스트에서 정수만 추출한다."""
-
-    text = str(value or "")
-    digits = re.sub(r"[^\d]", "", text)
-
-    return int(digits) if digits else 0
-
-
-def strip_html(value):
-    """좁은 범위의 HTML 조각을 사람이 읽는 텍스트로 바꾼다."""
-
-    text = re.sub(r"<[^>]+>", " ", value or "")
-    text = unescape(text)
-
-    return " ".join(text.split())
-
-
-def parse_poonggo_total(html):
-    """poonggo 월간/일별 페이지의 '별풍선 합계' 값을 읽는다."""
-
-    match = re.search(
-        r"<span>\s*별풍선 합계\s*</span>.*?<h3[^>]*>(.*?)</h3>",
-        html,
-        flags=re.DOTALL,
-    )
-
-    if not match:
-        return None
-
-    return parse_int_text(strip_html(match.group(1)))
-
-
-def parse_poonggo_fan_rows(html, limit=50):
-    """poonggo 팬랭킹 HTML을 기존 result.json fans 배열로 변환한다."""
-
-    fans = []
-
-    for chunk in re.findall(r"<li>(.*?)</li>", html, flags=re.DOTALL):
-        href_match = re.search(
-            r'href="https://www\.sooplive\.co\.kr/station/([^"]+)"',
-            chunk,
-        )
-
-        if not href_match:
-            continue
-
-        user_id = href_match.group(1).strip()
-        anchor_match = re.search(
-            r"<a\b[^>]*>(.*?)</a>",
-            chunk,
-            flags=re.DOTALL,
-        )
-        anchor_text = strip_html(anchor_match.group(1)) if anchor_match else ""
-        nickname = re.sub(r"^(👑|🥈|🥉|\d+)\s*", "", anchor_text).strip()
-
-        values = [
-            parse_int_text(strip_html(match))
-            for match in re.findall(
-                r'<div[^>]*class="[^"]*\bflx\b[^"]*\bjc\b[^"]*"[^>]*>'
-                r"(.*?)</div>",
-                chunk,
-                flags=re.DOTALL,
-            )
-        ]
-
-        if not values:
-            continue
-
-        balloons = values[0]
-        count = values[1] if len(values) > 1 else 0
-
-        fans.append({
-            "user_id": user_id,
-            "nickname": nickname or user_id,
-            "balloons": balloons,
-            "count": count,
-            "avg_balloons": int(balloons / count) if count else 0,
-        })
-
-        if len(fans) >= limit:
-            break
-
-    return fans
-
-
-def parse_poonggo_month_data(html, year, month):
-    """poonggo station 월간 HTML을 기존 month_data 형태로 변환한다."""
-
-    total_balloons = parse_poonggo_total(html)
-
-    if total_balloons is None:
-        raise RuntimeError("poonggo total 파싱 실패")
-
-    return {
-        "year": year,
-        "month": month,
-        "total_balloons": total_balloons,
-        "daily_balloons": [],
-        "fans": parse_poonggo_fan_rows(html),
-        "data_source": "poonggo_monthly",
-    }
-
-
-async def fetch_poonggo_month_data(client, user_id, year, month):
-    """poonggo station 월간 통계 HTML에서 월합과 팬랭킹을 가져온다."""
-
-    url = (
-        f"https://poonggo.com/station/{user_id}"
-        f"?c=monthly&date={year}-{month:02d}-01&page=1&tab=1"
-    )
-
-    res = await client.get(url, headers=POONGGO_HEADERS)
-
-    if res.status_code != 200:
-        body_preview = res.text[:200].replace("\n", " ")
-        raise source_error(
-            f"poonggo 월간 실패: {user_id} {year}-{month} "
-            f"{res.status_code} body={body_preview!r}",
-            res,
-        )
-
-    return parse_poonggo_month_data(res.text, year, month)
-
-
 async def resolve_month_balloon_data(
     client,
     user_id,
@@ -552,9 +412,8 @@ async def resolve_month_balloon_data(
     crew_name="",
 ):
     """
-    풍투(poong.today) detail/get → chart/get 을 기본으로 사용한다.
+    풍투(poong.today) detail/get → chart/get 을 사용한다.
     detail 경로에는 일별(d)이 있어 오늘 별풍선도 채워진다.
-    NAKSOO_ENABLE_POONGGO_FALLBACK=1이면 풍투 실패 시 poonggo 월간 HTML을 사용한다.
     """
 
     label = f"{crew_name}/{user_id} balloon {year}-{month}"
@@ -617,28 +476,7 @@ async def resolve_month_balloon_data(
         )
         return build_month_data_from_chart(entry, year, month)
 
-    if not ENABLE_POONGGO_FALLBACK:
-        print(
-            f"[{crew_name}/{user_id}] 풍고 fallback 비활성화 "
-            f"{year}-{month}"
-        )
-        return None
-
-    try:
-        month_data = await retry(
-            lambda: fetch_poonggo_month_data(client, user_id, year, month),
-            retries=3,
-            delay=1,
-            label=f"{crew_name}/{user_id} poonggo {year}-{month}",
-        )
-        print(
-            f"[{crew_name}/{user_id}] poonggo 월간 성공 {year}-{month} "
-            f"total={month_data.get('total_balloons')}"
-        )
-        return month_data
-    except Exception as e:
-        print(f"[{crew_name}/{user_id}] poonggo 월간 실패 {year}-{month}: {e}")
-        return None
+    return None
 
 
 # =========================
@@ -1504,12 +1342,9 @@ async def restore_suspicious_month_items_from_previous_result(items, period):
         is_same_period = item_period == backup_period
         regressed = is_same_period and previous_total > item_total
 
-        # 의도적으로 선택한 월합 소스는 GitHub 회귀 보정으로 덮지 않는다.
-        # poonggo 전환 후에는 이전 풍투 값보다 작아도 최신 기준값으로 본다.
-        if item_current.get("data_source") in (
-            "chart_ranking",
-            "poonggo_monthly",
-        ) and regressed:
+        # chart/get 폴백 값은 detail/get의 이전 캐시보다 작아도
+        # GitHub 회귀 보정으로 덮지 않는다.
+        if item_current.get("data_source") == "chart_ranking" and regressed:
             restored_items.append(item)
             continue
 

@@ -47,6 +47,7 @@ WARM_POLL_SECONDS = max(60, int(os.environ.get("NAKSOO_WARM_POLL_SECONDS", "180"
 WARM_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_WARM_POLL_JITTER_SECONDS", "45")))
 COLD_POLL_SECONDS = max(120, int(os.environ.get("NAKSOO_COLD_POLL_SECONDS", "600")))
 COLD_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_COLD_POLL_JITTER_SECONDS", "90")))
+UNAVAILABLE_RETRY_SECONDS = max(60, int(os.environ.get("NAKSOO_UNAVAILABLE_RETRY_SECONDS", "300")))
 LOOP_SLEEP_SECONDS = max(5, int(os.environ.get("NAKSOO_WORKER_LOOP_SECONDS", "10")))
 # A cold start or an administrator-triggered full refresh has to collect every
 # active member.  Start quickly in batches, then retry only the members that
@@ -310,6 +311,12 @@ class RealtimeCollector:
                     elif was_live and not is_live:
                         # One final sample after the broadcast ends.
                         to_collect.append(member)
+                    elif existing and existing.get("current_month_used_fallback") and now >= due:
+                        # Newly registered/offline members can also hit a
+                        # transient source block during the initial snapshot.
+                        # Retry only those unresolved rows at a low rate; do
+                        # not wait until the next daily recovery sweep.
+                        to_collect.append(member)
 
                 if to_collect:
                     calendar = get_calendar_period(now)
@@ -343,9 +350,12 @@ class RealtimeCollector:
                             # temporarily blocked.  This member remains due
                             # for a short retry instead of poisoning the cache
                             # with an `unavailable` zero.
-                            self.next_detail_at[key] = now + timedelta(
-                                seconds=_interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
+                            retry_seconds = (
+                                _interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
+                                if item.get("is_live")
+                                else UNAVAILABLE_RETRY_SECONDS
                             )
+                            self.next_detail_at[key] = now + timedelta(seconds=retry_seconds)
                             print(f"[{key[0]}/{key[1]}] monthly source unavailable; retaining last known cache.")
                             continue
                         previous_total = int(((items_by_key.get(key) or {}).get("current_month") or {}).get("total_balloons") or 0)
