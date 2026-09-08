@@ -69,7 +69,7 @@ export default function AdminPanelModal({
   onClose,
   onLogout,
 }: AdminPanelModalProps) {
-  const managedCrews = session.crews;
+  const [managedCrews, setManagedCrews] = useState(session.crews);
   const assignableCrews = useMemo(
     () => managedCrews.filter((crew) => !isFaCrew(crew)),
     [managedCrews],
@@ -109,6 +109,12 @@ export default function AdminPanelModal({
   const [selectedRequestRows, setSelectedRequestRows] = useState<number[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [isProcessingRequests, setIsProcessingRequests] = useState(false);
+  const [showCrewSetup, setShowCrewSetup] = useState(false);
+  const [newCrewName, setNewCrewName] = useState("");
+  const [representativeQuery, setRepresentativeQuery] = useState("");
+  const [representativeCandidates, setRepresentativeCandidates] = useState<SearchCandidate[]>([]);
+  const [representative, setRepresentative] = useState<SearchCandidate | null>(null);
+  const [isSearchingRepresentative, setIsSearchingRepresentative] = useState(false);
   const selectingFaCrew = isFaCrew(selectedCrew);
   const pendingCount = Object.keys(pendingAssignments).length;
   const displayMembers = useMemo(() => {
@@ -774,16 +780,21 @@ export default function AdminPanelModal({
     setMessage("비밀번호를 변경했습니다.");
   }
 
+  async function handleSearchRepresentative() {
+    const query = representativeQuery.trim(); if (query.length < 2) { setError("대표자 검색어는 2글자 이상 입력해주세요."); return; }
+    setIsSearchingRepresentative(true); setError("");
+    try { const response = await fetch(`/api/admin/streamers/search?q=${encodeURIComponent(query)}&representative=1`); const data = await response.json() as { candidates?: SearchCandidate[]; error?: string }; if (!response.ok) throw new Error(data.error ?? "대표자 검색에 실패했습니다."); setRepresentativeCandidates(data.candidates ?? []); }
+    catch (searchError) { setError(searchError instanceof Error ? searchError.message : "대표자 검색에 실패했습니다."); }
+    finally { setIsSearchingRepresentative(false); }
+  }
+
   async function handleAddCrew() {
-    if (session.login_id !== "admin") return;
-    const crewName = window.prompt("새 크루명을 입력하세요.")?.trim();
-    if (!crewName) return;
-    const representativeName = window.prompt("대표자명을 입력하세요.")?.trim();
-    if (!representativeName) return;
-    const response = await fetch("/api/admin/crews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ crew_name: crewName, representative_name: representativeName }) });
+    const crewName = newCrewName.trim();
+    if (!crewName || !representative) { setError("크루명과 대표 스트리머를 선택해주세요."); return; }
+    const response = await fetch("/api/admin/crews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ crew_name: crewName, representative_name: representative.nickname, representative_user_id: representative.user_id }) });
     const data = await response.json() as { error?: string };
     if (!response.ok) { setError(data.error ?? "크루 추가에 실패했습니다."); return; }
-    setMessage(`${crewName} 크루를 추가했습니다. 창을 다시 열면 목록에 반영됩니다.`);
+    setManagedCrews((current) => current.includes(crewName) ? current : [...current, crewName]); setSelectedCrew(crewName); setShowCrewSetup(false); setNewCrewName(""); setRepresentative(null); setRepresentativeCandidates([]); setMessage(`${crewName} 크루를 추가했습니다.`);
   }
 
   async function handleTriggerUpdate() {
@@ -852,7 +863,7 @@ export default function AdminPanelModal({
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => void handleChangePassword()} className="rounded border border-[#4b455c] px-2 py-1 text-xs font-semibold text-[#d8d4e5] hover:border-[#a99cff]">비밀번호 변경</button>
-            {session.login_id === "admin" ? <button type="button" onClick={() => void handleAddCrew()} className="rounded border border-[#4b455c] px-2 py-1 text-xs font-semibold text-[#d8d4e5] hover:border-[#a99cff]">크루 추가</button> : null}
+            {session.login_id === "admin" ? <button type="button" onClick={() => setShowCrewSetup(true)} className="rounded border border-[#4b455c] px-2 py-1 text-xs font-semibold text-[#d8d4e5] hover:border-[#a99cff]">크루 추가</button> : null}
             <button
               type="button"
               className="rounded-lg border border-[#5b4bdb]/50 px-3 py-1.5 text-sm font-medium text-[#d8d4ff] hover:border-[#a99cff] disabled:opacity-60"
@@ -1280,6 +1291,17 @@ export default function AdminPanelModal({
               </p>
             )}
           </section>
+
+          {showCrewSetup ? (
+            <section className="rounded-lg border border-[#5b4bdb]/50 bg-[#111018] p-4">
+              <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold text-[#e5e7eb]">새 크루 추가</h3><button type="button" onClick={() => setShowCrewSetup(false)} className="text-sm text-[#a8a2b8]">닫기</button></div>
+              <label className="block text-sm text-[#a8a2b8]">크루명<input value={newCrewName} onChange={(event) => setNewCrewName(event.target.value)} className="mt-1 h-10 w-full rounded border border-[#3a3548] bg-[#17151f] px-3 text-[#e5e7eb]" placeholder="크루명" /></label>
+              <div className="mt-3"><span className="text-sm text-[#a8a2b8]">대표 스트리머</span><div className="mt-1 flex gap-2"><input value={representativeQuery} onChange={(event) => { setRepresentativeQuery(event.target.value); setRepresentative(null); }} className="h-10 min-w-0 flex-1 rounded border border-[#3a3548] bg-[#17151f] px-3 text-[#e5e7eb]" placeholder="SOOP ID 또는 닉네임" /><button type="button" onClick={() => void handleSearchRepresentative()} disabled={isSearchingRepresentative} className="rounded border border-[#4b455c] px-3 text-sm text-[#d8d4ff]">{isSearchingRepresentative ? "검색 중..." : "검색"}</button></div></div>
+              {representativeCandidates.length ? <div className="mt-2 max-h-40 overflow-y-auto rounded border border-[#3a3548] p-1">{representativeCandidates.map((candidate) => <button key={candidate.user_id} type="button" onClick={() => setRepresentative(candidate)} className={`block w-full rounded px-2 py-2 text-left text-sm ${representative?.user_id === candidate.user_id ? "bg-[#5b4bdb]/25 text-[#d8d4ff]" : "text-[#e5e7eb] hover:bg-[#2b2836]"}`}>{candidate.nickname} <span className="text-xs text-[#8d879c]">({candidate.user_id})</span></button>)}</div> : null}
+              {representative ? <p className="mt-2 text-sm text-[#86efac]">대표 선택: {representative.nickname} ({representative.user_id})</p> : null}
+              <button type="button" onClick={() => void handleAddCrew()} disabled={!newCrewName.trim() || !representative} className="mt-4 rounded bg-[#5b4bdb] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">크루 생성</button>
+            </section>
+          ) : null}
 
           {message ? (
             <p className="text-sm font-medium text-[#86efac]">{message}</p>

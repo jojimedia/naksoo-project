@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim() ?? "";
   const targetCrew = searchParams.get("crew")?.trim() ?? "";
+  const forRepresentative = searchParams.get("representative") === "1";
 
   if (!query) {
     return jsonError("검색어를 입력해주세요.");
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
       const fromFa = Boolean(
         existing && isFaCrew(existing.crew_name) && !isFaCrew(targetCrew),
       );
-      const selectable = !sameCrew && (!existing || fromFa);
+      const selectable = forRepresentative || (!sameCrew && (!existing || fromFa));
 
       return {
         user_id: hit.user_id,
