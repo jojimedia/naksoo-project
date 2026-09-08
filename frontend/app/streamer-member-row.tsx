@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import FaGuestbookPanel from "./fa-guestbook-panel";
 import type { GuestbookPost, GuestbookPreview } from "@/lib/guestbook-shared";
 
@@ -17,6 +18,9 @@ type CrewMember = {
   nickname: string;
   broadcast_start: string | null;
   is_live: boolean;
+  broadcast_no?: string | null;
+  broadcast_title?: string | null;
+  viewer_count?: number | null;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;
@@ -37,6 +41,94 @@ function formatSignedNumber(value: number) {
 
 function formatSignedPercent(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function LiveBadge({ member }: { member: CrewMember }) {
+  const badgeRef = useRef<HTMLAnchorElement>(null);
+  const previewRef = useRef<HTMLAnchorElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const [preview, setPreview] = useState<{ top: number; left: number } | null>(null);
+  const streamUrl = `https://play.sooplive.co.kr/${encodeURIComponent(member.user_id)}`;
+  const thumbnailUrl = member.broadcast_no
+    ? `https://liveimg.sooplive.co.kr/m/${encodeURIComponent(member.broadcast_no)}`
+    : null;
+
+  function clearCloseTimer() {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
+
+  function hidePreview() {
+    clearCloseTimer();
+    setPreview(null);
+  }
+
+  function showPreview() {
+    if (!thumbnailUrl || !badgeRef.current) return;
+    clearCloseTimer();
+    const rect = badgeRef.current.getBoundingClientRect();
+    setPreview({
+      top: Math.min(rect.bottom + 8, window.innerHeight - 180),
+      left: Math.min(Math.max(rect.left + rect.width / 2, 118), window.innerWidth - 118),
+    });
+  }
+
+  function supportsHover() {
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  }
+
+  useEffect(() => () => clearCloseTimer(), []);
+
+  return (
+    <>
+      <a
+        ref={badgeRef}
+        href={streamUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex shrink-0 items-center rounded border border-red-300/90 bg-red-600 px-1 py-px text-[9px] font-black leading-none tracking-wide text-white shadow-sm animate-pulse"
+        aria-label={`${member.nickname} 라이브 방송 보기`}
+        onClick={(event) => {
+          if (!thumbnailUrl) return;
+          event.preventDefault();
+          preview ? hidePreview() : showPreview();
+        }}
+        onMouseEnter={() => supportsHover() && showPreview()}
+        onMouseLeave={() => {
+          if (!supportsHover()) return;
+          closeTimerRef.current = window.setTimeout(hidePreview, 140);
+        }}
+      >
+        LIVE
+      </a>
+      {preview && thumbnailUrl
+        ? createPortal(
+            <a
+              ref={previewRef}
+              href={streamUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="fixed z-[80] w-[220px] -translate-x-1/2 overflow-hidden rounded-lg border border-[#4b455c] bg-[#17151f] shadow-xl shadow-black/50"
+              style={{ top: preview.top, left: preview.left }}
+              onMouseEnter={clearCloseTimer}
+              onMouseLeave={() => {
+                closeTimerRef.current = window.setTimeout(hidePreview, 140);
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${thumbnailUrl}?t=${Math.floor(Date.now() / 60_000)}`} alt={`${member.nickname} 라이브 썸네일`} className="aspect-video w-full bg-[#111018] object-cover" />
+              <div className="px-2 py-1.5">
+                <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-[#e5e7eb]">{member.broadcast_title || "방송 중"}</p>
+                {member.viewer_count != null ? <p className="mt-0.5 text-[10px] font-bold text-[#a8a2b8]">시청자 {formatNumber(member.viewer_count)}명</p> : null}
+              </div>
+            </a>,
+            document.body,
+          )
+        : null}
+    </>
+  );
 }
 
 function HighlightText({ text, query }: { text: string; query: string }) {
@@ -349,6 +441,7 @@ export default function StreamerMemberRow({
             >
               <HighlightText text={member.nickname} query={searchQuery} />
             </button>
+            {member.is_live ? <LiveBadge member={member} /> : null}
             {hasNewGuestbook && !guestbookEnabled ? (
               <span className="shrink-0 rounded bg-[#ef4444] px-1 py-px text-[9px] font-black leading-none tracking-wide text-white">
                 NEW

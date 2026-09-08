@@ -79,7 +79,7 @@ class RealtimeCollector:
         self.last_change_at: dict[tuple[str, str], datetime] = {}
         self.last_cleanup_date = None
 
-    async def _status_for_member(self, client, member: dict[str, Any]) -> tuple[bool, str | None, bool] | None:
+    async def _status_for_member(self, client, member: dict[str, Any]) -> tuple[bool, str | None, bool, str | None, str | None, int | None] | None:
         user_id = member["user_id"]
         try:
             station = await retry(lambda: fetch_station(client, user_id), retries=2, delay=1, label=f"{user_id} station")
@@ -92,6 +92,9 @@ class RealtimeCollector:
                 bool(live_status.get("is_live")),
                 station.get("broadcast_start"),
                 bool(live_status.get("is_password")),
+                str(live_status["broadcast_no"]) if live_status.get("broadcast_no") else None,
+                str(live_status["broadcast_title"]).strip() if live_status.get("broadcast_title") else None,
+                int(live_status["viewer_count"]) if str(live_status.get("viewer_count") or "").isdigit() else None,
             )
         except Exception as error:
             print(f"[{member['crew_name']}/{user_id}] live status failed: {error}")
@@ -159,7 +162,7 @@ class RealtimeCollector:
                     if status is None:
                         continue  # retain the last known state on an API failure
 
-                    is_live, broadcast_start, is_password = status
+                    is_live, broadcast_start, is_password, broadcast_no, broadcast_title, viewer_count = status
                     # Do not trust a pre-restart cache value for a final sample.
                     # It could have been marked live by an old/stale station API.
                     was_live = self.live_states.get(key, False)
@@ -169,6 +172,9 @@ class RealtimeCollector:
                         existing["is_live"] = is_live
                         existing["broadcast_start"] = broadcast_start if is_live else None
                         existing["is_password_broadcast"] = is_password
+                        existing["broadcast_no"] = broadcast_no if is_live else None
+                        existing["broadcast_title"] = broadcast_title if is_live else None
+                        existing["viewer_count"] = viewer_count if is_live else None
 
                     due = self.next_detail_at.get(key, now)
                     if is_live and (not was_live or now >= due):

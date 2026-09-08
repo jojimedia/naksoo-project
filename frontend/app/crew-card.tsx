@@ -31,6 +31,9 @@ type CrewMember = {
   profile_image_url: string;
   broadcast_start: string | null;
   is_live: boolean;
+  broadcast_no?: string | null;
+  broadcast_title?: string | null;
+  viewer_count?: number | null;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;

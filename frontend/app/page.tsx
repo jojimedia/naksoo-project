@@ -114,6 +114,9 @@ type RankingItem = {
   broadcast_start?: string | null;
   is_live?: boolean;
   is_password_broadcast?: boolean;
+  broadcast_no?: string | number | null;
+  broadcast_title?: string | null;
+  viewer_count?: number | string | null;
   note?: string;
   is_on_leave?: boolean;
   current_month: MonthlyStats;
@@ -316,6 +319,13 @@ function normalizeRankingItem(
       typeof value.broadcast_start === "string" ? value.broadcast_start : null,
     is_live: Boolean(value.is_live),
     is_password_broadcast: Boolean(value.is_password_broadcast),
+    broadcast_no:
+      typeof value.broadcast_no === "string" || typeof value.broadcast_no === "number"
+        ? String(value.broadcast_no)
+        : null,
+    broadcast_title:
+      typeof value.broadcast_title === "string" ? value.broadcast_title : null,
+    viewer_count: toNumber(value.viewer_count, 0) || null,
     note: String(value.note ?? ""),
     is_on_leave:
       Boolean(value.is_on_leave) ||
@@ -712,6 +722,9 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             profile_image_url: normalizeImageUrl(item.profile_image_url),
             broadcast_start: item.broadcast_start ?? null,
             is_live: item.is_live ?? false,
+            broadcast_no: item.broadcast_no ?? null,
+            broadcast_title: item.broadcast_title ?? null,
+            viewer_count: item.viewer_count ?? null,
             current_balloons: current,
             previous_balloons: previous,
             change_balloons: current - previous,
@@ -748,6 +761,9 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
             profile_image_url: normalizeImageUrl(item.profile_image_url),
             broadcast_start: item.broadcast_start ?? null,
             is_live: false,
+            broadcast_no: null,
+            broadcast_title: null,
+            viewer_count: null,
             current_balloons: current,
             previous_balloons: previous,
             change_balloons: current - previous,

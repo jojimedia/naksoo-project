@@ -259,6 +259,12 @@ async def fetch_live_status(client, user_id):
     return {
         "is_live": channel.get("RESULT") == 1 and channel.get("BPWD") != "Y",
         "is_password": channel.get("BPWD") == "Y",
+        # Keep these fields with the ranking cache so the web UI can render a
+        # live badge/thumbnail without starting another browser-side polling
+        # loop for every member.
+        "broadcast_no": channel.get("BNO") or None,
+        "broadcast_title": channel.get("TITLE") or None,
+        "viewer_count": channel.get("CTUSER") or None,
     }
 
 
@@ -936,6 +942,9 @@ async def fetch_one_member(
                 ),
                 "is_live": is_live,
                 "is_password_broadcast": live_status["is_password"],
+                "broadcast_no": live_status.get("broadcast_no") if is_live else None,
+                "broadcast_title": live_status.get("broadcast_title") if is_live else None,
+                "viewer_count": live_status.get("viewer_count") if is_live else None,
                 "current_month_used_fallback": used_month_fallback,
 
                 "current_month": current_month_data,
