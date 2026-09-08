@@ -5,7 +5,7 @@ import {
   getSessionFromCookies,
 } from "@/lib/admin-session";
 import { jsonError } from "@/lib/api-utils";
-import { listPendingMemberRequests } from "@/lib/google-sheets";
+import { listPendingMemberRequests } from "@/lib/operations-store";
 
 export const dynamic = "force-dynamic";
 

@@ -134,6 +134,12 @@ def _as_datetime(value: Any) -> datetime | None:
     return None
 
 
+def _previous_period(year: int, month: int) -> dict[str, int]:
+    if month == 1:
+        return {"year": year - 1, "month": 12}
+    return {"year": year, "month": month - 1}
+
+
 def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observed_at: datetime) -> None:
     streamer_id = str(item.get("user_id") or "")
     year = int(month_data.get("year") or 0)
@@ -249,6 +255,7 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
             for item in payload.get("items") or []:
                 _upsert_month(conn, item, item.get("current_month") or {}, observed_at)
                 _upsert_month(conn, item, item.get("previous_month") or {}, observed_at)
+                _upsert_month(conn, item, item.get("older_month") or {}, observed_at)
 
             conn.execute(
                 """
@@ -262,11 +269,49 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
                 (_as_json(payload), observed_at, observed_at),
             )
 
+            # Keep the same response shape for each selectable month.  The
+            # browser therefore only switches PostgreSQL cache keys; it never
+            # calls the source APIs when the user chooses an older month.
+            current = payload.get("current_period") or {}
+            previous = payload.get("previous_period") or {}
+            period_pairs = [
+                (current, "current_month", "previous_month"),
+                (previous, "previous_month", "older_month"),
+                (payload.get("older_period") or {}, "older_month", "missing_month"),
+            ]
+            for period, current_key, previous_key in period_pairs:
+                year = int(period.get("year") or 0)
+                month = int(period.get("month") or 0)
+                if not year or not month:
+                    continue
+                period_payload = dict(payload)
+                period_payload["current_period"] = {"year": year, "month": month}
+                period_payload["previous_period"] = _previous_period(year, month)
+                period_payload["items"] = [
+                    {
+                        **item,
+                        "current_month": item.get(current_key) or {},
+                        "previous_month": item.get(previous_key) or {},
+                    }
+                    for item in payload.get("items") or []
+                ]
+                conn.execute(
+                    """
+                    INSERT INTO ranking_cache (cache_key, payload_json, generated_at, source_max_observed_at)
+                    VALUES (%s, %s::jsonb, %s, %s)
+                    ON CONFLICT (cache_key) DO UPDATE SET
+                      payload_json = EXCLUDED.payload_json,
+                      generated_at = EXCLUDED.generated_at,
+                      source_max_observed_at = EXCLUDED.source_max_observed_at
+                    """,
+                    (f"period:{year}-{month:02d}", _as_json(period_payload), observed_at, observed_at),
+                )
 
-def get_cached_result() -> dict[str, Any] | None:
+
+def get_cached_result(cache_key: str = "current") -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute(
-            "SELECT payload_json FROM ranking_cache WHERE cache_key = 'current'"
+            "SELECT payload_json FROM ranking_cache WHERE cache_key = %s", (cache_key,)
         ).fetchone()
     return row["payload_json"] if row else None
 

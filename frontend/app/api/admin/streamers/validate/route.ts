@@ -4,7 +4,7 @@ import { validateSoopUser } from "@/lib/admin-auth";
 import { getSessionFromCookies } from "@/lib/admin-session";
 import { jsonError } from "@/lib/api-utils";
 import { isFaCrew } from "@/lib/crews";
-import { findMemberByUserId } from "@/lib/google-sheets";
+import { findMemberByUserId } from "@/lib/operations-store";
 
 export const dynamic = "force-dynamic";
 

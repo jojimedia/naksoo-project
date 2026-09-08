@@ -94,6 +94,7 @@ def get_calendar_period(now):
     current_year = now.year
     current_month = now.month
     previous_year, previous_month = get_previous_period(current_year, current_month)
+    older_year, older_month = get_previous_period(previous_year, previous_month)
 
     return {
         "current": {
@@ -103,6 +104,10 @@ def get_calendar_period(now):
         "previous": {
             "year": previous_year,
             "month": previous_month,
+        },
+        "older": {
+            "year": older_year,
+            "month": older_month,
         },
     }
 
@@ -846,7 +851,7 @@ async def fetch_one_member(
     구글시트 멤버 1명에 대해:
     1. station API로 닉네임 / 프로필 이미지 가져오기
     2. 현재월 별풍선 가져오기
-    3. 이전달 별풍선 가져오기
+    3. 이전 두 달의 별풍선 가져오기
     4. 하나의 객체로 합치기
     """
 
@@ -859,6 +864,8 @@ async def fetch_one_member(
 
         previous_year = period["previous"]["year"]
         previous_month = period["previous"]["month"]
+        older_year = period["older"]["year"]
+        older_month = period["older"]["month"]
 
         try:
             print(f"[{crew_name}/{user_id}] 멤버 조회 시작")
@@ -917,6 +924,28 @@ async def fetch_one_member(
                     "fans": [],
                 }
 
+            print(
+                f"[{crew_name}/{user_id}] 별풍 2개월전 조회 "
+                f"{older_year}-{older_month}"
+            )
+            older_month_data = await resolve_month_balloon_data(
+                client,
+                user_id,
+                older_year,
+                older_month,
+                ranking_cache,
+                crew_name,
+            )
+
+            if older_month_data is None:
+                older_month_data = {
+                    "year": older_year,
+                    "month": older_month,
+                    "total_balloons": 0,
+                    "daily_balloons": [],
+                    "fans": [],
+                }
+
             current_month_data["fans"] = await enrich_fans_with_profiles(
                 client,
                 current_month_data["fans"],
@@ -950,6 +979,7 @@ async def fetch_one_member(
                 "current_month": current_month_data,
 
                 "previous_month": previous_month_data,
+                "older_month": older_month_data,
 
                 "success": True,
             }
@@ -978,6 +1008,13 @@ async def fetch_one_member(
                 "previous_month": {
                     "year": previous_year,
                     "month": previous_month,
+                    "total_balloons": 0,
+                    "daily_balloons": [],
+                    "fans": [],
+                },
+                "older_month": {
+                    "year": older_year,
+                    "month": older_month,
                     "total_balloons": 0,
                     "daily_balloons": [],
                     "fans": [],

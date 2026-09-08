@@ -91,6 +91,7 @@ type CrewCardData = {
   };
   crews: CrewCard[];
   fa_crew: CrewCard | null;
+  month_options?: Period[];
 };
 
 type MonthlyStats = {
@@ -816,7 +817,13 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
   };
 }
 
-async function getCrewCardData() {
+function getRecentPeriods(now = getKstDateParts()): Period[] {
+  const current = { year: now.year, month: now.month };
+  const previous = getPreviousPeriod(current);
+  return [getPreviousPeriod(previous), previous, current];
+}
+
+async function getCrewCardData(selectedPeriod?: Period) {
   const emptyData = () => makeCrewCardData(normalizeResult({ items: [] }));
 
   if (!isPostgresConfigured()) {
@@ -832,7 +839,11 @@ async function getCrewCardData() {
   }
 
   try {
-    const cached = await getCachedRanking();
+    const cached = await getCachedRanking(
+      selectedPeriod
+        ? `period:${selectedPeriod.year}-${String(selectedPeriod.month).padStart(2, "0")}`
+        : "current",
+    );
     return cached
       ? makeCrewCardData(normalizeResult(cached as RawNaksooResult))
       : emptyData();
@@ -842,8 +853,20 @@ async function getCrewCardData() {
   }
 }
 
-export default async function Home() {
-  const data = await getCrewCardData();
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string; month?: string }>;
+}) {
+  const params = await searchParams;
+  const recentPeriods = getRecentPeriods();
+  const requestedYear = Number(params.year);
+  const requestedMonth = Number(params.month);
+  const selectedPeriod = recentPeriods.find(
+    (period) => period.year === requestedYear && period.month === requestedMonth,
+  );
+  const data = await getCrewCardData(selectedPeriod);
+  data.month_options = recentPeriods;
 
   return <CrewDashboard data={data} />;
 }

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { jsonError, jsonNoStore } from "@/lib/api-utils";
-import { listGuestbookEntries } from "@/lib/google-sheets";
+import { listGuestbookEntries } from "@/lib/operations-store";
 import {
   bundleGuestbookByStreamer,
   guestbookVoteCookie,

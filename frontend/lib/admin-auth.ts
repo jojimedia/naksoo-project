@@ -1,4 +1,10 @@
-import { listAdmins, listRegisteredCrewNames, syncAdminsCrewColumns } from "./google-sheets";
+import {
+  listAdmins,
+  listRegisteredCrewNames,
+  refreshGoogleSheetsCache,
+  syncAdminsCrewColumns,
+} from "./operations-store";
+import { verifyPassword } from "./operations-db";
 import type { AdminSession } from "./admin-session";
 import { resolveManagedCrews } from "./crews";
 
@@ -35,9 +41,13 @@ export async function authenticateAdmin(
   loginId: string,
   password: string,
 ): Promise<AdminSession | null> {
+  // `admins` 권한과 크루 목록을 방금 수정한 뒤 로그인해도 바로 반영한다.
+  // 일반 페이지 조회에는 캐시를 유지하지만, 로그인 시에는 최신 시트를 기준으로 한다.
+  refreshGoogleSheetsCache();
+
   const admins = await listAdmins();
   const admin = admins.find(
-    (entry) => entry.login_id === loginId && entry.password === password,
+    (entry) => entry.login_id === loginId && verifyPassword(password, entry.password),
   );
 
   if (!admin) {
@@ -49,7 +59,9 @@ export async function authenticateAdmin(
 
   return {
     loginId: admin.login_id,
-    crews: resolveManagedCrews(admin.crews, registeredCrews),
+    crews: admin.is_superadmin
+      ? resolveManagedCrews(registeredCrews, registeredCrews)
+      : resolveManagedCrews(admin.crews, registeredCrews),
   };
 }
 

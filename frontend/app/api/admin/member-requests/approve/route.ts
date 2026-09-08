@@ -12,7 +12,7 @@ import {
   moveMemberToFa,
   updateMemberNote,
   updateMemberRequestStatuses,
-} from "@/lib/google-sheets";
+} from "@/lib/operations-store";
 
 export const dynamic = "force-dynamic";
 

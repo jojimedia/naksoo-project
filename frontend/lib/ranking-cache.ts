@@ -5,7 +5,7 @@ declare global {
   var naksooPostgresPool: Pool | undefined;
 }
 
-function getPool(): Pool | null {
+export function getPostgresPool(): Pool | null {
   const password = process.env.PGPASSWORD;
   const connectionString = process.env.DATABASE_URL;
 
@@ -33,15 +33,16 @@ function getPool(): Pool | null {
   return global.naksooPostgresPool;
 }
 
-export async function getCachedRanking(): Promise<unknown | null> {
-  const pool = getPool();
+export async function getCachedRanking(cacheKey = "current"): Promise<unknown | null> {
+  const pool = getPostgresPool();
 
   if (!pool) {
     return null;
   }
 
   const result = await pool.query<{ payload_json: unknown }>(
-    "SELECT payload_json FROM ranking_cache WHERE cache_key = 'current'",
+    "SELECT payload_json FROM ranking_cache WHERE cache_key = $1",
+    [cacheKey],
   );
 
   return result.rows[0]?.payload_json ?? null;
@@ -71,7 +72,7 @@ export function isPostgresConfigured(): boolean {
 }
 
 export async function requestCollectorRefresh(requestedBy: string) {
-  const pool = getPool();
+  const pool = getPostgresPool();
   if (!pool) {
     throw new Error("PGPASSWORD 또는 DATABASE_URL이 설정되지 않았습니다.");
   }
@@ -91,7 +92,7 @@ export async function requestCollectorRefresh(requestedBy: string) {
 }
 
 export async function getCollectorRefreshStatus() {
-  const pool = getPool();
+  const pool = getPostgresPool();
   if (!pool) {
     throw new Error("PGPASSWORD 또는 DATABASE_URL이 설정되지 않았습니다.");
   }

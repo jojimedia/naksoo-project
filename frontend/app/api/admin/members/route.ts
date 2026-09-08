@@ -15,7 +15,7 @@ import {
   moveMemberToFa,
   removeMemberPermanently,
   updateMemberNote,
-} from "@/lib/google-sheets";
+} from "@/lib/operations-store";
 
 export const dynamic = "force-dynamic";
 

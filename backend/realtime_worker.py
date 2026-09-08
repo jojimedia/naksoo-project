@@ -64,6 +64,7 @@ def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[s
         "timezone": "Asia/Seoul",
         "current_period": calendar["current"],
         "previous_period": calendar["previous"],
+        "older_period": calendar["older"],
         "calendar_current_period": calendar["current"],
         "used_month_fallback": any(item.get("current_month_used_fallback") for item in items),
         "count": len(items),
@@ -129,7 +130,10 @@ class RealtimeCollector:
                 raise RuntimeError("Google Sheets returned no members.")
 
             cached = get_cached_result()
-            if not cached:
+            calendar = get_calendar_period(now)
+            older = calendar["older"]
+            older_cache_key = f"period:{older['year']}-{older['month']:02d}"
+            if not cached or not get_cached_result(older_cache_key):
                 print("No ranking cache found; running one full bootstrap collection.")
                 output = await self._bootstrap(members, now)
                 save_result(output, now)

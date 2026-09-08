@@ -763,6 +763,29 @@ export default function AdminPanelModal({
     onLogout();
   }
 
+  async function handleChangePassword() {
+    const currentPassword = window.prompt("현재 비밀번호를 입력하세요.");
+    if (!currentPassword) return;
+    const newPassword = window.prompt("새 비밀번호를 8자 이상 입력하세요.");
+    if (!newPassword) return;
+    const response = await fetch("/api/admin/password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) });
+    const data = await response.json() as { error?: string };
+    if (!response.ok) { setError(data.error ?? "비밀번호 변경에 실패했습니다."); return; }
+    setMessage("비밀번호를 변경했습니다.");
+  }
+
+  async function handleAddCrew() {
+    if (session.login_id !== "admin") return;
+    const crewName = window.prompt("새 크루명을 입력하세요.")?.trim();
+    if (!crewName) return;
+    const representativeName = window.prompt("대표자명을 입력하세요.")?.trim();
+    if (!representativeName) return;
+    const response = await fetch("/api/admin/crews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ crew_name: crewName, representative_name: representativeName }) });
+    const data = await response.json() as { error?: string };
+    if (!response.ok) { setError(data.error ?? "크루 추가에 실패했습니다."); return; }
+    setMessage(`${crewName} 크루를 추가했습니다. 창을 다시 열면 목록에 반영됩니다.`);
+  }
+
   async function handleTriggerUpdate() {
     if (isUpdateRunning) {
       setError("이미 데이터 갱신이 진행 중입니다.");
@@ -828,6 +851,8 @@ export default function AdminPanelModal({
             <p className="mt-1 text-sm text-[#a8a2b8]">{session.login_id}</p>
           </div>
           <div className="flex items-center gap-2">
+            <button type="button" onClick={() => void handleChangePassword()} className="rounded border border-[#4b455c] px-2 py-1 text-xs font-semibold text-[#d8d4e5] hover:border-[#a99cff]">비밀번호 변경</button>
+            {session.login_id === "admin" ? <button type="button" onClick={() => void handleAddCrew()} className="rounded border border-[#4b455c] px-2 py-1 text-xs font-semibold text-[#d8d4e5] hover:border-[#a99cff]">크루 추가</button> : null}
             <button
               type="button"
               className="rounded-lg border border-[#5b4bdb]/50 px-3 py-1.5 text-sm font-medium text-[#d8d4ff] hover:border-[#a99cff] disabled:opacity-60"

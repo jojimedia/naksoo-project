@@ -6,7 +6,7 @@ import {
   listPublicCrewNames,
   type MemberRequestAction,
   type NewMemberRequestInput,
-} from "@/lib/google-sheets";
+} from "@/lib/operations-store";
 
 export type PublicMemberRequestDraft = NewMemberRequestInput;
 

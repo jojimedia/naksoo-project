@@ -27,8 +27,13 @@ import {
 type CrewDashboardData = {
   created_date: string;
   created_time: string;
+  current_period: {
+    year: number;
+    month: number;
+  };
   crews: CrewCardData[];
   fa_crew: CrewCardData | null;
+  month_options?: Array<{ year: number; month: number }>;
 };
 
 type SearchMode = "members" | "donors";
@@ -829,19 +834,51 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     setShowLoginModal(true);
   }
 
+  function selectMonth(year: number, month: number) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("year", String(year));
+    params.set("month", String(month));
+    window.location.assign(`/?${params.toString()}`);
+  }
+
   return (
     <main className="min-h-screen bg-[#111018] bg-[radial-gradient(#2b2836_1px,transparent_1px)] bg-[length:20px_20px] text-[#e5e7eb]">
       <header className="sticky top-0 z-40 w-full border-b border-[#3a3548] bg-[#111018]/95 backdrop-blur">
         <div className="mx-auto grid min-h-16 w-full max-w-[1920px] grid-cols-1 items-center gap-2 px-3 py-2 md:grid-cols-[minmax(240px,1fr)_minmax(420px,720px)_minmax(240px,1fr)] md:px-8">
-          <h1 className="text-center text-[26px] font-semibold leading-none text-[#a99cff] md:text-left md:text-[33px]">
-            <button
-              type="button"
-              className="rounded-sm transition hover:text-[#c8bfff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff]"
-              onClick={resetToHome}
-            >
-              엑셀 크루 낙수표
-            </button>
-          </h1>
+          <div className="flex items-center justify-center gap-2 md:justify-start">
+            <h1 className="text-center text-[26px] font-semibold leading-none text-[#a99cff] md:text-left md:text-[33px]">
+              <button
+                type="button"
+                className="rounded-sm transition hover:text-[#c8bfff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a99cff]"
+                onClick={resetToHome}
+              >
+                엑셀 크루 낙수표
+              </button>
+            </h1>
+            <div className="flex items-end gap-1" aria-label="월 선택">
+              {(data.month_options ?? []).map((period) => {
+                const selected =
+                  period.year === data.current_period.year &&
+                  period.month === data.current_period.month;
+                return (
+                  <button
+                    key={`${period.year}-${period.month}`}
+                    type="button"
+                    onClick={() => selectMonth(period.year, period.month)}
+                    className={`rounded px-1 font-bold tabular-nums transition ${
+                      selected
+                        ? "bg-[#5b4bdb] text-[22px] leading-7 text-white"
+                        : "text-[13px] leading-5 text-[#8d879c] hover:text-[#d8d4e5]"
+                    }`}
+                    aria-label={`${period.year}년 ${period.month}월 보기`}
+                    aria-current={selected ? "page" : undefined}
+                  >
+                    {period.month}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="flex items-center gap-2">
             <label className="relative min-w-0 flex-1">

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { jsonError } from "@/lib/api-utils";
-import { appendMemberRequests } from "@/lib/google-sheets";
+import { appendMemberRequests } from "@/lib/operations-store";
 import {
   validateMemberRequestDrafts,
   type PublicMemberRequestDraft,

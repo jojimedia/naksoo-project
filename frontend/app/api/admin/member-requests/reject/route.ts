@@ -8,7 +8,7 @@ import { jsonError } from "@/lib/api-utils";
 import {
   getMemberRequestsByRowIndexes,
   updateMemberRequestStatuses,
-} from "@/lib/google-sheets";
+} from "@/lib/operations-store";
 
 export const dynamic = "force-dynamic";
 

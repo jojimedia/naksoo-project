@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-import { listAdmins, listRegisteredCrewNames } from "./google-sheets";
+import { listAdmins, listRegisteredCrewNames } from "./operations-store";
 import { withFaCrew, isFaCrew, resolveManagedCrews } from "./crews";
 
 export type AdminSession = {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { jsonError } from "@/lib/api-utils";
 import { displayCrewName } from "@/lib/crews";
-import { listPublicCrewNames } from "@/lib/google-sheets";
+import { listPublicCrewNames } from "@/lib/operations-store";
 
 export const dynamic = "force-dynamic";
 

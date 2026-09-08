@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { jsonError } from "@/lib/api-utils";
 import { assertValidPublicCrew } from "@/lib/member-requests";
-import { listMembers } from "@/lib/google-sheets";
+import { listMembers } from "@/lib/operations-store";
 
 export const dynamic = "force-dynamic";
 

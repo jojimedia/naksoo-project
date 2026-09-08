@@ -11,7 +11,7 @@ import {
   findMemberByUserId,
   listGuestbookEntries,
   updateGuestbookVote,
-} from "@/lib/google-sheets";
+} from "@/lib/operations-store";
 import {
   assertGuestbookBody,
   assertGuestbookCooldown,
