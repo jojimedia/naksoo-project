@@ -23,7 +23,6 @@ from main import (
     fetch_one_member,
     fetch_station,
     get_calendar_period,
-    resolve_live_status,
     retry,
 )
 from realtime_db import (
@@ -85,8 +84,12 @@ class RealtimeCollector:
         try:
             station = await retry(lambda: fetch_station(client, user_id), retries=2, delay=1, label=f"{user_id} station")
             live_status = await retry(lambda: fetch_live_status(client, user_id), retries=2, delay=1, label=f"{user_id} live")
+            # `station.broadStart` can remain populated after a broadcast has
+            # ended.  It is useful display metadata but must not schedule a
+            # high-frequency collection.  Only the live player endpoint is
+            # authoritative for the collector.
             return (
-                resolve_live_status(station, live_status),
+                bool(live_status.get("is_live")),
                 station.get("broadcast_start"),
                 bool(live_status.get("is_password")),
             )
@@ -157,7 +160,9 @@ class RealtimeCollector:
                         continue  # retain the last known state on an API failure
 
                     is_live, broadcast_start, is_password = status
-                    was_live = self.live_states.get(key, bool(items_by_key.get(key, {}).get("is_live")))
+                    # Do not trust a pre-restart cache value for a final sample.
+                    # It could have been marked live by an old/stale station API.
+                    was_live = self.live_states.get(key, False)
                     self.live_states[key] = is_live
                     existing = items_by_key.get(key)
                     if existing:
