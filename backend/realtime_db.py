@@ -360,6 +360,27 @@ def get_collector_members() -> list[dict[str, Any]]:
     ]
 
 
+def get_collector_state(year: int, month: int) -> dict[tuple[str, str], dict[str, Any]]:
+    """Restore scheduling hints after a worker restart from durable rows."""
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT crew_name, streamer_id, is_live, last_changed_at
+            FROM streamer_month_current
+            WHERE year = %s AND month = %s
+            """,
+            (year, month),
+        ).fetchall()
+    return {
+        (str(row["crew_name"]), str(row["streamer_id"])): {
+            "is_live": bool(row["is_live"]),
+            "last_changed_at": row["last_changed_at"],
+        }
+        for row in rows
+    }
+
+
 def claim_refresh_requests() -> list[int]:
     """Mark queued manual refreshes as processing and return their ids."""
 

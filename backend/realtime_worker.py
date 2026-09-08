@@ -30,6 +30,7 @@ from realtime_db import (
     ensure_schema,
     get_cached_result,
     get_collector_members,
+    get_collector_state,
     mark_recovery_sweep,
     recovery_sweep_due,
     save_result,
@@ -103,6 +104,19 @@ class RealtimeCollector:
         self.live_states: dict[tuple[str, str], bool] = {}
         self.last_change_at: dict[tuple[str, str], datetime] = {}
         self.last_cleanup_date = None
+        self.state_restored = False
+
+    def _restore_state(self, now: datetime) -> None:
+        if self.state_restored:
+            return
+        state = get_collector_state(now.year, now.month)
+        for key, value in state.items():
+            self.live_states[key] = bool(value["is_live"])
+            last_changed_at = value.get("last_changed_at")
+            if isinstance(last_changed_at, datetime):
+                self.last_change_at[key] = last_changed_at
+        self.state_restored = True
+        print(f"Restored collector scheduling state for {len(state)} members.")
 
     async def _status_for_member(self, client, member: dict[str, Any]) -> tuple[bool, str | None, bool, str | None, str | None, int | None] | None:
         user_id = member["user_id"]
@@ -197,6 +211,7 @@ class RealtimeCollector:
             members = get_collector_members()
             if not members:
                 raise RuntimeError("PostgreSQL members 테이블이 비어 있습니다.")
+            self._restore_state(now)
 
             cached = get_cached_result()
             calendar = get_calendar_period(now)
