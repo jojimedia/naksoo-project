@@ -836,10 +836,11 @@ async function getCrewCardData(selectedPeriod?: Period) {
   const cacheKey = selectedPeriod
     ? `period:${selectedPeriod.year}-${String(selectedPeriod.month).padStart(2, "0")}`
     : "current";
+  const dashboardCacheKey = `dashboard:${cacheKey}`;
   const memoryCache = global.naksooCrewCardMemoryCache ??= new Map();
   const fromMemory = memoryCache.get(cacheKey);
   const version = isPostgresConfigured()
-    ? await getCachedRankingVersion(cacheKey)
+    ? await getCachedRankingVersion(dashboardCacheKey)
     : null;
   if (fromMemory && fromMemory.version === version) {
     return fromMemory.value;
@@ -860,13 +861,21 @@ async function getCrewCardData(selectedPeriod?: Period) {
   }
 
   try {
-    const cached = await getCachedRanking(
-      cacheKey,
+    const prepared = await getCachedRanking(
+      dashboardCacheKey,
       Boolean(fromMemory && fromMemory.version !== version),
     );
-    const data = cached
-      ? makeCrewCardData(normalizeResult(cached as RawNaksooResult))
-      : emptyData();
+    let data: CrewCardData;
+    if (prepared && typeof prepared === "object" && "crews" in prepared) {
+      data = prepared as CrewCardData;
+    } else {
+      // During the first collector deployment the prepared key does not exist
+      // yet. Keep the existing ranking cache as a safe one-cycle fallback.
+      const raw = await getCachedRanking(cacheKey);
+      data = raw
+        ? makeCrewCardData(normalizeResult(raw as RawNaksooResult))
+        : emptyData();
+    }
     memoryCache.set(cacheKey, { value: data, version });
     return data;
   } catch (error) {

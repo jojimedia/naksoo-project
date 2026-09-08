@@ -15,6 +15,7 @@ from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
+from dashboard_cache import build_dashboard
 
 
 SCHEMA_SQL = """
@@ -291,6 +292,7 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
                 _upsert_month(conn, item, item.get("older_month") or {}, observed_at)
 
             _save_cache(conn, "current", payload, observed_at)
+            _save_cache(conn, "dashboard:current", build_dashboard(payload), observed_at)
 
             # Keep the same response shape for each selectable month.  The
             # browser therefore only switches PostgreSQL cache keys; it never
@@ -319,6 +321,7 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
                     for item in payload.get("items") or []
                 ]
                 _save_cache(conn, f"period:{year}-{month:02d}", period_payload, observed_at)
+                _save_cache(conn, f"dashboard:period:{year}-{month:02d}", build_dashboard(period_payload), observed_at)
 
 
 def get_cached_result(cache_key: str = "current") -> dict[str, Any] | None:
