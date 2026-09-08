@@ -6,15 +6,24 @@ declare global {
 }
 
 function getPool(): Pool | null {
+  const password = process.env.PGPASSWORD;
   const connectionString = process.env.DATABASE_URL;
 
-  if (!connectionString) {
+  if (!password && !connectionString) {
     return null;
   }
 
   if (!global.naksooPostgresPool) {
     global.naksooPostgresPool = new Pool({
-      connectionString,
+      ...(password
+        ? {
+            host: process.env.PGHOST ?? "postgresql",
+            port: Number(process.env.PGPORT ?? "5432"),
+            user: process.env.PGUSER ?? "postgres",
+            password,
+            database: process.env.PGDATABASE ?? "postgres",
+          }
+        : { connectionString: connectionString! }),
       max: 4,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 3_000,
@@ -39,13 +48,13 @@ export async function getCachedRanking(): Promise<unknown | null> {
 }
 
 export function isPostgresConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL);
+  return Boolean(process.env.PGPASSWORD || process.env.DATABASE_URL);
 }
 
 export async function requestCollectorRefresh(requestedBy: string) {
   const pool = getPool();
   if (!pool) {
-    throw new Error("DATABASE_URL이 설정되지 않았습니다.");
+    throw new Error("PGPASSWORD 또는 DATABASE_URL이 설정되지 않았습니다.");
   }
 
   const active = await pool.query<{ id: number }>(
@@ -65,7 +74,7 @@ export async function requestCollectorRefresh(requestedBy: string) {
 export async function getCollectorRefreshStatus() {
   const pool = getPool();
   if (!pool) {
-    throw new Error("DATABASE_URL이 설정되지 않았습니다.");
+    throw new Error("PGPASSWORD 또는 DATABASE_URL이 설정되지 않았습니다.");
   }
 
   const [commandResult, statusResult] = await Promise.all([
