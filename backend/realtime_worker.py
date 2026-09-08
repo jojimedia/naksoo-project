@@ -124,6 +124,7 @@ class RealtimeCollector:
         self.last_cleanup_date = None
         self.state_restored = False
         self.next_detail_backfill_at: datetime | None = None
+        self.next_donor_backfill_for: dict[tuple[str, str], datetime] = {}
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -344,12 +345,22 @@ class RealtimeCollector:
                         and _needs_detail_backfill(
                             items_by_key.get((member["crew_name"], member["user_id"])) or {}
                         )
-                        and now >= self.next_detail_at.get((member["crew_name"], member["user_id"]), now)
+                        and now >= self.next_donor_backfill_for.get(
+                            (member["crew_name"], member["user_id"]), now
+                        )
                     ]
                     if detail_backfill_candidates:
                         slots = max(0, DETAIL_BACKFILL_BATCH_SIZE - len(to_collect))
                         if slots:
-                            to_collect.extend(detail_backfill_candidates[:slots])
+                            selected_backfills = detail_backfill_candidates[:slots]
+                            to_collect.extend(selected_backfills)
+                            # A failed detail attempt must not monopolize the
+                            # next batch. Try another empty member first, then
+                            # retry this one after five minutes.
+                            for member in selected_backfills:
+                                self.next_donor_backfill_for[
+                                    (member["crew_name"], member["user_id"])
+                                ] = now + timedelta(seconds=UNAVAILABLE_RETRY_SECONDS)
                             self.next_detail_backfill_at = now + timedelta(
                                 seconds=DETAIL_BACKFILL_INTERVAL_SECONDS
                             )
@@ -421,7 +432,8 @@ class RealtimeCollector:
                             )
                             items_by_key[key] = item
                             continue
-                        elif item.get("is_live"):
+                        self.next_donor_backfill_for.pop(key, None)
+                        if item.get("is_live"):
                             # A LIVE stream is the user-facing real-time path:
                             # keep checking detail/get every 60–90 seconds,
                             # even during a quiet minute with no new balloons.
