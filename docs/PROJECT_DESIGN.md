@@ -1,5 +1,10 @@
 # 엑셀 크루 낙수표 — 기획·설계 설명서
 
+> **운영 구조 변경 안내 (2026-09)**: 이 문서의 JSON·GitHub Actions 관련 세부 설명은
+> 이전 구조 기록이다. 현재 운영 구조는 `Python Collector → PostgreSQL → Next.js`이며,
+> 최신 배포 기준은 `docs/CLOUDTYPE_REALTIME_EXECUTION_PLAN.md`와
+> `docs/CLOUDTYPE_REALTIME_DEPLOY.md`를 따른다.
+
 > SOOP(숲) 크루별 별풍선 낙수 현황을 한눈에 보여주는 웹 서비스  
 > 저장소: [jojimedia/naksoo-project](https://github.com/jojimedia/naksoo-project)
 

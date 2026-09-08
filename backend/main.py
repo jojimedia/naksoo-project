@@ -1803,9 +1803,7 @@ async def main():
 # =========================
 
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--prune-backups":
-        cleanup_backup_files(datetime.now(TIMEZONE))
-    else:
-        asyncio.run(main())
+    raise SystemExit(
+        "JSON 수집기는 더 이상 사용하지 않습니다. "
+        "PostgreSQL Worker는 `python realtime_worker.py`로 실행하세요."
+    )

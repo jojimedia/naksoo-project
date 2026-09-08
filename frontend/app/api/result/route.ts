@@ -1,35 +1,32 @@
-import { readFile } from "fs/promises";
-import path from "path";
-
-const RESULT_PATHS = [
-  path.join(process.cwd(), "..", "backend", "data", "result.json"),
-  path.join(process.cwd(), "backend", "data", "result.json"),
-  path.join(process.cwd(), "public", "data", "result.json"),
-];
+import { getCachedRanking, isPostgresConfigured } from "@/lib/ranking-cache";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  for (const resultPath of RESULT_PATHS) {
-    try {
-      const raw = await readFile(resultPath, "utf-8");
-
-      return new Response(raw, {
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-store, no-cache, must-revalidate",
-        },
-      });
-    } catch {
-      continue;
-    }
+  if (!isPostgresConfigured()) {
+    return Response.json(
+      { error: "database_not_configured" },
+      { status: 503 },
+    );
   }
 
-  return Response.json(
-    {
-      error: "result_not_found",
-      paths: RESULT_PATHS,
-    },
-    { status: 404 },
-  );
+  try {
+    const cached = await getCachedRanking();
+    if (!cached) {
+      return Response.json(
+        { error: "ranking_cache_not_ready" },
+        { status: 503 },
+      );
+    }
+
+    return Response.json(cached, {
+      headers: {
+        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=30",
+        "X-Naksoo-Data-Source": "postgres",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to load PostgreSQL ranking cache", error);
+    return Response.json({ error: "ranking_cache_unavailable" }, { status: 503 });
+  }
 }

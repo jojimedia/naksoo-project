@@ -1,35 +1,8 @@
-import { readFile } from "fs/promises";
-import path from "path";
-
 import { getTrimmedAverage } from "@/lib/stats";
 import { isFaCrew } from "@/lib/crews";
+import { getCachedRanking, isPostgresConfigured } from "@/lib/ranking-cache";
 
 import CrewDashboard from "./crew-dashboard";
-
-const GITHUB_REPO = "jojimedia/naksoo-project";
-const GITHUB_DATA_REF = process.env.GITHUB_DATA_REF ?? "main";
-const REMOTE_DATA_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_DATA_REF}/backend/data/result.json`;
-const LOCAL_DATA_PATHS = [
-  path.join(process.cwd(), "..", "backend", "data", "result.json"),
-  path.join(process.cwd(), "backend", "data", "result.json"),
-  path.join(process.cwd(), "public", "data", "result.json"),
-];
-
-function shouldUseLocalDataInDev(): boolean {
-  return process.env.NAKSOO_USE_LOCAL_DATA === "1";
-}
-
-async function loadLocalResult(): Promise<RawNaksooResult | null> {
-  for (const filePath of LOCAL_DATA_PATHS) {
-    try {
-      const raw = await readFile(filePath, "utf-8");
-      return JSON.parse(raw) as RawNaksooResult;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
 
 export const dynamic = "force-dynamic";
 
@@ -826,32 +799,18 @@ function makeCrewCardData(result: NaksooResult): CrewCardData {
 async function getCrewCardData() {
   const emptyData = () => makeCrewCardData(normalizeResult({ items: [] }));
 
-  if (shouldUseLocalDataInDev()) {
-    const local = await loadLocalResult();
-    if (local) {
-      return makeCrewCardData(normalizeResult(local));
-    }
+  if (!isPostgresConfigured()) {
+    console.error("DATABASE_URL is not configured.");
+    return emptyData();
   }
 
   try {
-    const response = await fetch(REMOTE_DATA_URL, {
-      cache: "no-store",
-      next: { revalidate: 0 },
-      headers: {
-        Accept: "application/json",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-      },
-    });
-
-    if (!response.ok) {
-      return emptyData();
-    }
-
-    return makeCrewCardData(
-      normalizeResult((await response.json()) as RawNaksooResult),
-    );
-  } catch {
+    const cached = await getCachedRanking();
+    return cached
+      ? makeCrewCardData(normalizeResult(cached as RawNaksooResult))
+      : emptyData();
+  } catch (error) {
+    console.error("Failed to load PostgreSQL ranking cache", error);
     return emptyData();
   }
 }

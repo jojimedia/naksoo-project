@@ -771,7 +771,7 @@ export default function AdminPanelModal({
 
     if (
       !window.confirm(
-        "데이터 갱신을 요청할까요?\n크롤이 시작되며 5~15분 후 대시보드에 반영됩니다.",
+        "데이터 갱신을 요청할까요?\n상시 수집기가 즉시 처리하며 약 1~3분 안에 반영됩니다.",
       )
     ) {
       return;
@@ -790,12 +790,6 @@ export default function AdminPanelModal({
         message?: string;
         running?: boolean;
       };
-
-      if (response.status === 409) {
-        setIsUpdateRunning(true);
-        setError(data.error ?? "이미 데이터 갱신이 진행 중입니다.");
-        return;
-      }
 
       if (!response.ok) {
         throw new Error(data.error ?? "데이터 갱신 요청에 실패했습니다.");
