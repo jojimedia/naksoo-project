@@ -640,6 +640,12 @@ async def retry(coro_factory, retries=3, delay=1, label=None):
                 repr(e),
             )
 
+            # A source 403 is an access/rate-limit response, not a transient
+            # network failure. Retrying it eight times blocks a whole cache
+            # refresh while the old dashboard remains visible.
+            if " 403" in str(e) or "403 " in str(e):
+                break
+
             if attempt < retries:
                 await asyncio.sleep(delay * attempt)
 
