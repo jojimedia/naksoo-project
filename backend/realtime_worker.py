@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import random
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -33,9 +34,14 @@ from realtime_db import (
 
 
 STATUS_POLL_SECONDS = max(30, int(os.environ.get("NAKSOO_STATUS_POLL_SECONDS", "120")))
+STATUS_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_STATUS_POLL_JITTER_SECONDS", "30")))
+STATUS_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_STATUS_CONCURRENCY", "10")))
 HOT_POLL_SECONDS = max(30, int(os.environ.get("NAKSOO_HOT_POLL_SECONDS", "60")))
+HOT_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_HOT_POLL_JITTER_SECONDS", "30")))
 WARM_POLL_SECONDS = max(60, int(os.environ.get("NAKSOO_WARM_POLL_SECONDS", "180")))
+WARM_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_WARM_POLL_JITTER_SECONDS", "45")))
 COLD_POLL_SECONDS = max(120, int(os.environ.get("NAKSOO_COLD_POLL_SECONDS", "600")))
+COLD_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_COLD_POLL_JITTER_SECONDS", "90")))
 LOOP_SLEEP_SECONDS = max(5, int(os.environ.get("NAKSOO_WORKER_LOOP_SECONDS", "10")))
 # A cold start or an administrator-triggered full refresh has to collect every
 # active member.  Start quickly in batches, then retry only the members that
@@ -44,6 +50,12 @@ LOOP_SLEEP_SECONDS = max(5, int(os.environ.get("NAKSOO_WORKER_LOOP_SECONDS", "10
 BOOTSTRAP_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BOOTSTRAP_CONCURRENCY", "10")))
 BOOTSTRAP_RETRY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BOOTSTRAP_RETRY_CONCURRENCY", "2")))
 BOOTSTRAP_RETRY_DELAY_SECONDS = max(0, int(os.environ.get("NAKSOO_BOOTSTRAP_RETRY_DELAY_SECONDS", "15")))
+
+
+def _interval(base_seconds: int, jitter_seconds: int = 0) -> int:
+    """Return a positive collection interval with a one-sided random jitter."""
+
+    return base_seconds + random.randint(0, jitter_seconds)
 
 
 def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
@@ -204,12 +216,23 @@ class RealtimeCollector:
                     self.next_detail_at[key] = now
 
             async with httpx.AsyncClient(follow_redirects=True, timeout=15, headers=HEADERS) as client:
+                status_members: list[dict[str, Any]] = []
                 for member in active_members:
                     key = (member["crew_name"], member["user_id"])
                     if now < self.next_status_at.get(key, now):
                         continue
-                    self.next_status_at[key] = now + timedelta(seconds=STATUS_POLL_SECONDS)
-                    status = await self._status_for_member(client, member)
+                    self.next_status_at[key] = now + timedelta(
+                        seconds=_interval(STATUS_POLL_SECONDS, STATUS_POLL_JITTER_SECONDS)
+                    )
+                    status_members.append(member)
+
+                status_semaphore = asyncio.Semaphore(STATUS_CONCURRENCY)
+
+                async def check_status(member: dict[str, Any]):
+                    async with status_semaphore:
+                        return member, await self._status_for_member(client, member)
+
+                for member, status in await asyncio.gather(*(check_status(member) for member in status_members)):
                     if status is None:
                         continue  # retain the last known state on an API failure
 
@@ -263,11 +286,11 @@ class RealtimeCollector:
                         current_total = int((item.get("current_month") or {}).get("total_balloons") or 0)
                         if current_total > previous_total:
                             self.last_change_at[key] = now
-                            interval = HOT_POLL_SECONDS
+                            interval = _interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
                         elif now - self.last_change_at.get(key, now - timedelta(seconds=COLD_POLL_SECONDS)) < timedelta(minutes=10):
-                            interval = WARM_POLL_SECONDS
+                            interval = _interval(WARM_POLL_SECONDS, WARM_POLL_JITTER_SECONDS)
                         else:
-                            interval = COLD_POLL_SECONDS
+                            interval = _interval(COLD_POLL_SECONDS, COLD_POLL_JITTER_SECONDS)
                         self.next_detail_at[key] = now + timedelta(seconds=interval)
                         items_by_key[key] = item
 

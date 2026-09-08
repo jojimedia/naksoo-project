@@ -5,6 +5,7 @@ import csv
 import json
 import os
 import re
+import random
 from collections import Counter
 from html import unescape
 from io import StringIO
@@ -74,6 +75,24 @@ POONGGO_HEADERS = {
 ENABLE_POONGGO_FALLBACK = (
     os.environ.get("NAKSOO_ENABLE_POONGGO_FALLBACK", "0") == "1"
 )
+
+
+class SourceRequestError(RuntimeError):
+    """Source API failure with enough metadata for a respectful retry."""
+
+    def __init__(self, message, status_code=None, retry_after=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after = retry_after
+
+
+def source_error(message, response):
+    retry_after = response.headers.get("Retry-After")
+    try:
+        retry_after_seconds = max(0, int(retry_after)) if retry_after else None
+    except ValueError:
+        retry_after_seconds = None
+    return SourceRequestError(message, response.status_code, retry_after_seconds)
 
 # =========================
 # 현재월 / 이전달 계산
@@ -222,7 +241,7 @@ async def fetch_station(client, user_id):
     res = await client.get(url)
 
     if res.status_code != 200:
-        raise RuntimeError(f"station 실패: {user_id} {res.status_code}")
+        raise source_error(f"station 실패: {user_id} {res.status_code}", res)
 
     data = res.json()
     station = data.get("station", {})
@@ -257,7 +276,7 @@ async def fetch_live_status(client, user_id):
     )
 
     if res.status_code != 200:
-        raise RuntimeError(f"live status 실패: {user_id} {res.status_code}")
+        raise source_error(f"live status 실패: {user_id} {res.status_code}", res)
 
     channel = res.json().get("CHANNEL", {})
 
@@ -311,9 +330,10 @@ async def fetch_balloon(client, user_id, year, month):
 
     if res.status_code != 200:
         body_preview = res.text[:200].replace("\n", " ")
-        raise RuntimeError(
+        raise source_error(
             f"balloon 실패: {user_id} {year}-{month} "
-            f"{res.status_code} body={body_preview!r}"
+            f"{res.status_code} body={body_preview!r}",
+            res,
         )
 
     try:
@@ -338,9 +358,10 @@ async def fetch_month_ranking(client, year, month):
 
     if res.status_code != 200:
         body_preview = res.text[:200].replace("\n", " ")
-        raise RuntimeError(
+        raise source_error(
             f"chart/get 실패: {year}-{month} "
-            f"{res.status_code} body={body_preview!r}"
+            f"{res.status_code} body={body_preview!r}",
+            res,
         )
 
     try:
@@ -513,9 +534,10 @@ async def fetch_poonggo_month_data(client, user_id, year, month):
 
     if res.status_code != 200:
         body_preview = res.text[:200].replace("\n", " ")
-        raise RuntimeError(
+        raise source_error(
             f"poonggo 월간 실패: {user_id} {year}-{month} "
-            f"{res.status_code} body={body_preview!r}"
+            f"{res.status_code} body={body_preview!r}",
+            res,
         )
 
     return parse_poonggo_month_data(res.text, year, month)
@@ -624,7 +646,7 @@ async def resolve_month_balloon_data(
 # =========================
 
 async def retry(coro_factory, retries=3, delay=1, label=None):
-    """API 호출 실패 시 지정 횟수만큼 재시도한다."""
+    """Retry transient source failures with exponential backoff and jitter."""
 
     last_error = None
 
@@ -640,14 +662,25 @@ async def retry(coro_factory, retries=3, delay=1, label=None):
                 repr(e),
             )
 
-            # A source 403 is an access/rate-limit response, not a transient
-            # network failure. Retrying it eight times blocks a whole cache
-            # refresh while the old dashboard remains visible.
-            if " 403" in str(e) or "403 " in str(e):
+            status_code = getattr(e, "status_code", None)
+            if status_code is None:
+                match = re.search(r"(?:^|\\s)(403)(?:\\s|$)", str(e))
+                status_code = int(match.group(1)) if match else None
+
+            # 403 is generally a source-side block and should not hold the
+            # cache refresh hostage. 429/5xx/network errors are transient and
+            # get a bounded exponential retry below.
+            if status_code == 403:
                 break
 
             if attempt < retries:
-                await asyncio.sleep(delay * attempt)
+                retry_after = getattr(e, "retry_after", None)
+                backoff = min(30, delay * (2 ** (attempt - 1)))
+                wait_seconds = retry_after if retry_after is not None else backoff
+                # A little randomness prevents all failed requests from
+                # retrying in the same second.
+                wait_seconds += random.uniform(0, min(1, max(0.1, wait_seconds * 0.25)))
+                await asyncio.sleep(wait_seconds)
 
     raise last_error
 
