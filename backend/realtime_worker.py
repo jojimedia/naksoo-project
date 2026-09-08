@@ -16,10 +16,14 @@ from main import (
     HEADERS,
     TIMEZONE,
     apply_member_sheet_metadata,
+    build_month_data,
+    fetch_balloon,
     fetch_live_status,
     fetch_one_member,
     fetch_station,
     get_calendar_period,
+    is_month_data_available,
+    is_poong_not_found_response,
     retry,
 )
 from realtime_db import (
@@ -81,6 +85,9 @@ def _needs_detail_backfill(item: dict[str, Any]) -> bool:
     month = item.get("current_month") or {}
     return (
         month.get("data_source") in {"chart_ranking", "unavailable"}
+        # A zero-total month has no donor list by definition. Retrying those
+        # rows only wastes the small recovery budget needed by real donors.
+        and int(month.get("total_balloons") or 0) > 0
         and not month.get("fans")
     )
 
@@ -161,6 +168,42 @@ class RealtimeCollector:
         except Exception as error:
             print(f"[{member['crew_name']}/{user_id}] live status failed: {error}")
             return None
+
+    async def _backfill_donors(
+        self,
+        client: httpx.AsyncClient,
+        member: dict[str, Any],
+        calendar_current: dict[str, int],
+        balloon_semaphore: asyncio.Semaphore,
+    ) -> tuple[tuple[str, str], dict[str, Any] | None]:
+        """Fetch only the one missing donor payload, not a full member scan.
+
+        A full scan also requests station/live, three months and up to fifty
+        donor profiles. That made offline donor recovery wait behind live
+        polling indefinitely. The existing member snapshot already has all of
+        that metadata; this path needs only current-month ``detail/get``.
+        """
+
+        key = (member["crew_name"], member["user_id"])
+        year = int(calendar_current["year"])
+        month = int(calendar_current["month"])
+        try:
+            async with balloon_semaphore:
+                data = await retry(
+                    lambda: fetch_balloon(client, member["user_id"], year, month),
+                    retries=2,
+                    delay=1,
+                    label=f"{key[0]}/{key[1]} donor backfill {year}-{month}",
+                )
+            if is_poong_not_found_response(data) or not is_month_data_available(data):
+                return key, None
+            recovered = build_month_data(data, year, month)
+            recovered["data_source"] = "detail"
+            print(f"[{key[0]}/{key[1]}] donor detail recovered fans={len(recovered['fans'])}")
+            return key, recovered
+        except Exception as error:
+            print(f"[{key[0]}/{key[1]}] donor detail backfill failed: {error}")
+            return key, None
 
     async def _bootstrap(
         self,
@@ -333,6 +376,7 @@ class RealtimeCollector:
                 # Donor-detail backfill is independent of the 2-minute live
                 # status poll. Otherwise offline members would wait for a
                 # status turn before every retry.
+                selected_backfills: list[dict[str, Any]] = []
                 if self.next_detail_backfill_at is None or now >= self.next_detail_backfill_at:
                     already_collecting = {
                         (member["crew_name"], member["user_id"])
@@ -350,20 +394,38 @@ class RealtimeCollector:
                         )
                     ]
                     if detail_backfill_candidates:
-                        slots = max(0, DETAIL_BACKFILL_BATCH_SIZE - len(to_collect))
-                        if slots:
-                            selected_backfills = detail_backfill_candidates[:slots]
-                            to_collect.extend(selected_backfills)
-                            # A failed detail attempt must not monopolize the
-                            # next batch. Try another empty member first, then
-                            # retry this one after five minutes.
-                            for member in selected_backfills:
-                                self.next_donor_backfill_for[
-                                    (member["crew_name"], member["user_id"])
-                                ] = now + timedelta(seconds=UNAVAILABLE_RETRY_SECONDS)
-                            self.next_detail_backfill_at = now + timedelta(
-                                seconds=DETAIL_BACKFILL_INTERVAL_SECONDS
-                            )
+                        # This is deliberately separate from ``to_collect``.
+                        # Previously live polling could fill the five slots,
+                        # leaving every offline donor backfill at zero work.
+                        selected_backfills = detail_backfill_candidates[:DETAIL_BACKFILL_BATCH_SIZE]
+                        # A failed detail attempt must not monopolize the next
+                        # batch. Try another empty member first, then retry
+                        # this one after five minutes.
+                        for member in selected_backfills:
+                            self.next_donor_backfill_for[
+                                (member["crew_name"], member["user_id"])
+                            ] = now + timedelta(seconds=UNAVAILABLE_RETRY_SECONDS)
+                        self.next_detail_backfill_at = now + timedelta(
+                            seconds=DETAIL_BACKFILL_INTERVAL_SECONDS
+                        )
+
+                if selected_backfills:
+                    calendar = get_calendar_period(now)
+                    donor_semaphore = asyncio.Semaphore(RECOVERY_CONCURRENCY)
+                    recovered_months = await asyncio.gather(*(
+                        self._backfill_donors(client, member, calendar["current"], donor_semaphore)
+                        for member in selected_backfills
+                    ))
+                    for key, recovered_month in recovered_months:
+                        if recovered_month is None:
+                            continue
+                        existing = items_by_key.get(key)
+                        if existing is None:
+                            continue
+                        existing["current_month"] = recovered_month
+                        existing["current_month_used_fallback"] = False
+                        items_by_key[key] = existing
+                        self.next_donor_backfill_for.pop(key, None)
 
                 if to_collect:
                     calendar = get_calendar_period(now)
