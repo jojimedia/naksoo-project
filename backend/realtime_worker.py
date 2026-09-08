@@ -360,9 +360,28 @@ class RealtimeCollector:
                                 items_by_key[key] = item
                             print(f"[{key[0]}/{key[1]}] monthly source unavailable; retaining last known cache.")
                             continue
-                        previous_total = int(((items_by_key.get(key) or {}).get("current_month") or {}).get("total_balloons") or 0)
+                        previous_item = items_by_key.get(key) or {}
+                        previous_month = previous_item.get("current_month") or {}
+                        current_month = item.get("current_month") or {}
+                        # chart/get only has a monthly total.  Do not erase a
+                        # previously collected detail/get donor list just
+                        # because this one cycle fell back to chart/get.
+                        if (
+                            current_month.get("data_source") == "chart_ranking"
+                            and not current_month.get("fans")
+                            and previous_month.get("fans")
+                        ):
+                            current_month["fans"] = previous_month["fans"]
+                        previous_total = int(previous_month.get("total_balloons") or 0)
                         current_total = int((item.get("current_month") or {}).get("total_balloons") or 0)
-                        if current_total > previous_total:
+                        if item.get("is_live"):
+                            # A LIVE stream is the user-facing real-time path:
+                            # keep checking detail/get every 60–90 seconds,
+                            # even during a quiet minute with no new balloons.
+                            if current_total > previous_total:
+                                self.last_change_at[key] = now
+                            interval = _interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
+                        elif current_total > previous_total:
                             self.last_change_at[key] = now
                             interval = _interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
                         elif now - self.last_change_at.get(key, now - timedelta(seconds=COLD_POLL_SECONDS)) < timedelta(minutes=10):
