@@ -7,6 +7,7 @@ import {
 } from "@/lib/admin-session";
 import { jsonError } from "@/lib/api-utils";
 import { isFaCrew } from "@/lib/crews";
+import { requestCollectorRefresh } from "@/lib/ranking-cache";
 import {
   addMember,
   assignMembersFromFa,
@@ -27,6 +28,10 @@ async function requireSession() {
   }
 
   return session;
+}
+
+async function queueRankingRefresh(loginId: string) {
+  try { await requestCollectorRefresh(loginId); } catch (error) { console.error("Failed to queue collector refresh", error); }
 }
 
 export async function GET(request: Request) {
@@ -102,6 +107,7 @@ export async function POST(request: Request) {
       );
 
       const { version } = await getCrewMembersState("FA");
+      await queueRankingRefresh(session.loginId);
 
       return NextResponse.json({
         ok: true,
@@ -140,6 +146,7 @@ export async function POST(request: Request) {
     );
 
     const { version } = await getCrewMembersState(crewName);
+    await queueRankingRefresh(session.loginId);
 
     return NextResponse.json({
       ok: true,
@@ -192,6 +199,7 @@ export async function DELETE(request: Request) {
       );
 
       const { version } = await getCrewMembersState(crewName);
+      await queueRankingRefresh(session.loginId);
 
       return NextResponse.json({
         ok: true,
@@ -203,6 +211,7 @@ export async function DELETE(request: Request) {
     await moveMemberToFa(crewName, userId, expectedVersion || undefined);
 
     const { version } = await getCrewMembersState(crewName);
+    await queueRankingRefresh(session.loginId);
 
     return NextResponse.json({
       ok: true,

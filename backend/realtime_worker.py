@@ -136,8 +136,8 @@ class RealtimeCollector:
             calendar = get_calendar_period(now)
             older = calendar["older"]
             older_cache_key = f"period:{older['year']}-{older['month']:02d}"
-            if not cached or not get_cached_result(older_cache_key):
-                print("No ranking cache found; running one full bootstrap collection.")
+            if requested_refreshes or not cached or not get_cached_result(older_cache_key):
+                print("Bootstrap/administrator refresh requested; rebuilding member ranking cache.")
                 output = await self._bootstrap(members, now)
                 save_result(output, now)
                 complete_refresh_requests(requested_refreshes)
