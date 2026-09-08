@@ -95,7 +95,10 @@ class RealtimeCollector:
                 bool(live_status.get("is_password")),
                 str(live_status["broadcast_no"]) if live_status.get("broadcast_no") else None,
                 str(live_status["broadcast_title"]).strip() if live_status.get("broadcast_title") else None,
-                int(live_status["viewer_count"]) if str(live_status.get("viewer_count") or "").isdigit() else None,
+                # SOOP may return a formatted value such as "1,234". Keep
+                # only digits instead of dropping the viewer count entirely.
+                int("".join(ch for ch in str(live_status.get("viewer_count") or "") if ch.isdigit()))
+                if any(ch.isdigit() for ch in str(live_status.get("viewer_count") or "")) else None,
             )
         except Exception as error:
             print(f"[{member['crew_name']}/{user_id}] live status failed: {error}")

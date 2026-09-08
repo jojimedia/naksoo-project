@@ -123,6 +123,7 @@ function LiveBadge({ member }: { member: CrewMember }) {
               <div className="px-2 py-1.5">
                 <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-[#e5e7eb]">{member.broadcast_title || "방송 중"}</p>
                 {member.viewer_count != null ? <p className="mt-0.5 text-[10px] font-bold text-[#a8a2b8]">시청자 {formatNumber(member.viewer_count)}명</p> : null}
+                <p className="mt-0.5 text-[10px] font-bold text-[#fbbf24]">오늘 별풍선 {formatNumber(member.display_day_balloons)}개</p>
               </div>
             </a>,
             document.body,
