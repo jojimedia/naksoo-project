@@ -115,6 +115,9 @@ export default function AdminPanelModal({
   const [representativeCandidates, setRepresentativeCandidates] = useState<SearchCandidate[]>([]);
   const [representative, setRepresentative] = useState<SearchCandidate | null>(null);
   const [isSearchingRepresentative, setIsSearchingRepresentative] = useState(false);
+  const [newAdminId, setNewAdminId] = useState("");
+  const [newAdminCrews, setNewAdminCrews] = useState<string[]>([]);
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
   const selectingFaCrew = isFaCrew(selectedCrew);
   const pendingCount = Object.keys(pendingAssignments).length;
   const displayMembers = useMemo(() => {
@@ -812,6 +815,12 @@ export default function AdminPanelModal({
     setManagedCrews((current)=>current.filter((crew)=>crew!==selectedCrew)); setSelectedCrew(FA_CREW_NAME); setMessage(`${selectedCrew} 크루를 삭제하고 멤버를 FA로 이동했습니다.`);
   }
 
+  async function handleCreateAdmin() {
+    setIsCreatingAdmin(true); setError("");
+    try { const response=await fetch("/api/admin/accounts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({login_id:newAdminId,crews:newAdminCrews})}); const data=await response.json() as {error?:string;temporary_password?:string}; if(!response.ok) throw new Error(data.error??"계정 생성에 실패했습니다."); setMessage(`${newAdminId} 계정을 생성했습니다. 임시 비밀번호는 ${data.temporary_password??"1234"}입니다.`); setNewAdminId(""); setNewAdminCrews([]); }
+    catch(error) { setError(error instanceof Error?error.message:"계정 생성에 실패했습니다."); } finally { setIsCreatingAdmin(false); }
+  }
+
   async function handleTriggerUpdate() {
     if (isUpdateRunning) {
       setError("이미 데이터 갱신이 진행 중입니다.");
@@ -1318,6 +1327,8 @@ export default function AdminPanelModal({
               <button type="button" onClick={() => void handleAddCrew()} disabled={!newCrewName.trim() || !representative} className="mt-4 rounded bg-[#5b4bdb] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">크루 생성</button>
             </section>
           ) : null}
+
+          {session.login_id === "admin" ? <section className="rounded-lg border border-[#3a3548] bg-[#111018] p-4"><h3 className="mb-3 text-sm font-semibold text-[#e5e7eb]">관리자 계정 생성</h3><div className="flex gap-2"><input value={newAdminId} onChange={(event)=>setNewAdminId(event.target.value)} placeholder="로그인 아이디" className="h-9 min-w-0 flex-1 rounded border border-[#3a3548] bg-[#17151f] px-3 text-sm text-[#e5e7eb]"/><button type="button" onClick={()=>void handleCreateAdmin()} disabled={!newAdminId.trim()||isCreatingAdmin} className="rounded border border-[#5b4bdb] px-3 text-xs font-semibold text-[#d8d4ff] disabled:opacity-50">{isCreatingAdmin?"생성 중...":"생성"}</button></div><p className="mt-2 text-xs text-[#8d879c]">생성 시 임시 비밀번호는 1234이며, 첫 로그인 후 변경해야 합니다.</p><div className="mt-2 flex flex-wrap gap-2">{managedCrews.map((crew)=><label key={crew} className="flex items-center gap-1 text-xs text-[#d8d4e5]"><input type="checkbox" checked={newAdminCrews.includes(crew)} onChange={(event)=>setNewAdminCrews(current=>event.target.checked?[...current,crew]:current.filter(value=>value!==crew))}/>{displayCrewName(crew)}</label>)}</div></section> : null}
 
           {message ? (
             <p className="text-sm font-medium text-[#86efac]">{message}</p>
