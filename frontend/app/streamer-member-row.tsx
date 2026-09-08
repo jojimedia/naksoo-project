@@ -121,9 +121,10 @@ function LiveBadge({ member }: { member: CrewMember }) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`${thumbnailUrl}?t=${Math.floor(Date.now() / 60_000)}`} alt={`${member.nickname} 라이브 썸네일`} className="aspect-video w-full bg-[#111018] object-cover" />
               <div className="px-2 py-1.5">
-                <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-[#e5e7eb]">{member.broadcast_title || "방송 중"}</p>
-                {member.viewer_count != null ? <p className="mt-0.5 text-[10px] font-bold text-[#a8a2b8]">시청자 {formatNumber(member.viewer_count)}명</p> : null}
-                <p className="mt-0.5 text-[10px] font-bold text-[#fbbf24]">오늘 별풍선 {formatNumber(member.display_day_balloons)}개</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="line-clamp-2 min-w-0 flex-1 text-[11px] font-semibold leading-snug text-[#e5e7eb]">{member.broadcast_title || "방송 중"}</p>
+                  <p className="shrink-0 text-[10px] font-bold text-[#fbbf24]">오늘 {formatNumber(member.display_day_balloons)}개</p>
+                </div>
               </div>
             </a>,
             document.body,
