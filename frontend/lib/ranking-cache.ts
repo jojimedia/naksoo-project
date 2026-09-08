@@ -47,6 +47,25 @@ export async function getCachedRanking(): Promise<unknown | null> {
   return result.rows[0]?.payload_json ?? null;
 }
 
+/**
+ * Local development cannot reach Cloudtype's private PostgreSQL network.
+ * Use the deployed, DB-backed result API only when explicitly configured.
+ */
+export async function getDevelopmentRanking(): Promise<unknown | null> {
+  const url = process.env.NAKSOO_RESULT_API_URL?.trim();
+
+  if (process.env.NODE_ENV === "production" || !url) {
+    return null;
+  }
+
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.json();
+}
+
 export function isPostgresConfigured(): boolean {
   return Boolean(process.env.PGPASSWORD || process.env.DATABASE_URL);
 }

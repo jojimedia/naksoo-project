@@ -1,6 +1,10 @@
 import { getTrimmedAverage } from "@/lib/stats";
 import { isFaCrew } from "@/lib/crews";
-import { getCachedRanking, isPostgresConfigured } from "@/lib/ranking-cache";
+import {
+  getCachedRanking,
+  getDevelopmentRanking,
+  isPostgresConfigured,
+} from "@/lib/ranking-cache";
 
 import CrewDashboard from "./crew-dashboard";
 
@@ -800,8 +804,15 @@ async function getCrewCardData() {
   const emptyData = () => makeCrewCardData(normalizeResult({ items: [] }));
 
   if (!isPostgresConfigured()) {
-    console.error("DATABASE_URL is not configured.");
-    return emptyData();
+    try {
+      const developmentRanking = await getDevelopmentRanking();
+      return developmentRanking
+        ? makeCrewCardData(normalizeResult(developmentRanking as RawNaksooResult))
+        : emptyData();
+    } catch (error) {
+      console.error("Failed to load development ranking API", error);
+      return emptyData();
+    }
   }
 
   try {
