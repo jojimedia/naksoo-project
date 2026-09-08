@@ -96,22 +96,23 @@ CREATE TABLE IF NOT EXISTS collector_status (
 def connect():
     """Open an autocommit connection suitable for a short worker transaction."""
 
+    value = os.environ.get("DATABASE_URL")
+    if value:
+        return psycopg.connect(value, autocommit=True, row_factory=dict_row)
+
     password = os.environ.get("PGPASSWORD")
     if password:
         return psycopg.connect(
             host=os.environ.get("PGHOST", "postgresql"),
             port=int(os.environ.get("PGPORT", "5432")),
-            user=os.environ.get("PGUSER", "postgres"),
+            user=os.environ.get("PGUSER", "root"),
             password=password,
             dbname=os.environ.get("PGDATABASE", "postgres"),
             autocommit=True,
             row_factory=dict_row,
         )
 
-    value = os.environ.get("DATABASE_URL")
-    if not value:
-        raise RuntimeError("PGPASSWORD 또는 DATABASE_URL 환경변수가 필요합니다.")
-    return psycopg.connect(value, autocommit=True, row_factory=dict_row)
+    raise RuntimeError("PGPASSWORD 또는 DATABASE_URL 환경변수가 필요합니다.")
 
 
 def ensure_schema() -> None:

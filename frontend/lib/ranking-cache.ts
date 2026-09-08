@@ -20,15 +20,21 @@ export function getPostgresPool(): Pool | null {
 
   if (!global.naksooPostgresPool) {
     global.naksooPostgresPool = new Pool({
-      ...(password
+      // A complete DATABASE_URL is the authoritative Cloudtype connection
+      // setting. Do not let a partial PG* setting override it.
+      ...(connectionString
+        ? { connectionString }
+        : password
         ? {
             host: process.env.PGHOST ?? "postgresql",
             port: Number(process.env.PGPORT ?? "5432"),
-            user: process.env.PGUSER ?? "postgres",
+            // Cloudtype's PostgreSQL template uses `root` unless explicitly
+            // overridden when the database service is created.
+            user: process.env.PGUSER ?? "root",
             password,
             database: process.env.PGDATABASE ?? "postgres",
           }
-        : { connectionString: connectionString! }),
+        : {}),
       max: 4,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 3_000,
