@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import os
 import random
+import socket
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -22,12 +23,15 @@ from main import (
     retry,
 )
 from realtime_db import (
+    acquire_collector_lease,
     claim_refresh_requests,
     cleanup_expired_data,
     complete_refresh_requests,
     ensure_schema,
     get_cached_result,
     get_collector_members,
+    mark_recovery_sweep,
+    recovery_sweep_due,
     save_result,
     update_collector_status,
 )
@@ -50,6 +54,10 @@ LOOP_SLEEP_SECONDS = max(5, int(os.environ.get("NAKSOO_WORKER_LOOP_SECONDS", "10
 BOOTSTRAP_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BOOTSTRAP_CONCURRENCY", "10")))
 BOOTSTRAP_RETRY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_BOOTSTRAP_RETRY_CONCURRENCY", "2")))
 BOOTSTRAP_RETRY_DELAY_SECONDS = max(0, int(os.environ.get("NAKSOO_BOOTSTRAP_RETRY_DELAY_SECONDS", "15")))
+RECOVERY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_RECOVERY_CONCURRENCY", "2")))
+RECOVERY_RETRY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_RECOVERY_RETRY_CONCURRENCY", "1")))
+RECOVERY_RETRY_DELAY_SECONDS = max(0, int(os.environ.get("NAKSOO_RECOVERY_RETRY_DELAY_SECONDS", "30")))
+COLLECTOR_LEASE_SECONDS = max(60, int(os.environ.get("NAKSOO_COLLECTOR_LEASE_SECONDS", "600")))
 
 
 def _interval(base_seconds: int, jitter_seconds: int = 0) -> int:
@@ -89,6 +97,7 @@ def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[s
 
 class RealtimeCollector:
     def __init__(self) -> None:
+        self.holder = f"{socket.gethostname()}:{os.getpid()}"
         self.next_status_at: dict[tuple[str, str], datetime] = {}
         self.next_detail_at: dict[tuple[str, str], datetime] = {}
         self.live_states: dict[tuple[str, str], bool] = {}
@@ -119,7 +128,14 @@ class RealtimeCollector:
             print(f"[{member['crew_name']}/{user_id}] live status failed: {error}")
             return None
 
-    async def _bootstrap(self, members: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+    async def _bootstrap(
+        self,
+        members: list[dict[str, Any]],
+        now: datetime,
+        concurrency: int = BOOTSTRAP_CONCURRENCY,
+        retry_concurrency: int = BOOTSTRAP_RETRY_CONCURRENCY,
+        retry_delay_seconds: int = BOOTSTRAP_RETRY_DELAY_SECONDS,
+    ) -> dict[str, Any]:
         """Build a full snapshot with a fast pass and a limited retry pass."""
         active = [member for member in members if not member.get("is_on_leave")]
         calendar = get_calendar_period(now)
@@ -129,7 +145,7 @@ class RealtimeCollector:
         fan_semaphore = asyncio.Semaphore(8)
         ranking_cache: dict[str, Any] = {}
         async with httpx.AsyncClient(follow_redirects=True, timeout=15, headers=HEADERS) as client:
-            initial_semaphore = asyncio.Semaphore(BOOTSTRAP_CONCURRENCY)
+            initial_semaphore = asyncio.Semaphore(concurrency)
             items = await asyncio.gather(*(
                 fetch_one_member(client, member, period, ranking_cache, initial_semaphore, fan_cache, fan_lock, fan_semaphore)
                 for member in active
@@ -147,11 +163,11 @@ class RealtimeCollector:
                 ]
                 print(
                     f"Bootstrap first pass complete; retrying {len(retry_members)} failed members "
-                    f"at concurrency {BOOTSTRAP_RETRY_CONCURRENCY}."
+                    f"at concurrency {retry_concurrency}."
                 )
-                if BOOTSTRAP_RETRY_DELAY_SECONDS:
-                    await asyncio.sleep(BOOTSTRAP_RETRY_DELAY_SECONDS)
-                retry_semaphore = asyncio.Semaphore(BOOTSTRAP_RETRY_CONCURRENCY)
+                if retry_delay_seconds:
+                    await asyncio.sleep(retry_delay_seconds)
+                retry_semaphore = asyncio.Semaphore(retry_concurrency)
                 retried_items = await asyncio.gather(*(
                     fetch_one_member(client, member, period, ranking_cache, retry_semaphore, fan_cache, fan_lock, fan_semaphore)
                     for member in retry_members
@@ -172,6 +188,10 @@ class RealtimeCollector:
 
     async def run_cycle(self) -> None:
         now = datetime.now(TIMEZONE)
+        if not acquire_collector_lease(self.holder, COLLECTOR_LEASE_SECONDS):
+            print("Another collector holds the PostgreSQL lease; skipping this cycle.")
+            return
+
         requested_refreshes = claim_refresh_requests()
         try:
             members = get_collector_members()
@@ -196,6 +216,21 @@ class RealtimeCollector:
                 print(f"{reason}; rebuilding member ranking cache.")
                 output = await self._bootstrap(members, now)
                 save_result(output, now)
+                complete_refresh_requests(requested_refreshes)
+                update_collector_status(now)
+                return
+
+            if recovery_sweep_due(now):
+                print("Daily recovery sweep; rebuilding ranking cache at low concurrency.")
+                output = await self._bootstrap(
+                    members,
+                    now,
+                    concurrency=RECOVERY_CONCURRENCY,
+                    retry_concurrency=RECOVERY_RETRY_CONCURRENCY,
+                    retry_delay_seconds=RECOVERY_RETRY_DELAY_SECONDS,
+                )
+                save_result(output, now)
+                mark_recovery_sweep(now)
                 complete_refresh_requests(requested_refreshes)
                 update_collector_status(now)
                 return

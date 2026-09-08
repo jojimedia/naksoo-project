@@ -95,6 +95,15 @@ CREATE TABLE IF NOT EXISTS collector_status (
     last_error TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE collector_status ADD COLUMN IF NOT EXISTS last_recovery_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS collector_lease (
+    lease_key TEXT PRIMARY KEY,
+    holder TEXT NOT NULL,
+    lease_until TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 
@@ -407,6 +416,52 @@ def update_collector_status(now: datetime, error: str | None = None) -> None:
               updated_at = EXCLUDED.updated_at
             """,
             (now, now if error is None else None, error, now),
+        )
+
+
+def acquire_collector_lease(holder: str, lease_seconds: int) -> bool:
+    """Claim the single collector lease without waiting for another worker."""
+
+    with connect() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO collector_lease (lease_key, holder, lease_until, updated_at)
+            VALUES ('realtime', %s, NOW() + (%s * INTERVAL '1 second'), NOW())
+            ON CONFLICT (lease_key) DO UPDATE SET
+              holder = EXCLUDED.holder,
+              lease_until = EXCLUDED.lease_until,
+              updated_at = EXCLUDED.updated_at
+            WHERE collector_lease.lease_until < NOW()
+               OR collector_lease.holder = EXCLUDED.holder
+            RETURNING holder
+            """,
+            (holder, lease_seconds),
+        ).fetchone()
+    return bool(row and row["holder"] == holder)
+
+
+def recovery_sweep_due(now: datetime) -> bool:
+    """Run at most one low-rate all-member verification pass per local day."""
+
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT last_recovery_at FROM collector_status WHERE status_key = 'current'"
+        ).fetchone()
+    last_recovery_at = row["last_recovery_at"] if row else None
+    return not last_recovery_at or last_recovery_at.date() != now.date()
+
+
+def mark_recovery_sweep(now: datetime) -> None:
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO collector_status (status_key, last_recovery_at, updated_at)
+            VALUES ('current', %s, %s)
+            ON CONFLICT (status_key) DO UPDATE SET
+              last_recovery_at = EXCLUDED.last_recovery_at,
+              updated_at = EXCLUDED.updated_at
+            """,
+            (now, now),
         )
 
 
