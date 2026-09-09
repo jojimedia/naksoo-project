@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import AdminLoginModal from "./admin-login-modal";
 import AdminPanelModal from "./admin-panel-modal";
 import MemberRequestModal from "./member-request-modal";
@@ -677,6 +678,7 @@ function FaRankingCard({
 }
 
 export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("members");
   const [showOverall, setShowOverall] = useState(false);
@@ -692,6 +694,20 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     () => (data.fa_crew ? [...data.crews, data.fa_crew] : data.crews),
     [data.crews, data.fa_crew],
   );
+
+  // The server component reads the current PostgreSQL cache, but a browser
+  // that remains open otherwise keeps its initial render forever. Refreshing
+  // the route while visible lets live 풍투 changes appear without a manual
+  // browser reload and preserves the dashboard's client-side UI state.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    };
+    const intervalId = window.setInterval(refresh, 30_000);
+    return () => window.clearInterval(intervalId);
+  }, [router]);
 
   const crews = useMemo(() => {
     // 홈/검색 카드에는 소속 크루만 표시한다. FA는 카드로 넣지 않는다.
