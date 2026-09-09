@@ -59,24 +59,10 @@ type OverallMember = {
   member: CrewCardData["members"][number];
 };
 
-type UpdateStatus = {
-  label: string;
-  className: string;
-};
-
 type AdminSession = {
   login_id: string;
   crews: string[];
 };
-
-function formatUpdatedAt(data: CrewDashboardData) {
-  return `${Number(data.created_date.slice(0, 4))}년 ${Number(
-    data.created_date.slice(5, 7),
-  )}월 ${Number(data.created_date.slice(8, 10))}일 ${data.created_time.slice(
-    0,
-    5,
-  )} 업데이트 출처: 풍투`;
-}
 
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
@@ -154,41 +140,6 @@ function HighlightText({ text, query }: { text: string; query: string }) {
       {text.slice(index + keyword.length)}
     </>
   );
-}
-
-function getUpdateStatus(data: CrewDashboardData): UpdateStatus {
-  const updatedAt = new Date(`${data.created_date}T${data.created_time}+09:00`);
-  const diffHours = (Date.now() - updatedAt.getTime()) / 1000 / 60 / 60;
-
-  if (!Number.isFinite(diffHours)) {
-    return {
-      label: formatUpdatedAt(data),
-      className:
-        "border-[#3a3548] bg-[#17151f]/70 text-[#8d879c]",
-    };
-  }
-
-  if (diffHours >= 24) {
-    return {
-      label: `${formatUpdatedAt(data)} · 업데이트 지연`,
-      className:
-        "border-[#dc2626]/40 bg-[#dc2626]/10 text-[#fca5a5]",
-    };
-  }
-
-  if (diffHours >= 12) {
-    return {
-      label: `${formatUpdatedAt(data)} · 확인 필요`,
-      className:
-        "border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#fbbf24]",
-    };
-  }
-
-  return {
-    label: formatUpdatedAt(data),
-    className:
-      "border-[#3a3548] bg-[#17151f]/70 text-[#8d879c]",
-  };
 }
 
 function aggregateDonors(
@@ -778,7 +729,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       : searchMode === "donors" && isSearching
         ? donorResults.length > 0
         : crews.length > 0;
-  const updateStatus = getUpdateStatus(data);
   const overallRows = useMemo(
     () =>
       rankingCrews
@@ -1016,7 +966,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               className="rounded-full border border-[#3a3548] bg-[#17151f] px-2.5 py-1.5 text-[11px] font-medium text-[#d8d4ff] transition hover:border-[#a99cff]/40"
               onClick={() => setShowMemberRequestModal(true)}
             >
-              스트리머 등록 신청
+              스트리머 수정/등록 신청
             </button>
             <button
               type="button"
@@ -1037,11 +987,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                 }}
               />
             </button>
-            <button
-              className={`rounded-full border px-2.5 py-1.5 text-[11px] font-medium leading-tight ${updateStatus.className}`}
-            >
-              {updateStatus.label}
-            </button>
           </div>
         </div>
       </header>
@@ -1053,7 +998,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             className="rounded-full border border-[#3a3548] bg-[#17151f] px-2.5 py-1.5 text-[11px] font-medium text-[#d8d4ff]"
             onClick={() => setShowMemberRequestModal(true)}
           >
-            스트리머 등록 신청
+            스트리머 수정/등록 신청
           </button>
           <button
             type="button"
@@ -1073,11 +1018,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                   '<box-icon name="key" color="currentColor" size="14px"></box-icon>',
               }}
             />
-          </button>
-          <button
-            className={`rounded-full border px-2.5 py-1.5 text-[11px] font-medium leading-tight ${updateStatus.className}`}
-          >
-            {updateStatus.label}
           </button>
         </div>
 
