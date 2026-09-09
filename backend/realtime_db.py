@@ -292,9 +292,10 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
             bool(item.get("is_live")), bool(item.get("is_password_broadcast")),
             effective_total, _as_json(month_data.get("daily_balloons")),
             _as_json(month_data.get("fans")), month_data.get("data_source"),
-            observed_at, observed_at, last_changed_at or observed_at, changed,
+            observed_at, observed_at, last_changed_at or observed_at,
             _as_datetime(item.get("last_detail_collected_at")),
             _as_datetime(item.get("last_live_end_at")),
+            changed,
         ),
     )
 
