@@ -51,6 +51,11 @@ WARM_POLL_SECONDS = max(60, int(os.environ.get("NAKSOO_WARM_POLL_SECONDS", "180"
 WARM_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_WARM_POLL_JITTER_SECONDS", "45")))
 COLD_POLL_SECONDS = max(120, int(os.environ.get("NAKSOO_COLD_POLL_SECONDS", "600")))
 COLD_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_COLD_POLL_JITTER_SECONDS", "90")))
+# A full 풍투 reconciliation protects against a missed/stale SOOP LIVE
+# signal, without turning every offline streamer into a frequent poll.
+FULL_RECONCILIATION_SECONDS = max(
+    300, int(os.environ.get("NAKSOO_FULL_RECONCILIATION_SECONDS", "7200"))
+)
 UNAVAILABLE_RETRY_SECONDS = max(60, int(os.environ.get("NAKSOO_UNAVAILABLE_RETRY_SECONDS", "300")))
 # Recover missing donor lists promptly after a temporary source block. The
 # actual monthly requests remain capped by the two-wide detail semaphore.
@@ -132,6 +137,10 @@ class RealtimeCollector:
         self.state_restored = False
         self.next_detail_backfill_at: datetime | None = None
         self.next_donor_backfill_for: dict[tuple[str, str], datetime] = {}
+        # ``None`` deliberately makes a newly deployed/restarted collector
+        # reconcile all existing members once before returning to live-only
+        # polling.
+        self.next_full_reconciliation_at: datetime | None = None
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -294,6 +303,9 @@ class RealtimeCollector:
                 print("Ranking cache is not ready; building initial member snapshot.")
                 output = await self._bootstrap(members, now)
                 save_result(output, now)
+                self.next_full_reconciliation_at = now + timedelta(
+                    seconds=FULL_RECONCILIATION_SECONDS
+                )
                 complete_refresh_requests(requested_refreshes)
                 update_collector_status(now)
                 return
@@ -318,10 +330,19 @@ class RealtimeCollector:
             to_collect: list[dict[str, Any]] = []
             quick_collect: list[dict[str, Any]] = []
 
-            if requested_refreshes or recovery_due:
+            scheduled_reconciliation = (
+                self.next_full_reconciliation_at is None
+                or now >= self.next_full_reconciliation_at
+            )
+            full_current_month_refresh = bool(requested_refreshes) or scheduled_reconciliation
+            if scheduled_reconciliation:
+                self.next_full_reconciliation_at = now + timedelta(
+                    seconds=FULL_RECONCILIATION_SECONDS
+                )
+            if full_current_month_refresh or recovery_due:
                 # An administrator request or the daily sweep refreshes the
-                # status of every registered member.  It intentionally does
-                # not refetch all three monthly periods for every member.
+                # status of every registered member.  Historical months stay
+                # immutable here; the current-month total is handled below.
                 for member in active_members:
                     key = (member["crew_name"], member["user_id"])
                     self.next_status_at[key] = now
@@ -377,10 +398,35 @@ class RealtimeCollector:
                         # not wait until the next daily recovery sweep.
                         quick_collect.append(member)
 
+                # Reconcile the current month at collector start, on a manual
+                # update, and every two hours by default. This catches a
+                # missed/stale SOOP LIVE signal without polling every offline
+                # member at the live cadence. New members still use the full
+                # bootstrap path above to obtain their historical months.
+                if full_current_month_refresh:
+                    bootstrap_keys = {
+                        (member["crew_name"], member["user_id"])
+                        for member in to_collect
+                    }
+                    quick_keys = {
+                        (member["crew_name"], member["user_id"])
+                        for member in quick_collect
+                    }
+                    for member in active_members:
+                        key = (member["crew_name"], member["user_id"])
+                        if key not in bootstrap_keys and key not in quick_keys:
+                            quick_collect.append(member)
+                            quick_keys.add(key)
+                    reason = "manual refresh" if requested_refreshes else "scheduled reconciliation"
+                    print(
+                        f"{reason}: reconciling current-month 풍투 totals "
+                        f"for {len(quick_collect)} existing members."
+                    )
+
                 # Status polling is intentionally slower than live detail
-                # polling. Use the cached live state here so each LIVE member
-                # can be refreshed at its own jittered 60–90 second cadence,
-                # without refetching station/live metadata or old months.
+                # polling. Outside of the periodic reconciliation, use the
+                # cached live state so only LIVE members are refreshed at the
+                # faster 60–90 second cadence.
                 quick_keys = {(member["crew_name"], member["user_id"]) for member in quick_collect}
                 for member in active_members:
                     key = (member["crew_name"], member["user_id"])
