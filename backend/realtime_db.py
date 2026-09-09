@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS streamer_month_current (
     source_observed_at TIMESTAMPTZ NOT NULL,
     last_collected_at TIMESTAMPTZ NOT NULL,
     last_changed_at TIMESTAMPTZ NOT NULL,
+    last_detail_collected_at TIMESTAMPTZ,
+    last_live_end_at TIMESTAMPTZ,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (streamer_id, year, month)
 );
@@ -97,6 +99,11 @@ CREATE TABLE IF NOT EXISTS collector_status (
 );
 
 ALTER TABLE collector_status ADD COLUMN IF NOT EXISTS last_recovery_at TIMESTAMPTZ;
+ALTER TABLE collector_status ADD COLUMN IF NOT EXISTS source_request_count BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE collector_status ADD COLUMN IF NOT EXISTS source_failure_count BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE collector_status ADD COLUMN IF NOT EXISTS last_source_success_at TIMESTAMPTZ;
+ALTER TABLE streamer_month_current ADD COLUMN IF NOT EXISTS last_detail_collected_at TIMESTAMPTZ;
+ALTER TABLE streamer_month_current ADD COLUMN IF NOT EXISTS last_live_end_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS collector_lease (
     lease_key TEXT PRIMARY KEY,
@@ -248,10 +255,11 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
           note, is_on_leave, broadcast_start, is_live, is_password_broadcast,
           total_balloons, daily_balloons, fans, data_source,
           source_observed_at, last_collected_at, last_changed_at,
+          last_detail_collected_at, last_live_end_at,
           consecutive_failures
         ) VALUES (
           %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-          %s::jsonb, %s::jsonb, %s, %s, %s, %s, 0
+          %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s, %s, 0
         )
         ON CONFLICT (streamer_id, year, month) DO UPDATE SET
           crew_name = EXCLUDED.crew_name,
@@ -272,6 +280,8 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
           last_collected_at = EXCLUDED.last_collected_at,
           last_changed_at = CASE WHEN %s THEN EXCLUDED.last_changed_at
             ELSE streamer_month_current.last_changed_at END,
+          last_detail_collected_at = COALESCE(EXCLUDED.last_detail_collected_at, streamer_month_current.last_detail_collected_at),
+          last_live_end_at = COALESCE(EXCLUDED.last_live_end_at, streamer_month_current.last_live_end_at),
           consecutive_failures = 0
         """,
         (
@@ -283,6 +293,8 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
             effective_total, _as_json(month_data.get("daily_balloons")),
             _as_json(month_data.get("fans")), month_data.get("data_source"),
             observed_at, observed_at, last_changed_at or observed_at, changed,
+            _as_datetime(item.get("last_detail_collected_at")),
+            _as_datetime(item.get("last_live_end_at")),
         ),
     )
 
@@ -366,7 +378,8 @@ def get_collector_state(year: int, month: int) -> dict[tuple[str, str], dict[str
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT crew_name, streamer_id, is_live, last_changed_at
+            SELECT crew_name, streamer_id, is_live, last_changed_at,
+                   last_detail_collected_at, last_live_end_at
             FROM streamer_month_current
             WHERE year = %s AND month = %s
             """,
@@ -376,6 +389,8 @@ def get_collector_state(year: int, month: int) -> dict[tuple[str, str], dict[str
         (str(row["crew_name"]), str(row["streamer_id"])): {
             "is_live": bool(row["is_live"]),
             "last_changed_at": row["last_changed_at"],
+            "last_detail_collected_at": row["last_detail_collected_at"],
+            "last_live_end_at": row["last_live_end_at"],
         }
         for row in rows
     }
@@ -437,6 +452,26 @@ def update_collector_status(now: datetime, error: str | None = None) -> None:
               updated_at = EXCLUDED.updated_at
             """,
             (now, now if error is None else None, error, now),
+        )
+
+
+def record_source_collection_result(success: bool, observed_at: datetime) -> None:
+    """Persist lightweight source health counters for the admin monitor."""
+
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO collector_status (
+              status_key, source_request_count, source_failure_count,
+              last_source_success_at, updated_at
+            ) VALUES ('current', 1, %s, %s, %s)
+            ON CONFLICT (status_key) DO UPDATE SET
+              source_request_count = collector_status.source_request_count + 1,
+              source_failure_count = collector_status.source_failure_count + EXCLUDED.source_failure_count,
+              last_source_success_at = COALESCE(EXCLUDED.last_source_success_at, collector_status.last_source_success_at),
+              updated_at = EXCLUDED.updated_at
+            """,
+            (0 if success else 1, observed_at if success else None, observed_at),
         )
 
 

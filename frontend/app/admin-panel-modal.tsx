@@ -49,6 +49,18 @@ type AdminPanelModalProps = {
   onLogout: () => void;
 };
 
+type CollectorStatus = {
+  running: boolean;
+  error: string | null;
+  last_success_at: string | null;
+  last_source_success_at: string | null;
+  source_request_count: number;
+  source_failure_count: number;
+  active_members: number;
+  live_members: number;
+  final_collection_due: number;
+};
+
 function requestActionLabel(action: PendingMemberRequest["action"]) {
   switch (action) {
     case "add":
@@ -102,6 +114,7 @@ export default function AdminPanelModal({
   const [isSearching, setIsSearching] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [isTriggeringUpdate, setIsTriggeringUpdate] = useState(false);
+  const [collectorStatus, setCollectorStatus] = useState<CollectorStatus | null>(null);
   const [pendingRequests, setPendingRequests] = useState<PendingMemberRequest[]>(
     [],
   );
@@ -248,6 +261,16 @@ export default function AdminPanelModal({
     }
   }, []);
 
+  const loadCollectorStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/trigger-update", { cache: "no-store" });
+      if (!response.ok) return;
+      setCollectorStatus((await response.json()) as CollectorStatus);
+    } catch {
+      // Status is auxiliary; do not block normal admin operations.
+    }
+  }, []);
+
   useEffect(() => {
     void loadMembers(selectedCrew);
   }, [loadMembers, selectedCrew]);
@@ -255,6 +278,15 @@ export default function AdminPanelModal({
   useEffect(() => {
     void loadPendingRequests();
   }, [loadPendingRequests]);
+
+  useEffect(() => {
+    const initialTimeoutId = window.setTimeout(() => void loadCollectorStatus(), 0);
+    const intervalId = window.setInterval(() => void loadCollectorStatus(), 30_000);
+    return () => {
+      window.clearTimeout(initialTimeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [loadCollectorStatus]);
 
   useEffect(() => {
     if (session.login_id !== "admin") return;
@@ -820,6 +852,7 @@ export default function AdminPanelModal({
       }
 
       setMessage(data.message ?? "전체 데이터 갱신을 요청했습니다.");
+      void loadCollectorStatus();
     } catch (triggerError) {
       setError(
         triggerError instanceof Error
@@ -881,6 +914,23 @@ export default function AdminPanelModal({
         </div>
 
         <div className="space-y-4 overflow-y-auto px-5 py-4">
+          {collectorStatus ? (
+            <section className="rounded-lg border border-[#3a3548] bg-[#111018] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-[#e5e7eb]">수집 상태</h3>
+                <span className={collectorStatus.error ? "text-xs font-semibold text-[#fca5a5]" : "text-xs font-semibold text-[#6ee7b7]"}>
+                  {collectorStatus.error ? "오류 감지" : collectorStatus.running ? "수동 갱신 처리 중" : "정상"}
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-[#a8a2b8] sm:grid-cols-4">
+                <span>활성 {collectorStatus.active_members}명</span><span>라이브 {collectorStatus.live_members}명</span>
+                <span>풍투 요청 {collectorStatus.source_request_count}</span><span>실패 {collectorStatus.source_failure_count}</span>
+                <span className="col-span-2 sm:col-span-4">마지막 원천 성공: {collectorStatus.last_source_success_at ?? "아직 없음"}</span>
+                {collectorStatus.final_collection_due > 0 ? <span className="col-span-2 text-[#fbbf24] sm:col-span-4">종료 후 최종 수집 대기 {collectorStatus.final_collection_due}명</span> : null}
+                {collectorStatus.error ? <span className="col-span-2 text-[#fca5a5] sm:col-span-4">최근 오류: {collectorStatus.error}</span> : null}
+              </div>
+            </section>
+          ) : null}
           <section className="rounded-lg border border-[#3a3548] bg-[#111018] p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-[#e5e7eb]">

@@ -36,6 +36,7 @@ from realtime_db import (
     get_collector_members,
     get_collector_state,
     mark_recovery_sweep,
+    record_source_collection_result,
     recovery_sweep_due,
     save_result,
     update_collector_status,
@@ -141,6 +142,7 @@ class RealtimeCollector:
         # reconcile all existing members once before returning to live-only
         # polling.
         self.next_full_reconciliation_at: datetime | None = None
+        self.recovery_required: set[tuple[str, str]] = set()
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -151,6 +153,13 @@ class RealtimeCollector:
             last_changed_at = value.get("last_changed_at")
             if isinstance(last_changed_at, datetime):
                 self.last_change_at[key] = last_changed_at
+            last_live_end_at = value.get("last_live_end_at")
+            last_detail_collected_at = value.get("last_detail_collected_at")
+            if (
+                isinstance(last_live_end_at, datetime)
+                and (not isinstance(last_detail_collected_at, datetime) or last_live_end_at > last_detail_collected_at)
+            ):
+                self.recovery_required.add(key)
         self.state_restored = True
         print(f"Restored collector scheduling state for {len(state)} members.")
 
@@ -390,6 +399,12 @@ class RealtimeCollector:
                         to_collect.append(member)
                     elif was_live and not is_live:
                         # One final sample after the broadcast ends.
+                        existing["last_live_end_at"] = now.isoformat()
+                        self.recovery_required.add(key)
+                        quick_collect.append(member)
+                    elif key in self.recovery_required:
+                        # A previous process stopped after a broadcast ended
+                        # but before its final 풍투 read completed.
                         quick_collect.append(member)
                     elif existing and (existing.get("current_month") or {}).get("data_source") == "unavailable" and now >= due:
                         # Newly registered/offline members can also hit a
@@ -488,6 +503,7 @@ class RealtimeCollector:
                         for member in selected_backfills
                     }
                     for key, recovered_month in recovered_months:
+                        record_source_collection_result(recovered_month is not None, now)
                         if recovered_month is None:
                             # Preserve known data; only the next attempt is
                             # delayed. This must never turn a good donor list
@@ -506,8 +522,10 @@ class RealtimeCollector:
                         previous_total = int((existing.get("current_month") or {}).get("total_balloons") or 0)
                         existing["current_month"] = recovered_month
                         existing["current_month_used_fallback"] = False
+                        existing["last_detail_collected_at"] = now.isoformat()
                         items_by_key[key] = existing
                         self.next_donor_backfill_for.pop(key, None)
+                        self.recovery_required.discard(key)
                         if self.live_states.get(key, False) or int(recovered_month.get("total_balloons") or 0) > previous_total:
                             interval = _interval(HOT_POLL_SECONDS, HOT_POLL_JITTER_SECONDS)
                         else:

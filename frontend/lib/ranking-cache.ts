@@ -153,7 +153,7 @@ export async function getCollectorRefreshStatus() {
     throw new Error("PGPASSWORD 또는 DATABASE_URL이 설정되지 않았습니다.");
   }
 
-  const [commandResult, statusResult] = await Promise.all([
+  const [commandResult, statusResult, overviewResult] = await Promise.all([
     pool.query<{
       id: number;
       status: "queued" | "processing" | "completed" | "failed";
@@ -167,12 +167,31 @@ export async function getCollectorRefreshStatus() {
       last_cycle_at: string | null;
       last_success_at: string | null;
       last_error: string | null;
+      source_request_count: number;
+      source_failure_count: number;
+      last_source_success_at: string | null;
     }>(
-      "SELECT last_cycle_at, last_success_at, last_error FROM collector_status WHERE status_key = 'current'",
+      "SELECT last_cycle_at, last_success_at, last_error, source_request_count, source_failure_count, last_source_success_at FROM collector_status WHERE status_key = 'current'",
+    ),
+    pool.query<{
+      active_members: number;
+      live_members: number;
+      final_collection_due: number;
+      oldest_detail_collected_at: string | null;
+    }>(
+      `SELECT
+        COUNT(*) FILTER (WHERE NOT is_on_leave)::int AS active_members,
+        COUNT(*) FILTER (WHERE NOT is_on_leave AND is_live)::int AS live_members,
+        COUNT(*) FILTER (WHERE NOT is_on_leave AND last_live_end_at > COALESCE(last_detail_collected_at, '-infinity'::timestamptz))::int AS final_collection_due,
+        MIN(last_detail_collected_at) FILTER (WHERE NOT is_on_leave) AS oldest_detail_collected_at
+       FROM streamer_month_current
+       WHERE year = EXTRACT(YEAR FROM NOW() AT TIME ZONE 'Asia/Seoul')::int
+         AND month = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'Asia/Seoul')::int`,
     ),
   ]);
   const command = commandResult.rows[0];
   const status = statusResult.rows[0];
+  const overview = overviewResult.rows[0];
   return {
     running: command?.status === "queued" || command?.status === "processing",
     command_status: command?.status ?? null,
@@ -181,5 +200,12 @@ export async function getCollectorRefreshStatus() {
     error: command?.error_message ?? status?.last_error ?? null,
     last_cycle_at: status?.last_cycle_at ?? null,
     last_success_at: status?.last_success_at ?? null,
+    last_source_success_at: status?.last_source_success_at ?? null,
+    source_request_count: Number(status?.source_request_count ?? 0),
+    source_failure_count: Number(status?.source_failure_count ?? 0),
+    active_members: Number(overview?.active_members ?? 0),
+    live_members: Number(overview?.live_members ?? 0),
+    final_collection_due: Number(overview?.final_collection_due ?? 0),
+    oldest_detail_collected_at: overview?.oldest_detail_collected_at ?? null,
   };
 }
