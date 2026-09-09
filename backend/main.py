@@ -309,6 +309,11 @@ async def fetch_balloon(client, user_id, year, month):
     url = (
         "https://static.poong.today/bj/detail/get"
         f"?id={user_id}&year={year}&month={month}"
+        # Cloudtype's outbound path can otherwise receive an old CDN object
+        # even when the public broadcast page has already advanced.  The
+        # monthly detail endpoint is live data, so each collector poll must
+        # identify a fresh representation instead of reusing that object.
+        f"&cache_bust={int(datetime.now(TIMEZONE).timestamp() * 1000)}"
     )
 
     res = await client.get(url, headers=POONG_HEADERS)
