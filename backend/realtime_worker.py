@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
+from live_totals import POLL_SECONDS, apply_totals, fetch_totals, saved_totals
 
 from main import (
     HEADERS,
@@ -48,7 +49,7 @@ STATUS_POLL_SECONDS = max(30, int(os.environ.get("NAKSOO_STATUS_POLL_SECONDS", "
 # still detecting a newly LIVE streamer within roughly one minute.
 STATUS_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_STATUS_POLL_JITTER_SECONDS", "5")))
 STATUS_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_STATUS_CONCURRENCY", "10")))
-HOT_POLL_SECONDS = max(30, int(os.environ.get("NAKSOO_HOT_POLL_SECONDS", "60")))
+HOT_POLL_SECONDS = max(120, int(os.environ.get("NAKSOO_HOT_POLL_SECONDS", "300")))
 HOT_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_HOT_POLL_JITTER_SECONDS", "5")))
 WARM_POLL_SECONDS = max(60, int(os.environ.get("NAKSOO_WARM_POLL_SECONDS", "180")))
 WARM_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_WARM_POLL_JITTER_SECONDS", "45")))
@@ -131,6 +132,7 @@ def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[s
 
 class RealtimeCollector:
     def __init__(self) -> None:
+        self.chart_totals = {}
         self.holder = f"{socket.gethostname()}:{os.getpid()}"
         self.next_status_at: dict[tuple[str, str], datetime] = {}
         self.next_detail_at: dict[tuple[str, str], datetime] = {}
@@ -313,7 +315,7 @@ class RealtimeCollector:
             if not cached or not get_cached_result(older_cache_key):
                 print("Ranking cache is not ready; building initial member snapshot.")
                 output = await self._bootstrap(members, now)
-                save_result(output, now)
+                self._save_result(output, datetime.now(TIMEZONE))
                 self.next_full_reconciliation_at = now + timedelta(
                     seconds=FULL_RECONCILIATION_SECONDS
                 )
@@ -620,7 +622,7 @@ class RealtimeCollector:
                         items_by_key[key] = item
 
             output = make_output(now, members, list(items_by_key.values()))
-            save_result(output, now)
+            self._save_result(output, datetime.now(TIMEZONE))
             if recovery_due:
                 mark_recovery_sweep(now)
             complete_refresh_requests(requested_refreshes)
@@ -638,7 +640,40 @@ class RealtimeCollector:
             update_collector_status(now, str(error))
             raise
 
+    def _save_result(self, output, now):
+        # No await between reading and saving: the two tasks in this process
+        # cannot interleave writes. Restore the latest published overlay even
+        # when a slow detail task started with an older cache snapshot.
+        apply_totals(output, saved_totals(get_cached_result() or {}))
+        apply_totals(output, self.chart_totals)
+        save_result(output, now)
+
+    async def run_live_totals(self) -> None:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            while True:
+                delay = POLL_SECONDS
+                try:
+                    if acquire_collector_lease(self.holder, COLLECTOR_LEASE_SECONDS):
+                        started = datetime.now(TIMEZONE)
+                        self.chart_totals = await fetch_totals(client, started)
+                        now = datetime.now(TIMEZONE)
+                        output = get_cached_result()
+                        if output:
+                            changed = apply_totals(output, self.chart_totals)
+                            self._save_result(output, now)
+                            print(f"Live chart saved: requests=2 changed={changed} observed={now.isoformat()} elapsed={(now-started).total_seconds():.2f}s")
+                        record_source_collection_result(True, now)
+                except Exception as error:
+                    # Honour source throttling without blocking detail work.
+                    delay = max(POLL_SECONDS, getattr(error, "retry_after", None) or 90)
+                    print(f"Live chart failed: {error}; retry in {delay}s")
+                    record_source_collection_result(False, datetime.now(TIMEZONE))
+                await asyncio.sleep(delay)
+
     async def run_forever(self) -> None:
+        await asyncio.gather(self.run_detail_forever(), self.run_live_totals())
+
+    async def run_detail_forever(self) -> None:
         while True:
             try:
                 await self.run_cycle()

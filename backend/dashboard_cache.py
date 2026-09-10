@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any
+from live_totals import KST, chart_date
 
 
 def _number(value: Any) -> int:
@@ -54,7 +55,7 @@ def _patrons(items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
 
 def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
     """Return the exact top-level shape consumed by CrewDashboard."""
-    now = datetime.now().astimezone()
+    now = datetime.now(KST)
     current = result.get("current_period") or {}
     previous = result.get("previous_period") or {}
     current_year, current_month = _number(current.get("year")), _number(current.get("month"))
@@ -78,6 +79,11 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
                 yesterday = now - timedelta(days=1)
                 source = cur if (yesterday.year, yesterday.month) == (current_year, current_month) else prev
                 today = _daily(source, yesterday.day)
+            reporting_date = chart_date(now)
+            for source in (cur, prev):
+                realtime = source.get("realtime_totals") or {}
+                if realtime.get("date") == reporting_date.isoformat() and realtime.get("today") is not None:
+                    today = _number(realtime["today"])
             members.append({"rank": rank, "user_id": str(item["user_id"]), "nickname": str(item.get("nickname") or item["user_id"]), "profile_image_url": _profile(str(item["user_id"]), item.get("profile_image_url")), "broadcast_start": item.get("broadcast_start"), "is_live": bool(item.get("is_live")), "broadcast_no": item.get("broadcast_no"), "broadcast_title": item.get("broadcast_title"), "viewer_count": item.get("viewer_count"), "current_balloons": current_total, "previous_balloons": previous_total, "change_balloons": current_total - previous_total, "change_rate": round(((current_total - previous_total) / previous_total * 100) if previous_total else (100 if current_total else 0), 1), "display_day_balloons": today, "current_daily_balloons": cur.get("daily_balloons") or [], "previous_daily_balloons": prev.get("daily_balloons") or [], "monthly_fans": [], "monthly_top_fans": _top_fans(cur), "is_on_leave": False})
         total = sum(member["current_balloons"] for member in members)
         average = round(total / len(members)) if members else 0
