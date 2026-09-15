@@ -6,6 +6,7 @@ import json
 import os
 import re
 import random
+import time
 from collections import Counter
 from io import StringIO
 from datetime import datetime, timedelta
@@ -239,6 +240,37 @@ async def fetch_station(client, user_id):
     }
 
 
+_public_live_ids = set()
+_public_live_checked_at = 0.0
+_public_live_lock = asyncio.Lock()
+
+
+async def fetch_public_live_ids(client):
+    """Read the shared public LIVE roster at most once per minute.
+
+    Adult/restricted broadcasts return a negative player RESULT even while
+    they are live.  The roster confirms presence without opening the stream.
+    """
+
+    global _public_live_ids, _public_live_checked_at
+    async with _public_live_lock:
+        if time.monotonic() - _public_live_checked_at < 60:
+            return _public_live_ids
+
+        response = await client.get(
+            "https://static.poong.today/broad/live",
+            headers=POONG_HEADERS,
+        )
+        response.raise_for_status()
+        values = [value.strip().lower() for value in response.text.strip().split(",") if value.strip()]
+        if any(not re.fullmatch(r"[a-z0-9_]+", value) for value in values):
+            raise ValueError("Invalid public LIVE list")
+
+        _public_live_ids = set(values)
+        _public_live_checked_at = time.monotonic()
+        return _public_live_ids
+
+
 async def fetch_live_status(client, user_id):
     """SOOPTV 생방송 정보 API에서 비번방 여부와 공개 방송 여부를 가져온다."""
 
@@ -264,10 +296,18 @@ async def fetch_live_status(client, user_id):
         raise source_error(f"live status 실패: {user_id} {res.status_code}", res)
 
     channel = res.json().get("CHANNEL", {})
+    result = str(channel.get("RESULT"))
+    is_password = channel.get("BPWD") == "Y"
+    is_live = result == "1"
+
+    if not is_password and result in {"-6", "-8"} and channel.get("TITLE"):
+        # Restricted playback is not evidence of an ended broadcast. Confirm
+        # public presence without attempting to access the restricted stream.
+        is_live = user_id.lower() in await fetch_public_live_ids(client)
 
     return {
-        "is_live": channel.get("RESULT") == 1 and channel.get("BPWD") != "Y",
-        "is_password": channel.get("BPWD") == "Y",
+        "is_live": is_live and not is_password,
+        "is_password": is_password,
         # Keep these fields with the ranking cache so the web UI can render a
         # live badge/thumbnail without starting another browser-side polling
         # loop for every member.

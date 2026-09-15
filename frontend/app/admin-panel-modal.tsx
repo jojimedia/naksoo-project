@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { displayCrewName, FA_CREW_NAME, isFaCrew } from "@/lib/crews";
 
@@ -81,6 +82,7 @@ export default function AdminPanelModal({
   onClose,
   onLogout,
 }: AdminPanelModalProps) {
+  const router = useRouter();
   const [managedCrews, setManagedCrews] = useState(session.crews);
   const assignableCrews = useMemo(
     () => managedCrews.filter((crew) => !isFaCrew(crew)),
@@ -436,6 +438,7 @@ export default function AdminPanelModal({
       setSearchCandidates([]);
       setValidatedStreamer(null);
       await loadMembers(selectedCrew);
+      router.refresh();
     } catch (addError) {
       setError(
         addError instanceof Error
@@ -517,6 +520,7 @@ export default function AdminPanelModal({
       setAssignMenuPos(null);
       setMessage(`${data.assigned ?? moved.length}명의 크루 배정을 적용했습니다.`);
       await loadMembers(selectedCrew);
+      router.refresh();
     } catch (assignError) {
       setError(
         assignError instanceof Error
@@ -578,6 +582,7 @@ export default function AdminPanelModal({
       });
       setMessage(`${userId} 멤버를 삭제했습니다.`);
       await loadMembers(selectedCrew);
+      router.refresh();
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -632,6 +637,7 @@ export default function AdminPanelModal({
 
       setMessage(`${userId} 멤버를 무소속으로 이동했습니다.`);
       await loadMembers(selectedCrew);
+      router.refresh();
     } catch (retireError) {
       setError(
         retireError instanceof Error
@@ -685,6 +691,7 @@ export default function AdminPanelModal({
           : `${member.user_id} 멤버를 복직 처리했습니다.`,
       );
       await loadMembers(selectedCrew);
+      router.refresh();
     } catch (toggleError) {
       setError(
         toggleError instanceof Error
@@ -758,6 +765,7 @@ export default function AdminPanelModal({
       setSelectedRequestRows([]);
       await loadPendingRequests();
       await loadMembers(selectedCrew);
+      router.refresh();
     } catch (processError) {
       setError(
         processError instanceof Error

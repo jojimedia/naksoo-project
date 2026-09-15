@@ -7,11 +7,11 @@ import {
 } from "@/lib/admin-session";
 import { jsonError } from "@/lib/api-utils";
 import { isFaCrew } from "@/lib/crews";
-import { requestCollectorRefresh } from "@/lib/ranking-cache";
 import {
   addMember,
   assignMembersFromFa,
   CrewVersionConflictError,
+  findMemberByUserId,
   getCrewMembersState,
   moveMemberToFa,
   removeMemberPermanently,
@@ -31,7 +31,11 @@ async function requireSession() {
 }
 
 async function queueRankingRefresh(loginId: string) {
-  try { await requestCollectorRefresh(loginId); } catch (error) { console.error("Failed to queue collector refresh", error); }
+  // The server-rendered view reads membership directly. The collector checks
+  // only for missing IDs every five seconds, so do not queue a full crawl.
+  void loginId;
+  global.naksooRankingVersionMemoryCache?.clear();
+  global.naksooRankingMemoryCache?.clear();
 }
 
 export async function GET(request: Request) {
@@ -132,7 +136,12 @@ export async function POST(request: Request) {
 
     assertCrewAccess(session, crewName);
 
-    const validated = await validateSoopUser(userId);
+    // An FA member is already validated and has collected history. Moving it
+    // must not trigger another SOOP lookup or reset its nickname/statistics.
+    const existing = await findMemberByUserId(userId);
+    const validated = existing
+      ? { user_id: existing.user_id, nickname: existing.nickname }
+      : await validateSoopUser(userId);
 
     if (!validated) {
       return jsonError("유효하지 않은 SOOP ID입니다.");
@@ -265,6 +274,7 @@ export async function PATCH(request: Request) {
     );
 
     const { version } = await getCrewMembersState(crewName);
+    await queueRankingRefresh(session.loginId);
 
     return NextResponse.json({
       ok: true,

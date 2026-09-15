@@ -44,7 +44,10 @@ async def fetch_totals(client, now):
         results.append(values)
     daily, monthly = results
     return {uid: {"date": day.isoformat(), "year": day.year, "month": day.month,
-                  "total": total, "today": daily.get(uid),
+                  # Absence from the daily ranking is an observed zero, not
+                  # an unknown value. This also prevents yesterday's value
+                  # from leaking into today's dashboard before a first gift.
+                  "total": total, "today": daily.get(uid, 0),
                   "observed_at": datetime.now(KST).isoformat()}
             for uid, total in monthly.items()}
 

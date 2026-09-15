@@ -1,5 +1,7 @@
 import { getTrimmedAverage } from "@/lib/stats";
 import { isFaCrew } from "@/lib/crews";
+import { alignMembership } from "@/lib/membership-view";
+import { computeCrewVersion, listMembers } from "@/lib/operations-store";
 import {
   getCachedRanking,
   getCachedRankingVersion,
@@ -105,6 +107,7 @@ type CrewCardData = {
 };
 
 type MonthlyStats = {
+  realtime_totals?: { date: string; today: number | null };
   year: number;
   month: number;
   total_balloons: number;
@@ -263,6 +266,15 @@ function normalizeMonthlyStats(
     total_balloons: toNumber(stats.total_balloons),
     daily_balloons: normalizeDailyBalloons(stats.daily_balloons),
     fans: normalizeFans(stats.fans),
+    realtime_totals: isRecord(stats.realtime_totals)
+      ? {
+          date: String(stats.realtime_totals.date ?? ""),
+          today:
+            stats.realtime_totals.today == null
+              ? null
+              : toNumber(stats.realtime_totals.today),
+        }
+      : undefined,
   };
 }
 
@@ -436,6 +448,21 @@ function getDailyBalloonsForDisplayDate(
     "year" | "month" | "day"
   >,
 ) {
+  // Match Poong's reporting day (KST minus eight hours). An explicit zero
+  // must win over the legacy fallback to yesterday.
+  const reporting = getKstDateParts(
+    new Date(Date.now() - 8 * 60 * 60 * 1000),
+  );
+  const reportingDate = formatDateParts(reporting);
+  for (const month of [item.current_month, item.previous_month]) {
+    if (
+      month.realtime_totals?.date === reportingDate &&
+      month.realtime_totals.today != null
+    ) {
+      return month.realtime_totals.today;
+    }
+  }
+
   const todayPeriod = getMonthlyStatsForDate(item, result, displayDate);
   const todayHasEntry = hasDailyEntryForDate(todayPeriod, displayDate.day);
   const todayBalloons = todayHasEntry
@@ -836,13 +863,13 @@ async function getCrewCardData(selectedPeriod?: Period) {
   const cacheKey = selectedPeriod
     ? `period:${selectedPeriod.year}-${String(selectedPeriod.month).padStart(2, "0")}`
     : "current";
-  const dashboardCacheKey = `dashboard:${cacheKey}`;
   const memoryCache = global.naksooCrewCardMemoryCache ??= new Map();
   const fromMemory = memoryCache.get(cacheKey);
+  const members = isPostgresConfigured() ? await listMembers() : [];
   const version = isPostgresConfigured()
-    ? await getCachedRankingVersion(dashboardCacheKey)
+    ? `${await getCachedRankingVersion(cacheKey)}:${computeCrewVersion(members)}`
     : null;
-  if (fromMemory && fromMemory.version === version) {
+  if (isPostgresConfigured() && fromMemory && fromMemory.version === version) {
     return fromMemory.value;
   }
 
@@ -861,21 +888,16 @@ async function getCrewCardData(selectedPeriod?: Period) {
   }
 
   try {
-    const prepared = await getCachedRanking(
-      dashboardCacheKey,
-      Boolean(fromMemory && fromMemory.version !== version),
+    // Membership is authoritative immediately. Existing statistics follow
+    // the SOOP ID across crews; only a new ID starts with zero while its
+    // isolated three-month bootstrap runs in the collector.
+    const raw = (await getCachedRanking(cacheKey, true) ?? {}) as RawNaksooResult;
+    const data = makeCrewCardData(
+      normalizeResult({
+        ...raw,
+        items: alignMembership(raw.items ?? [], members),
+      }),
     );
-    let data: CrewCardData;
-    if (prepared && typeof prepared === "object" && "crews" in prepared) {
-      data = prepared as CrewCardData;
-    } else {
-      // During the first collector deployment the prepared key does not exist
-      // yet. Keep the existing ranking cache as a safe one-cycle fallback.
-      const raw = await getCachedRanking(cacheKey);
-      data = raw
-        ? makeCrewCardData(normalizeResult(raw as RawNaksooResult))
-        : emptyData();
-    }
     memoryCache.set(cacheKey, { value: data, version });
     return data;
   } catch (error) {

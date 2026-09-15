@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 from live_totals import POLL_SECONDS, apply_totals, fetch_totals, saved_totals
+from member_sync import align_members
 
 from main import (
     HEADERS,
@@ -133,6 +134,8 @@ def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[s
 class RealtimeCollector:
     def __init__(self) -> None:
         self.chart_totals = {}
+        self.new_member_tasks: dict[str, asyncio.Task] = {}
+        self.new_member_retry: dict[str, datetime] = {}
         self.holder = f"{socket.gethostname()}:{os.getpid()}"
         self.next_status_at: dict[tuple[str, str], datetime] = {}
         self.next_detail_at: dict[tuple[str, str], datetime] = {}
@@ -170,8 +173,12 @@ class RealtimeCollector:
     async def _status_for_member(self, client, member: dict[str, Any]) -> tuple[bool, str | None, bool, str | None, str | None, int | None] | None:
         user_id = member["user_id"]
         try:
-            station = await retry(lambda: fetch_station(client, user_id), retries=2, delay=1, label=f"{user_id} station")
             live_status = await retry(lambda: fetch_live_status(client, user_id), retries=2, delay=1, label=f"{user_id} live")
+            try:
+                station = await fetch_station(client, user_id)
+            except Exception:
+                # A profile/station failure must not hide a confirmed LIVE.
+                station = {}
             # `station.broadStart` can remain populated after a broadcast has
             # ended.  It is useful display metadata but must not schedule a
             # high-frequency collection.  Only the live player endpoint is
@@ -333,7 +340,7 @@ class RealtimeCollector:
 
             items_by_key = {
                 (item.get("crew_name"), item.get("user_id")): dict(item)
-                for item in cached.get("items") or []
+                for item in align_members(cached.get("items") or [], members)
             }
             active_members = [member for member in members if not member.get("is_on_leave")]
             # Only brand-new members need the expensive three-month bootstrap.
@@ -398,9 +405,9 @@ class RealtimeCollector:
 
                     due = self.next_detail_at.get(key, now)
                     if existing is None:
-                        # A newly added member needs one initial three-month
-                        # snapshot whether or not they are currently LIVE.
-                        to_collect.append(member)
+                        # The independent member lane bootstraps only this ID
+                        # within five seconds, outside the normal cycle.
+                        continue
                     elif was_live and not is_live:
                         # One final sample after the broadcast ends.
                         existing["last_live_end_at"] = now.isoformat()
@@ -433,7 +440,7 @@ class RealtimeCollector:
                     }
                     for member in active_members:
                         key = (member["crew_name"], member["user_id"])
-                        if key not in bootstrap_keys and key not in quick_keys:
+                        if key in items_by_key and key not in bootstrap_keys and key not in quick_keys:
                             quick_collect.append(member)
                             quick_keys.add(key)
                     reason = "manual refresh" if requested_refreshes else "scheduled reconciliation"
@@ -644,7 +651,19 @@ class RealtimeCollector:
         # No await between reading and saving: the two tasks in this process
         # cannot interleave writes. Restore the latest published overlay even
         # when a slow detail task started with an older cache snapshot.
-        apply_totals(output, saved_totals(get_cached_result() or {}))
+        latest = get_cached_result() or {}
+        output_items = list(output.get("items") or [])
+        ids = {str(item.get("user_id") or "").lower() for item in output_items}
+        output["items"] = output_items + [
+            item
+            for item in latest.get("items") or []
+            if str(item.get("user_id") or "").lower() not in ids
+        ]
+        # Re-read the source of truth at the last possible moment so a slow
+        # source request cannot undo a concurrent admin move/delete.
+        output["items"] = align_members(output["items"], get_collector_members())
+        output["count"] = len(output["items"])
+        apply_totals(output, saved_totals(latest))
         apply_totals(output, self.chart_totals)
         save_result(output, now)
 
@@ -671,7 +690,122 @@ class RealtimeCollector:
                 await asyncio.sleep(delay)
 
     async def run_forever(self) -> None:
-        await asyncio.gather(self.run_detail_forever(), self.run_live_totals())
+        await asyncio.gather(
+            self.run_detail_forever(),
+            self.run_live_totals(),
+            self.run_members_forever(),
+        )
+
+    async def _collect_new_member(self, member: dict[str, Any]) -> None:
+        """Bootstrap exactly one newly registered member."""
+
+        user_id = member["user_id"]
+        key = user_id.lower()
+        try:
+            async with asyncio.timeout(60):
+                now = datetime.now(TIMEZONE)
+                periods = get_calendar_period(now)
+                item: dict[str, Any] = {**member, "success": True, "is_live": False}
+                async with httpx.AsyncClient(
+                    headers=HEADERS,
+                    timeout=10,
+                    follow_redirects=True,
+                ) as client:
+                    # Three sequential detail requests, no donor-profile fanout.
+                    for period_key, period in periods.items():
+                        data = await retry(
+                            lambda p=period: fetch_balloon(
+                                client, user_id, p["year"], p["month"]
+                            ),
+                            retries=2,
+                            delay=1,
+                            label=f"{user_id} new member {period_key}",
+                        )
+                        if (
+                            not is_poong_not_found_response(data)
+                            and not is_month_data_available(data)
+                        ):
+                            raise ValueError("Incomplete new-member monthly data")
+                        item[f"{period_key}_month"] = build_month_data(
+                            data, period["year"], period["month"]
+                        )
+                        item[f"{period_key}_month"]["data_source"] = "detail"
+
+                    try:
+                        live = await fetch_live_status(client, user_id)
+                        item.update(
+                            is_live=live["is_live"],
+                            is_password_broadcast=live.get("is_password"),
+                            broadcast_no=live.get("broadcast_no"),
+                            broadcast_title=live.get("broadcast_title"),
+                            viewer_count=live.get("viewer_count"),
+                        )
+                    except Exception as error:
+                        print(f"[{user_id}] new-member live status failed: {error}")
+
+                collected_at = datetime.now(TIMEZONE)
+                item["last_detail_collected_at"] = collected_at.isoformat()
+                latest = get_cached_result() or {}
+                latest["items"] = [
+                    existing
+                    for existing in latest.get("items") or []
+                    if str(existing.get("user_id") or "").lower() != key
+                ] + [item]
+                self._save_result(latest, collected_at)
+                self.new_member_retry.pop(key, None)
+                print(f"New member saved: {user_id}; monthly requests=3")
+        except Exception as error:
+            self.new_member_retry[key] = datetime.now(TIMEZONE) + timedelta(seconds=90)
+            print(f"New member failed: {user_id}: {error}; retry in 90s")
+
+    async def run_members_forever(self) -> None:
+        """Publish moves/deletes and discover new IDs every five seconds."""
+
+        try:
+            while True:
+                try:
+                    self.new_member_tasks = {
+                        key: task
+                        for key, task in self.new_member_tasks.items()
+                        if not task.done()
+                    }
+                    if acquire_collector_lease(self.holder, COLLECTOR_LEASE_SECONDS):
+                        latest = get_cached_result()
+                        if latest:
+                            members = get_collector_members()
+                            aligned = align_members(latest.get("items") or [], members)
+                            if aligned != latest.get("items"):
+                                latest["items"] = aligned
+                                self._save_result(latest, datetime.now(TIMEZONE))
+
+                            known = {
+                                str(item.get("user_id") or "").lower()
+                                for item in aligned
+                            }
+                            now = datetime.now(TIMEZONE)
+                            for member in members:
+                                key = member["user_id"].lower()
+                                retry_at = self.new_member_retry.get(key)
+                                if len(self.new_member_tasks) >= 2:
+                                    break
+                                if (
+                                    key not in known
+                                    and key not in self.new_member_tasks
+                                    and not member.get("is_on_leave")
+                                    and (retry_at is None or now >= retry_at)
+                                ):
+                                    self.new_member_tasks[key] = asyncio.create_task(
+                                        self._collect_new_member(member)
+                                    )
+                except Exception as error:
+                    print(f"Membership sync failed: {error}")
+                await asyncio.sleep(5)
+        finally:
+            for task in self.new_member_tasks.values():
+                task.cancel()
+            await asyncio.gather(
+                *self.new_member_tasks.values(), return_exceptions=True
+            )
 
     async def run_detail_forever(self) -> None:
         while True:

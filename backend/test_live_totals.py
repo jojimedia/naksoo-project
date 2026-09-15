@@ -24,17 +24,35 @@ def snapshot(total=140, today=45):
 
 
 class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.members_patch = patch(
+            "realtime_worker.get_collector_members",
+            return_value=[
+                {
+                    "user_id": "test",
+                    "nickname": "Test",
+                    "crew_name": "Crew",
+                    "note": "",
+                    "is_on_leave": False,
+                }
+            ],
+        )
+        self.members_patch.start()
+        self.addCleanup(self.members_patch.stop)
+
     async def test_two_shared_requests_and_zero_is_valid(self):
         calls = []
         def handle(request):
             calls.append(request)
-            rows = [{"i": "test", "b": 0}, {"i": "second", "b": 50}]
-            return httpx.Response(200, json={"b": rows} if request.url.params["ctype"] == "month" else rows)
+            monthly = [{"i": "test", "b": 0}, {"i": "second", "b": 50}]
+            daily = [{"i": "test", "b": 0}]
+            return httpx.Response(200, json={"b": monthly} if request.url.params["ctype"] == "month" else daily)
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
             result = await fetch_totals(client, datetime(2026, 9, 10, 11, tzinfo=KST))
         self.assertEqual(len(calls), 2)
         self.assertEqual(result["test"]["today"], 0)
         self.assertEqual(result["second"]["total"], 50)
+        self.assertEqual(result["second"]["today"], 0)
 
     async def test_throttling_no_immediate_retry(self):
         calls = []
