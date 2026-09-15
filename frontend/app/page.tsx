@@ -1,7 +1,5 @@
 import { getTrimmedAverage } from "@/lib/stats";
 import { isFaCrew } from "@/lib/crews";
-import { alignMembership } from "@/lib/membership-view";
-import { computeCrewVersion, listMembers } from "@/lib/operations-store";
 import {
   getCachedRanking,
   getCachedRankingVersion,
@@ -86,6 +84,7 @@ type CrewCard = {
 };
 
 type CrewCardData = {
+  data_version?: string | null;
   created_date: string;
   created_time: string;
   display_date: {
@@ -863,11 +862,11 @@ async function getCrewCardData(selectedPeriod?: Period) {
   const cacheKey = selectedPeriod
     ? `period:${selectedPeriod.year}-${String(selectedPeriod.month).padStart(2, "0")}`
     : "current";
+  const dashboardCacheKey = `dashboard:${cacheKey}`;
   const memoryCache = global.naksooCrewCardMemoryCache ??= new Map();
   const fromMemory = memoryCache.get(cacheKey);
-  const members = isPostgresConfigured() ? await listMembers() : [];
   const version = isPostgresConfigured()
-    ? `${await getCachedRankingVersion(cacheKey)}:${computeCrewVersion(members)}`
+    ? await getCachedRankingVersion(dashboardCacheKey)
     : null;
   if (isPostgresConfigured() && fromMemory && fromMemory.version === version) {
     return fromMemory.value;
@@ -888,16 +887,21 @@ async function getCrewCardData(selectedPeriod?: Period) {
   }
 
   try {
-    // Membership is authoritative immediately. Existing statistics follow
-    // the SOOP ID across crews; only a new ID starts with zero while its
-    // isolated three-month bootstrap runs in the collector.
-    const raw = (await getCachedRanking(cacheKey, true) ?? {}) as RawNaksooResult;
-    const data = makeCrewCardData(
-      normalizeResult({
-        ...raw,
-        items: alignMembership(raw.items ?? [], members),
-      }),
+    const prepared = await getCachedRanking(
+      dashboardCacheKey,
+      Boolean(fromMemory && fromMemory.version !== version),
     );
+    let data: CrewCardData;
+    if (prepared && typeof prepared === "object" && "crews" in prepared) {
+      data = { ...(prepared as CrewCardData), data_version: version };
+    } else {
+      // Safe fallback while an older collector has not created the prebuilt
+      // dashboard cache yet.
+      const raw = await getCachedRanking(cacheKey);
+      data = raw
+        ? { ...makeCrewCardData(normalizeResult(raw as RawNaksooResult)), data_version: version }
+        : emptyData();
+    }
     memoryCache.set(cacheKey, { value: data, version });
     return data;
   } catch (error) {

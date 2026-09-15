@@ -6,7 +6,9 @@ from zoneinfo import ZoneInfo
 from main import POONG_HEADERS, source_error
 
 KST = ZoneInfo("Asia/Seoul")
-POLL_SECONDS = 45
+# Two shared chart reads per tick (day + month), regardless of member count.
+# Thirty seconds keeps live totals responsive without per-streamer fan-out.
+POLL_SECONDS = 30
 
 
 def chart_date(now):

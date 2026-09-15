@@ -26,6 +26,7 @@ import {
 } from "@/lib/guestbook-shared";
 
 type CrewDashboardData = {
+  data_version?: string | null;
   created_date: string;
   created_time: string;
   current_period: {
@@ -646,19 +647,42 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     [data.crews, data.fa_crew],
   );
 
-  // The server component reads the current PostgreSQL cache, but a browser
-  // that remains open otherwise keeps its initial render forever. Refreshing
-  // the route while visible lets live 풍투 changes appear without a manual
-  // browser reload and preserves the dashboard's client-side UI state.
+  // Poll only the tiny cache version. The full React server payload is fetched
+  // only after the collector has published changed dashboard data.
   useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") {
-        router.refresh();
+    let cancelled = false;
+    let refreshing = false;
+    const params = new URLSearchParams(window.location.search);
+    const year = params.get("year");
+    const month = params.get("month");
+    const query = year && month ? `?year=${year}&month=${month}` : "";
+
+    const refreshIfChanged = async () => {
+      if (document.visibilityState !== "visible" || refreshing) return;
+      try {
+        const response = await fetch(`/api/dashboard-version${query}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { version?: string | null };
+        if (!cancelled && payload.version && payload.version !== data.data_version) {
+          refreshing = true;
+          router.refresh();
+        }
+      } catch {
+        // Keep the current snapshot during a short network interruption.
       }
     };
-    const intervalId = window.setInterval(refresh, 30_000);
-    return () => window.clearInterval(intervalId);
-  }, [router]);
+
+    const onVisibilityChange = () => void refreshIfChanged();
+    const intervalId = window.setInterval(refreshIfChanged, 5_000);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [data.data_version, router]);
 
   const crews = useMemo(() => {
     // 홈/검색 카드에는 소속 크루만 표시한다. FA는 카드로 넣지 않는다.
