@@ -67,19 +67,19 @@ NAKSOO_COLD_POLL_SECONDS=600
 NAKSOO_WORKER_LOOP_SECONDS=10
 NAKSOO_POONGGO_RECONCILE_SECONDS=90
 NAKSOO_LIVE_FLUSH_SECONDS=2
-NAKSOO_FRONTEND_ORIGINS=https://프론트엔드-서비스-주소
 ```
 
-Collector의 HTTP 포트를 공개하고 서비스 주소를 만든다. 실행 프로세스는 Cloudtype의
-`PORT` 환경변수에서 FastAPI 포트를 자동으로 읽는다. Health Check 경로는 `/health`로
-설정한다. 읽기 전용 실시간 엔드포인트는 `/live/events`, 재접속 스냅샷은
+Collector는 Dockerfile의 8000번 포트에서 FastAPI를 함께 실행한다. Health Check
+경로는 `/health`, 읽기 전용 실시간 엔드포인트는 `/live/events`, 재접속 스냅샷은
 `/live/snapshot`이다.
 
-Next.js 서비스에는 Collector의 공개 주소를 추가한다. 이 값은 브라우저가 접속해야
-하므로 `NEXT_PUBLIC_` 값이 맞으며 DB 비밀번호 같은 비밀값을 포함하지 않는다.
+Next.js의 `/api/live/events`가 같은 배포환경의 내부 서비스 주소
+`http://naksoo-collector:8000`을 프록시하므로 Collector 공개 도메인과 CORS 설정은
+필요 없다. 서비스명을 바꾼 경우에만 Next.js 서비스에 아래 서버 전용 환경변수를
+추가한다.
 
 ```text
-NEXT_PUBLIC_NAKSOO_LIVE_URL=https://Collector-서비스-주소
+NAKSOO_LIVE_INTERNAL_URL=http://변경한-Collector-서비스명:8000
 ```
 
 ## 5. DB 초기화와 첫 수집

@@ -808,11 +808,11 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   );
 
   useEffect(() => {
-    const configured = process.env.NEXT_PUBLIC_NAKSOO_LIVE_URL?.trim();
-    if (!configured) return;
-    const source = new EventSource(
-      `${configured.replace(/\/$/, "")}/live/events`,
-    );
+    const configured = process.env.NEXT_PUBLIC_NAKSOO_LIVE_URL?.trim() || "";
+    const eventUrl = configured
+      ? `${configured.replace(/\/$/, "")}/live/events`
+      : "/api/live/events";
+    const source = new EventSource(eventUrl);
 
     const applyOne = (item: LiveTotal) => {
       if (!item?.user_id) return;
