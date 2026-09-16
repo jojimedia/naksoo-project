@@ -34,6 +34,12 @@ from realtime_db import (
 POONGGO_BASE_URL = "https://poonggo.com"
 POONGGO_SSE_URL = "https://sse2.poonggo.com"
 RECONCILE_SECONDS = max(60, int(os.environ.get("NAKSOO_POONGGO_RECONCILE_SECONDS", "90")))
+ROSTER_RECONCILE_SECONDS = max(
+    300, int(os.environ.get("NAKSOO_POONGGO_ROSTER_RECONCILE_SECONDS", "7200"))
+)
+ROSTER_RECONCILE_DELAY = max(
+    0.1, float(os.environ.get("NAKSOO_POONGGO_ROSTER_RECONCILE_DELAY", "0.5"))
+)
 FLUSH_SECONDS = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_SECONDS", "2")))
 FLUSH_EVENT_COUNT = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_EVENT_COUNT", "20")))
 MAX_SEEN_IDS = max(1_000, int(os.environ.get("NAKSOO_LIVE_SEEN_IDS", "10000")))
@@ -419,6 +425,54 @@ class PoonggoLiveService:
                     self.stream_tasks[key] = asyncio.create_task(self._stream_member(metadata))
             await asyncio.sleep(5)
 
+    async def reconcile_roster_forever(self) -> None:
+        """Slowly correct every member from Poonggo without delaying startup.
+
+        Live members already have a 90-second exact snapshot lane.  This
+        independent sweep covers offline/missed-live members at the requested
+        two-hour cadence, one station at a time, so a stale Poong.today value
+        cannot remain in today's ranking indefinitely.
+        """
+
+        await asyncio.sleep(5)
+        while True:
+            started = asyncio.get_running_loop().time()
+            try:
+                cached = get_cached_result() or {}
+                live_ids = set(self.stream_tasks)
+                members: dict[str, dict[str, Any]] = {}
+                for item in cached.get("items") or []:
+                    user_id = str(item.get("user_id") or "").strip()
+                    if not user_id or item.get("is_on_leave"):
+                        continue
+                    key = user_id.lower()
+                    if key in live_ids:
+                        continue
+                    members[key] = {
+                        "user_id": user_id,
+                        "crew_name": str(item.get("crew_name") or ""),
+                        "nickname": str(item.get("nickname") or user_id),
+                    }
+
+                async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+                    for metadata in members.values():
+                        try:
+                            snapshot = await fetch_poonggo_snapshot(client, metadata["user_id"])
+                            await self.apply_snapshot(metadata, snapshot)
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as error:
+                            print(f"[{metadata['user_id']}] Poonggo roster snapshot failed: {error}")
+                        await asyncio.sleep(ROSTER_RECONCILE_DELAY)
+                print(f"Poonggo roster reconciliation complete: {len(members)} offline members.")
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                print(f"Poonggo roster reconciliation failed: {error}")
+
+            elapsed = asyncio.get_running_loop().time() - started
+            await asyncio.sleep(max(5, ROSTER_RECONCILE_SECONDS - elapsed))
+
     async def flush_forever(self) -> None:
         while True:
             try:
@@ -446,7 +500,11 @@ class PoonggoLiveService:
 
     async def run(self) -> None:
         await self.restore()
-        await asyncio.gather(self.sync_streams(), self.flush_forever())
+        await asyncio.gather(
+            self.sync_streams(),
+            self.reconcile_roster_forever(),
+            self.flush_forever(),
+        )
 
 
 def create_live_app(service: PoonggoLiveService) -> FastAPI:
