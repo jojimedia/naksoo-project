@@ -65,6 +65,91 @@ type AdminSession = {
   crews: string[];
 };
 
+type LiveTotal = {
+  user_id: string;
+  date: string;
+  year: number;
+  month: number;
+  today: number;
+  total: number;
+  observed_at: string;
+  source: string;
+  connected?: boolean;
+  fans?: Array<{
+    rank?: number;
+    user_id: string;
+    nickname: string;
+    balloons: number;
+  }>;
+};
+
+function getKstDateKey() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function applyLiveTotalsToCrew(
+  crew: CrewCardData,
+  totals: Map<string, LiveTotal>,
+  currentPeriod: CrewDashboardData["current_period"],
+) {
+  const today = getKstDateKey();
+  const members = crew.members.map((member) => {
+    const live = totals.get(member.user_id.toLowerCase());
+    if (
+      !live ||
+      live.date !== today ||
+      live.year !== currentPeriod.year ||
+      live.month !== currentPeriod.month
+    ) {
+      return member;
+    }
+    const current = Number(live.total);
+    const previous = member.previous_balloons;
+    return {
+      ...member,
+      current_balloons: current,
+      display_day_balloons: Number(live.today),
+      daily_fans: (live.fans ?? []).map((fan, index) => ({
+        rank: index + 1,
+        user_id: fan.user_id,
+        nickname: fan.nickname,
+        balloons: Number(fan.balloons),
+      })),
+      change_balloons: current - previous,
+      change_rate:
+        previous > 0
+          ? Number((((current - previous) / previous) * 100).toFixed(1))
+          : current > 0
+            ? 100
+            : 0,
+    };
+  });
+  const active = members.filter((member) => !member.is_on_leave);
+  const ranked = active
+    .slice()
+    .sort((a, b) => b.current_balloons - a.current_balloons)
+    .map((member, index) => ({ ...member, rank: index + 1 }));
+  const leaves = members.filter((member) => member.is_on_leave);
+  return {
+    ...crew,
+    members: [...ranked, ...leaves],
+    current_total_balloons: active.reduce(
+      (sum, member) => sum + member.current_balloons,
+      0,
+    ),
+    average_current_balloons: getTrimmedAverage(
+      active.map((member) => member.current_balloons),
+    ),
+  };
+}
+
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
 }
@@ -416,12 +501,67 @@ function DonorStreamerRow({
 }
 
 function OverallRankingCard({ rows }: { rows: OverallMember[] }) {
+  const [mode, setMode] = useState<"month" | "today">("month");
+  const visibleRows = useMemo(
+    () =>
+      rows
+        .slice()
+        .sort((a, b) =>
+          mode === "today"
+            ? b.member.display_day_balloons - a.member.display_day_balloons
+            : b.member.current_balloons - a.member.current_balloons,
+        )
+        .map((row, index) => ({
+          ...row,
+          member: { ...row.member, rank: index + 1 },
+        })),
+    [mode, rows],
+  );
+
   return (
     <PeriodRankingCard
       title="전체순위"
       headerColor="#5b4bdb"
-      scoreLabel="별풍선"
-      rows={rows}
+      scoreLabel={mode === "today" ? "오늘" : "별풍선"}
+      rows={visibleRows}
+      headerTabs={
+        <div className="mt-2 flex gap-1">
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 text-[11px] font-bold transition ${
+              mode === "month"
+                ? "border-white/40 bg-white/20 text-white"
+                : "border-white/20 bg-black/10 text-white/75 hover:text-white"
+            }`}
+            onClick={() => setMode("month")}
+          >
+            월간 별풍선
+          </button>
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 text-[11px] font-bold transition ${
+              mode === "today"
+                ? "border-[#6ee7b7]/70 bg-[#064e3b]/55 text-[#a7f3d0]"
+                : "border-white/20 bg-black/10 text-white/75 hover:text-white"
+            }`}
+            onClick={() => setMode("today")}
+          >
+            오늘의 별풍선
+          </button>
+        </div>
+      }
+      getRowProps={
+        mode === "today"
+          ? (row) => ({
+              scoreOverride: row.member.display_day_balloons,
+              scoreToneValue: row.member.display_day_balloons,
+              todayBalloonsOverride: row.member.display_day_balloons,
+              fansOverride: row.member.daily_fans ?? [],
+              fanPanelTitle: "오늘의 후원자",
+              liveBroadcastMode: true,
+            })
+          : undefined
+      }
     />
   );
 }
@@ -431,6 +571,7 @@ function PeriodRankingCard({
   headerColor,
   scoreLabel,
   headerNote,
+  headerTabs,
   rows,
   getRowProps,
 }: {
@@ -438,6 +579,7 @@ function PeriodRankingCard({
   headerColor: string;
   scoreLabel: string;
   headerNote?: string;
+  headerTabs?: React.ReactNode;
   rows: OverallMember[];
   getRowProps?: (row: OverallMember) => {
     scoreOverride?: number;
@@ -465,6 +607,7 @@ function PeriodRankingCard({
                 {headerNote}
               </p>
             ) : null}
+            {headerTabs}
           </div>
           <p className="rounded bg-black/10 px-2.5 py-1.5 text-[12px] font-bold">
             {rows.length}명
@@ -640,12 +783,70 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showMemberRequestModal, setShowMemberRequestModal] = useState(false);
+  const [liveTotals, setLiveTotals] = useState<Map<string, LiveTotal>>(
+    () => new Map(),
+  );
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
-  const rankingCrews = useMemo(
-    () => (data.fa_crew ? [...data.crews, data.fa_crew] : data.crews),
-    [data.crews, data.fa_crew],
+  const liveCrews = useMemo(
+    () =>
+      data.crews.map((crew) =>
+        applyLiveTotalsToCrew(crew, liveTotals, data.current_period),
+      ),
+    [data.crews, data.current_period, liveTotals],
   );
+  const liveFaCrew = useMemo(
+    () =>
+      data.fa_crew
+        ? applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period)
+        : null,
+    [data.current_period, data.fa_crew, liveTotals],
+  );
+  const rankingCrews = useMemo(
+    () => (liveFaCrew ? [...liveCrews, liveFaCrew] : liveCrews),
+    [liveCrews, liveFaCrew],
+  );
+
+  useEffect(() => {
+    const configured = process.env.NEXT_PUBLIC_NAKSOO_LIVE_URL?.trim();
+    if (!configured) return;
+    const source = new EventSource(
+      `${configured.replace(/\/$/, "")}/live/events`,
+    );
+
+    const applyOne = (item: LiveTotal) => {
+      if (!item?.user_id) return;
+      setLiveTotals((current) => {
+        const next = new Map(current);
+        next.set(item.user_id.toLowerCase(), item);
+        return next;
+      });
+    };
+    const onSnapshot = (event: MessageEvent<string>) => {
+      try {
+        const items = JSON.parse(event.data) as LiveTotal[];
+        setLiveTotals(
+          new Map(
+            items
+              .filter((item) => item?.user_id)
+              .map((item) => [item.user_id.toLowerCase(), item]),
+          ),
+        );
+      } catch {
+        // The normal PostgreSQL/version path remains the fallback.
+      }
+    };
+    const onTotal = (event: MessageEvent<string>) => {
+      try {
+        applyOne(JSON.parse(event.data) as LiveTotal);
+      } catch {
+        // Ignore a malformed single event and keep the last good snapshot.
+      }
+    };
+    source.addEventListener("snapshot", onSnapshot as EventListener);
+    source.addEventListener("total", onTotal as EventListener);
+    return () => source.close();
+  }, []);
 
   // Poll only the tiny cache version. The full React server payload is fetched
   // only after the collector has published changed dashboard data.
@@ -686,7 +887,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
 
   const crews = useMemo(() => {
     // 홈/검색 카드에는 소속 크루만 표시한다. FA는 카드로 넣지 않는다.
-    const sourceCrews = data.crews;
+    const sourceCrews = liveCrews;
 
     if (!isSearching) {
       return sourceCrews;
@@ -717,7 +918,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         };
       })
       .filter((crew) => crew.members.length > 0);
-  }, [data.crews, isSearching, search]);
+  }, [isSearching, liveCrews, search]);
   const donorResults = useMemo(() => {
     if (!isSearching || searchMode !== "donors") {
       return [];
@@ -730,11 +931,11 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     [rankingCrews],
   );
   const faRows = useMemo(() => {
-    if (!data.fa_crew) {
+    if (!liveFaCrew) {
       return [];
     }
 
-    return data.fa_crew.members
+    return liveFaCrew.members
       .filter((member) => !member.is_on_leave)
       .slice()
       .sort((a, b) => b.current_balloons - a.current_balloons)
@@ -746,7 +947,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           rank: index + 1,
         },
       }));
-  }, [data.fa_crew]);
+  }, [liveFaCrew]);
   const hasResults =
     (showOverall || showKings || showFa) && !isSearching
       ? true

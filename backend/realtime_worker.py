@@ -11,8 +11,10 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
+import uvicorn
 from live_totals import POLL_SECONDS, apply_totals, fetch_totals, saved_totals
 from member_sync import align_members
+from poonggo_live import PoonggoLiveService, create_live_app
 
 from main import (
     HEADERS,
@@ -150,6 +152,7 @@ class RealtimeCollector:
         # polling.
         self.next_full_reconciliation_at: datetime | None = None
         self.recovery_required: set[tuple[str, str]] = set()
+        self.poonggo_live = PoonggoLiveService()
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -665,6 +668,19 @@ class RealtimeCollector:
         output["count"] = len(output["items"])
         apply_totals(output, saved_totals(latest))
         apply_totals(output, self.chart_totals)
+        poonggo_totals = {
+            str(row["user_id"]): {
+                "date": row["date"],
+                "year": row["year"],
+                "month": row["month"],
+                "today": row["today"],
+                "total": row["total"],
+                "observed_at": row["observed_at"],
+                "source": row.get("source") or "poonggo_sse",
+            }
+            for row in self.poonggo_live.snapshot()
+        }
+        apply_totals(output, poonggo_totals, authoritative=True)
         save_result(output, now)
 
     async def run_live_totals(self) -> None:
@@ -690,10 +706,22 @@ class RealtimeCollector:
                 await asyncio.sleep(delay)
 
     async def run_forever(self) -> None:
+        port = int(os.environ.get("PORT", os.environ.get("NAKSOO_LIVE_API_PORT", "8000")))
+        api = uvicorn.Server(
+            uvicorn.Config(
+                create_live_app(self.poonggo_live),
+                host="0.0.0.0",
+                port=port,
+                log_level=os.environ.get("NAKSOO_LIVE_API_LOG_LEVEL", "warning"),
+                access_log=False,
+            )
+        )
         await asyncio.gather(
             self.run_detail_forever(),
             self.run_live_totals(),
             self.run_members_forever(),
+            self.poonggo_live.run(),
+            api.serve(),
         )
 
     async def _collect_new_member(self, member: dict[str, Any]) -> None:

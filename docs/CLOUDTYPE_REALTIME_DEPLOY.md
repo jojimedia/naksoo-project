@@ -65,10 +65,22 @@ NAKSOO_HOT_POLL_SECONDS=60
 NAKSOO_WARM_POLL_SECONDS=180
 NAKSOO_COLD_POLL_SECONDS=600
 NAKSOO_WORKER_LOOP_SECONDS=10
+NAKSOO_POONGGO_RECONCILE_SECONDS=90
+NAKSOO_LIVE_FLUSH_SECONDS=2
+NAKSOO_FRONTEND_ORIGINS=https://프론트엔드-서비스-주소
 ```
 
-수집기는 외부 HTTP 요청만 하므로 도메인과 Health Check는 필요 없다. 공개 포트를
-열지 않는다.
+Collector의 HTTP 포트를 공개하고 서비스 주소를 만든다. 실행 프로세스는 Cloudtype의
+`PORT` 환경변수에서 FastAPI 포트를 자동으로 읽는다. Health Check 경로는 `/health`로
+설정한다. 읽기 전용 실시간 엔드포인트는 `/live/events`, 재접속 스냅샷은
+`/live/snapshot`이다.
+
+Next.js 서비스에는 Collector의 공개 주소를 추가한다. 이 값은 브라우저가 접속해야
+하므로 `NEXT_PUBLIC_` 값이 맞으며 DB 비밀번호 같은 비밀값을 포함하지 않는다.
+
+```text
+NEXT_PUBLIC_NAKSOO_LIVE_URL=https://Collector-서비스-주소
+```
 
 ## 5. DB 초기화와 첫 수집
 
@@ -79,15 +91,19 @@ Collector를 배포하면 기본 명령인 `python realtime_worker.py`가 스키
 ## 6. 확인 기준
 
 1. Collector 로그에 `Cycle saved`가 반복 표시된다.
-2. 방송 중인 대상이 있을 때 `live refreshes=1` 이상이 기록된다.
+2. Collector `/health`에서 `live_streams`와 `connected_streams`가 확인된다.
 3. Next.js `/api/result` 응답 헤더가 `X-Naksoo-Data-Source: postgres`가 된다.
-4. 메인 화면의 초기 로딩에서 GitHub raw JSON 요청이 없다.
+4. 브라우저 네트워크에서 `/live/events`가 `text/event-stream`으로 유지된다.
+5. 메인 화면의 초기 로딩에서 GitHub raw JSON 요청이 없다.
 
 ## 운영 메모
 
-- 풍투 원천 API 자체가 늦게 갱신하면 1분 폴링이어도 값이 바로 오르지 않을 수 있다.
-  이 시스템은 그 지연을 없애기보다, 원천이 갱신된 뒤 화면 반영 지연을 줄인다.
-- 월간 총액이 이전보다 작게 오면 DB는 높은 기존 값은 유지하고 `regression` 이력만
-  남긴다.
+- 풍투는 전체 멤버의 저부하 기준값으로 유지한다. 라이브 멤버는 풍고 일간·월간
+  스냅샷으로 시작하고 풍고 SSE 후원을 즉시 합산한다.
+- 풍고 SSE 이벤트는 메모리에서 바로 프론트로 전달한다. PostgreSQL에는 2초 단위로
+  합계·오늘 후원자 목록과 원본 이벤트 ID를 묶어 저장하며, 같은 이벤트 ID는 한 번만
+  반영한다.
+- SSE 연결이 끊기거나 수집기가 재시작되면 풍고 일간·월간 스냅샷을 즉시 읽고,
+  라이브 중에는 기본 90초마다 누락을 보정한다.
 - `streamer_month_current`은 현재월 포함 3개월, `streamer_month_history`는 90일만
   유지한다.

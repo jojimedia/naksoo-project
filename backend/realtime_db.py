@@ -111,6 +111,38 @@ CREATE TABLE IF NOT EXISTS collector_lease (
     lease_until TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS live_donation_events (
+    donation_id TEXT PRIMARY KEY,
+    streamer_id TEXT NOT NULL,
+    broadcast_no TEXT,
+    amount BIGINT NOT NULL CHECK (amount > 0),
+    occurred_at TIMESTAMPTZ NOT NULL,
+    payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS live_donation_events_streamer_idx
+    ON live_donation_events (streamer_id, occurred_at DESC);
+
+CREATE TABLE IF NOT EXISTS streamer_live_totals (
+    streamer_id TEXT PRIMARY KEY,
+    crew_name TEXT NOT NULL DEFAULT '',
+    nickname TEXT NOT NULL DEFAULT '',
+    broadcast_no TEXT,
+    reporting_date DATE NOT NULL,
+    year SMALLINT NOT NULL,
+    month SMALLINT NOT NULL CHECK (month BETWEEN 1 AND 12),
+    today_balloons BIGINT NOT NULL DEFAULT 0,
+    month_balloons BIGINT NOT NULL DEFAULT 0,
+    daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source TEXT NOT NULL,
+    connected BOOLEAN NOT NULL DEFAULT FALSE,
+    observed_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb;
 """
 
 
@@ -354,6 +386,145 @@ def get_cached_result(cache_key: str = "current") -> dict[str, Any] | None:
     return row["payload_json"] if row else None
 
 
+def load_live_totals() -> list[dict[str, Any]]:
+    """Restore today's hot totals after a collector deployment/restart."""
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT streamer_id, crew_name, nickname, broadcast_no,
+                   reporting_date, year, month, today_balloons,
+                   month_balloons, daily_fans, source, connected, observed_at
+            FROM streamer_live_totals
+            WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+            """
+        ).fetchall()
+    return [
+        {
+            "user_id": str(row["streamer_id"]),
+            "crew_name": str(row["crew_name"] or ""),
+            "nickname": str(row["nickname"] or row["streamer_id"]),
+            "broadcast_no": str(row["broadcast_no"] or ""),
+            "date": row["reporting_date"].isoformat(),
+            "year": int(row["year"]),
+            "month": int(row["month"]),
+            "today": int(row["today_balloons"]),
+            "total": int(row["month_balloons"]),
+            "fans": row["daily_fans"] or [],
+            "source": str(row["source"]),
+            # A restored row is not connected until its upstream task opens.
+            "connected": False,
+            "observed_at": row["observed_at"].isoformat(),
+        }
+        for row in rows
+    ]
+
+
+def load_recent_donation_ids() -> list[str]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT donation_id FROM live_donation_events
+            WHERE occurred_at >= NOW() - INTERVAL '2 days'
+            ORDER BY occurred_at DESC LIMIT 20000
+            """
+        ).fetchall()
+    return [str(row["donation_id"]) for row in rows]
+
+
+def persist_live_updates(
+    updates: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    observed_at: datetime,
+) -> None:
+    """Flush a hot-memory batch without re-upserting every member/month row."""
+
+    if not updates and not events:
+        return
+    with connect() as conn:
+        with conn.transaction():
+            for event in events:
+                conn.execute(
+                    """
+                    INSERT INTO live_donation_events (
+                      donation_id, streamer_id, broadcast_no, amount,
+                      occurred_at, payload_json
+                    ) VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                    ON CONFLICT (donation_id) DO NOTHING
+                    """,
+                    (
+                        event["donation_id"], event["user_id"],
+                        event.get("broadcast_no"), int(event["amount"]),
+                        _as_datetime(event.get("occurred_at")) or observed_at,
+                        _as_json(event.get("payload") or {}),
+                    ),
+                )
+
+            for row in updates:
+                conn.execute(
+                    """
+                    INSERT INTO streamer_live_totals (
+                      streamer_id, crew_name, nickname, broadcast_no,
+                      reporting_date, year, month, today_balloons,
+                      month_balloons, daily_fans, source, connected, observed_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+                    ON CONFLICT (streamer_id) DO UPDATE SET
+                      crew_name = EXCLUDED.crew_name,
+                      nickname = EXCLUDED.nickname,
+                      broadcast_no = EXCLUDED.broadcast_no,
+                      reporting_date = EXCLUDED.reporting_date,
+                      year = EXCLUDED.year,
+                      month = EXCLUDED.month,
+                      today_balloons = EXCLUDED.today_balloons,
+                      month_balloons = EXCLUDED.month_balloons,
+                      daily_fans = EXCLUDED.daily_fans,
+                      source = EXCLUDED.source,
+                      connected = EXCLUDED.connected,
+                      observed_at = EXCLUDED.observed_at,
+                      updated_at = NOW()
+                    """,
+                    (
+                        row["user_id"], row.get("crew_name") or "",
+                        row.get("nickname") or row["user_id"],
+                        row.get("broadcast_no"), row["date"],
+                        int(row["year"]), int(row["month"]),
+                        int(row["today"]), int(row["total"]),
+                        _as_json(row.get("fans") or []),
+                        row.get("source") or "poonggo_sse",
+                        bool(row.get("connected")),
+                        _as_datetime(row.get("observed_at")) or observed_at,
+                    ),
+                )
+                day = int(str(row["date"])[-2:])
+                conn.execute(
+                    """
+                    UPDATE streamer_month_current
+                    SET total_balloons = %s,
+                        daily_balloons = (
+                          SELECT COALESCE(jsonb_agg(value ORDER BY (value->>'day')::int), '[]'::jsonb)
+                          FROM (
+                            SELECT value FROM jsonb_array_elements(daily_balloons)
+                            WHERE (value->>'day')::int <> %s
+                            UNION ALL
+                            SELECT jsonb_build_object('day', %s, 'balloons', %s)
+                          ) days
+                        ),
+                        data_source = %s,
+                        source_observed_at = %s,
+                        last_collected_at = %s,
+                        last_changed_at = %s
+                    WHERE streamer_id = %s AND year = %s AND month = %s
+                    """,
+                    (
+                        int(row["total"]), day, day, int(row["today"]),
+                        row.get("source") or "poonggo_sse", observed_at,
+                        observed_at, observed_at, row["user_id"],
+                        int(row["year"]), int(row["month"]),
+                    ),
+                )
+
+
+
 def get_collector_members() -> list[dict[str, Any]]:
     """The collector's membership source of truth is PostgreSQL, not Sheets."""
 
@@ -535,5 +706,9 @@ def cleanup_expired_data(now: datetime) -> None:
         )
         conn.execute(
             "DELETE FROM streamer_month_history WHERE detected_at < %s",
+            (history_from,),
+        )
+        conn.execute(
+            "DELETE FROM live_donation_events WHERE occurred_at < %s",
             (history_from,),
         )

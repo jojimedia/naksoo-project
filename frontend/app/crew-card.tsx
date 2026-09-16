@@ -43,6 +43,7 @@ type CrewMember = {
   previous_daily_balloons: DailyBalloons[];
   monthly_fans: Fan[];
   monthly_top_fans: Fan[];
+  daily_fans?: Fan[];
   is_on_leave?: boolean;
 };
 
@@ -65,7 +66,7 @@ type NaksooGod = {
 };
 
 type CrewKing = NaksooGod;
-type CrewBodyMode = "members" | "gods" | "kings";
+type CrewBodyMode = "members" | "gods" | "kings" | "today";
 
 export type CrewCardData = {
   rank: number;
@@ -419,7 +420,7 @@ function CrewCardBody({
 }) {
   const [mode, setMode] = useState<CrewBodyMode>("members");
   const [showFormula, setShowFormula] = useState(false);
-  // 카드 본문은 같은 공간에서 스트리머, 낙수의 신, 큰손 랭킹 목록만 전환한다.
+  // 카드 본문은 같은 공간에서 월간·일간·후원자 목록만 전환한다.
   const rows = useMemo(
     () => {
       if (mode === "gods") {
@@ -434,6 +435,27 @@ function CrewCardBody({
         ));
       }
 
+      if (mode === "today") {
+        return crew.members
+          .filter((member) => !member.is_on_leave)
+          .slice()
+          .sort((a, b) => b.display_day_balloons - a.display_day_balloons)
+          .map((member, memberIndex) => (
+            <StreamerMemberRow
+              key={`today-${crew.crew_name}-${member.user_id}-${memberIndex}`}
+              member={{ ...member, rank: memberIndex + 1 }}
+              scoreOverride={member.display_day_balloons}
+              scoreToneValue={member.display_day_balloons}
+              fansOverride={member.daily_fans ?? []}
+              fanPanelTitle="오늘의 후원자"
+              todayBalloonsOverride={member.display_day_balloons}
+              liveBroadcastMode
+              defaultOpen={expandMembers}
+              searchQuery={searchQuery}
+            />
+          ));
+      }
+
       return crew.members.map((member, memberIndex) => (
         <StreamerMemberRow
           key={`${crew.crew_name}-${member.user_id}-${memberIndex}`}
@@ -446,13 +468,17 @@ function CrewCardBody({
     [crew.crew_name, crew.members, crew.naksoo_gods, crew.crew_kings, expandMembers, mode, searchQuery],
   );
   const emptyMessage =
-    mode === "kings"
+    mode === "today"
+      ? "오늘의 별풍선 데이터 없음"
+      : mode === "kings"
       ? "큰손 랭킹 없음"
       : mode === "gods"
         ? "낙수의 신 없음"
         : "크루원 데이터 없음";
   const activeCount =
-    mode === "kings"
+    mode === "today"
+      ? crew.members.filter((member) => !member.is_on_leave).length
+      : mode === "kings"
       ? crew.crew_kings.length
       : mode === "gods"
         ? crew.naksoo_gods.length
@@ -493,6 +519,22 @@ function CrewCardBody({
             }}
           >
             큰손 랭킹
+          </button>
+
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+              mode === "today"
+                ? "border-[#34d399]/40 bg-[#34d399]/10 text-[#6ee7b7]"
+                : "border-[#3a3548] bg-[#17151f] text-[#a8a2b8] hover:border-[#34d399]/40 hover:text-[#6ee7b7]"
+            }`}
+            aria-pressed={mode === "today"}
+            onClick={() => {
+              setShowFormula(false);
+              setMode((current) => (current === "today" ? "members" : "today"));
+            }}
+          >
+            오늘의 별풍선
           </button>
         </div>
 
@@ -539,7 +581,7 @@ function CrewCardBody({
       <div className="grid min-h-6 grid-cols-[30px_minmax(0,1fr)_112px] items-center gap-x-1 border-b border-[#3a3548] px-0.5 py-0.5 text-[14px] font-semibold tracking-tight text-[#a8a2b8]">
         <p>순위</p>
         <p>닉네임</p>
-        <p className="text-right">별풍선</p>
+        <p className="text-right">{mode === "today" ? "오늘" : "별풍선"}</p>
       </div>
 
       <div>

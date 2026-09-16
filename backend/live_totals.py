@@ -50,11 +50,12 @@ async def fetch_totals(client, now):
                   # an unknown value. This also prevents yesterday's value
                   # from leaking into today's dashboard before a first gift.
                   "total": total, "today": daily.get(uid, 0),
+                  "source": "poong_today_chart",
                   "observed_at": datetime.now(KST).isoformat()}
             for uid, total in monthly.items()}
 
 
-def apply_totals(result, snapshots):
+def apply_totals(result, snapshots, *, authoritative=False):
     changed = 0
     for item in result.get("items") or []:
         snapshot = snapshots.get(item.get("user_id"))
@@ -67,11 +68,28 @@ def apply_totals(result, snapshots):
             if (month.get("year"), month.get("month")) != (snapshot["year"], snapshot["month"]):
                 continue
             previous = month.get("realtime_totals") or {}
+            # Once a live member has an authoritative Poonggo snapshot/SSE
+            # total, the broader but less accurate Poong.today chart must not
+            # overwrite it merely because its request finished later.
+            if (
+                str(previous.get("source") or "").startswith("poonggo")
+                and not str(snapshot.get("source") or "").startswith("poonggo")
+            ):
+                continue
             if previous.get("observed_at", "") > snapshot["observed_at"]:
                 continue
-            total = max(int(month.get("total_balloons") or 0), snapshot["total"])
+            total = (
+                int(snapshot["total"])
+                if authoritative
+                else max(int(month.get("total_balloons") or 0), snapshot["total"])
+            )
             today = snapshot["today"]
-            if today is not None and previous.get("date") == snapshot["date"] and previous.get("today") is not None:
+            if (
+                not authoritative
+                and today is not None
+                and previous.get("date") == snapshot["date"]
+                and previous.get("today") is not None
+            ):
                 today = max(today, previous["today"])
             if total != month.get("total_balloons") or previous.get("today") != today:
                 changed += 1

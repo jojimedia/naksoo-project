@@ -28,6 +28,7 @@ type CrewMember = {
   display_day_balloons: number;
   monthly_fans: Fan[];
   monthly_top_fans: Fan[];
+  daily_fans?: Fan[];
   is_on_leave?: boolean;
 };
 
