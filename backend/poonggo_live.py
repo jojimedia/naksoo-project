@@ -14,7 +14,7 @@ import os
 import re
 from collections import deque
 from contextlib import suppress
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -112,26 +112,6 @@ def parse_poonggo_stream(html: str, user_id: str) -> dict[str, Any] | None:
     return None
 
 
-def merge_fans(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    merged: dict[str, dict[str, Any]] = {}
-    for fans in groups:
-        for fan in fans:
-            key = str(fan.get("user_id") or fan.get("nickname") or "").lower()
-            if not key:
-                continue
-            current = merged.get(key)
-            if current is None:
-                merged[key] = dict(fan)
-            else:
-                current["balloons"] = int(current.get("balloons") or 0) + int(
-                    fan.get("balloons") or 0
-                )
-                if fan.get("nickname"):
-                    current["nickname"] = fan["nickname"]
-    ordered = sorted(merged.values(), key=lambda fan: int(fan.get("balloons") or 0), reverse=True)
-    return [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)]
-
-
 def merge_fans_max(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Merge two observations without double counting the same donor."""
 
@@ -165,36 +145,17 @@ async def fetch_poonggo_snapshot(
 ) -> dict[str, Any]:
     now = (now or datetime.now(KST)).astimezone(KST)
     date = now.date().isoformat()
-    previous_date = (now.date() - timedelta(days=1)).isoformat()
     daily_url = f"{POONGGO_BASE_URL}/station/{user_id}/daily"
     monthly_url = f"{POONGGO_BASE_URL}/station/{user_id}/monthly"
-    daily, monthly, previous_daily = await asyncio.gather(
+    daily, monthly = await asyncio.gather(
         client.get(daily_url, params={"date": date, "perPage": 100}),
         client.get(monthly_url, params={"date": f"{now.year}-{now.month:02d}-01"}),
-        client.get(daily_url, params={"date": previous_date, "perPage": 100}),
-        return_exceptions=True,
     )
-    if isinstance(daily, Exception):
-        raise daily
-    if isinstance(monthly, Exception):
-        raise monthly
     daily.raise_for_status()
     monthly.raise_for_status()
     stream = parse_poonggo_stream(daily.text, user_id)
     today = parse_poonggo_total(daily.text, user_id)
     fans = parse_poonggo_daily_fans(daily.text, user_id)
-    source = "poonggo_snapshot"
-
-    # Poonggo splits one broadcast at midnight.  The SOOP/live counter does
-    # not, so join the two calendar slices when their broadcast number is the
-    # same. This remains valid after the stream ends because both pages retain
-    # that broadcast number.
-    if isinstance(previous_daily, httpx.Response) and previous_daily.is_success:
-        previous_stream = parse_poonggo_stream(previous_daily.text, user_id)
-        if stream and previous_stream and stream["broadcast_no"] == previous_stream["broadcast_no"]:
-            today += parse_poonggo_total(previous_daily.text, user_id)
-            fans = merge_fans(parse_poonggo_daily_fans(previous_daily.text, user_id), fans)
-            source = "poonggo_broadcast_snapshot"
 
     return {
         "user_id": user_id,
@@ -205,8 +166,9 @@ async def fetch_poonggo_snapshot(
         "total": parse_poonggo_total(monthly.text, user_id),
         "fans": fans,
         "broadcast_no": (stream or {}).get("broadcast_no", ""),
+        "counting_mode": "calendar_day_v2",
         "observed_at": _iso_now(),
-        "source": source,
+        "source": "poonggo_calendar_snapshot",
     }
 
 
@@ -305,7 +267,12 @@ class PoonggoLiveService:
                     "total": max(int(snapshot.get("total") or 0), int(previous.get("total") or 0)),
                     "fans": previous.get("fans") or snapshot.get("fans") or [],
                 }
-            elif same_broadcast and str(previous.get("source") or "") == "poonggo_sse":
+            elif (
+                same_broadcast
+                and previous.get("date") == snapshot.get("date")
+                and previous.get("counting_mode") == "calendar_day_v2"
+                and str(previous.get("source") or "") == "poonggo_sse"
+            ):
                 # Poonggo HTML can lag behind its live stream. Never let a
                 # delayed snapshot reduce a value already observed over SSE.
                 snapshot = {
@@ -321,6 +288,7 @@ class PoonggoLiveService:
                 **snapshot,
                 "user_id": metadata["user_id"],
                 "connected": bool(previous.get("connected")),
+                "counting_mode": "calendar_day_v2",
                 "_event_revision": int(previous.get("_event_revision") or 0),
             }
             self.states[user_id] = next_state
@@ -353,17 +321,17 @@ class PoonggoLiveService:
             current_date = now.date().isoformat()
             current_month = (now.year, now.month)
             stored_month = (int(state.get("year") or 0), int(state.get("month") or 0))
-            if state.get("date") != current_date:
-                same_broadcast = bool(
-                    state.get("broadcast_no")
-                    and metadata.get("broadcast_no")
-                    and str(state["broadcast_no"]) == str(metadata["broadcast_no"])
-                )
-                state = (
-                    {**state, "date": current_date}
-                    if same_broadcast
-                    else {**state, "date": current_date, "today": 0, "fans": []}
-                )
+            if state.get("date") != current_date or state.get("counting_mode") != "calendar_day_v2":
+                # The dashboard's "today" is a calendar-day slice. Broadcast
+                # continuity is tracked by broadcast_no, but a stream crossing
+                # midnight must not carry yesterday's amount into today's row.
+                state = {
+                    **state,
+                    "date": current_date,
+                    "today": 0,
+                    "fans": [],
+                    "counting_mode": "calendar_day_v2",
+                }
             if stored_month != current_month:
                 state = {**state, "year": now.year, "month": now.month, "total": 0}
             state = {
@@ -374,6 +342,7 @@ class PoonggoLiveService:
                 "observed_at": _event_time(event.get("occurredAt") or event.get("occurred_at")),
                 "source": "poonggo_sse",
                 "connected": True,
+                "counting_mode": "calendar_day_v2",
                 "_event_revision": int(state.get("_event_revision") or 0) + 1,
             }
             donor_id = str(

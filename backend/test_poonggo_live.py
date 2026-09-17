@@ -45,12 +45,12 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
             result = await fetch_poonggo_snapshot(
                 client, "03apple", datetime(2026, 9, 16, 15, tzinfo=KST)
             )
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 2)
         self.assertEqual(result["today"], 61222)
         self.assertEqual(result["total"], 186716)
         self.assertEqual(result["fans"][0]["balloons"], 100)
 
-    async def test_snapshot_joins_midnight_slices_of_same_broadcast(self):
+    async def test_snapshot_keeps_calendar_days_separate_even_when_stream_number_repeats(self):
         def handle(request: httpx.Request):
             if request.url.path.endswith("/monthly"):
                 return httpx.Response(200, text=page("tlsdbqls118", 110515))
@@ -62,9 +62,9 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
                 client, "tlsdbqls118", datetime(2026, 9, 17, 1, tzinfo=KST)
             )
         self.assertEqual(parse_poonggo_stream(page("tlsdbqls118", 10, "297161987"), "tlsdbqls118")["broadcast_no"], "297161987")
-        self.assertEqual(result["today"], 110515)
-        self.assertEqual(result["fans"][0]["balloons"], 200)
-        self.assertEqual(result["source"], "poonggo_broadcast_snapshot")
+        self.assertEqual(result["today"], 10)
+        self.assertEqual(result["fans"][0]["balloons"], 100)
+        self.assertEqual(result["source"], "poonggo_calendar_snapshot")
 
     async def test_donation_is_immediate_and_deduplicated(self):
         service = PoonggoLiveService()
@@ -74,17 +74,19 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
             "nickname": "Soya",
             "broadcast_no": "123",
         }
+        now = datetime.now(KST)
         await service.apply_snapshot(
             metadata,
             {
-                "date": "2026-09-16",
-                "year": 2026,
-                "month": 9,
+                "date": now.date().isoformat(),
+                "year": now.year,
+                "month": now.month,
                 "today": 100,
                 "total": 1000,
                 "fans": [{"rank": 1, "user_id": "fan1", "nickname": "큰손", "balloons": 100}],
-                "observed_at": "2026-09-16T15:00:00+09:00",
-                "source": "poonggo_snapshot",
+                "observed_at": now.isoformat(),
+                "source": "poonggo_calendar_snapshot",
+                "counting_mode": "calendar_day_v2",
             },
         )
         event = {
@@ -104,20 +106,58 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         await service.apply_snapshot(
             metadata,
             {
-                "date": datetime.now(KST).date().isoformat(),
-                "year": datetime.now(KST).year,
-                "month": datetime.now(KST).month,
+                "date": now.date().isoformat(),
+                "year": now.year,
+                "month": now.month,
                 "today": 120,
                 "total": 1020,
                 "fans": [{"rank": 1, "user_id": "fan1", "nickname": "큰손", "balloons": 120}],
                 "broadcast_no": "123",
                 "observed_at": datetime.now(KST).isoformat(),
                 "source": "poonggo_snapshot",
+                "counting_mode": "calendar_day_v2",
             },
         )
         self.assertEqual(service.states["03apple"]["today"], 150)
         self.assertEqual(service.states["03apple"]["total"], 1050)
         self.assertEqual(service.states["03apple"]["source"], "poonggo_sse")
+
+    async def test_same_broadcast_resets_calendar_today_at_midnight(self):
+        service = PoonggoLiveService()
+        now = datetime.now(KST)
+        metadata = {
+            "user_id": "dign1461",
+            "crew_name": "광우상사",
+            "nickname": "혜밍",
+            "broadcast_no": "297165045",
+        }
+        await service.apply_snapshot(
+            metadata,
+            {
+                "date": "2026-09-16",
+                "year": now.year,
+                "month": now.month,
+                "today": 77930,
+                "total": 77930,
+                "fans": [],
+                "broadcast_no": "297165045",
+                "counting_mode": "calendar_day_v2",
+                "observed_at": now.isoformat(),
+                "source": "poonggo_calendar_snapshot",
+            },
+        )
+        await service.apply_donation(
+            metadata,
+            {
+                "donation_id": "after-midnight",
+                "donator_id": "fan",
+                "donator_nickname": "후원자",
+                "amount": 10,
+                "occurred_at": now.isoformat(),
+            },
+        )
+        self.assertEqual(service.states["dign1461"]["date"], now.date().isoformat())
+        self.assertEqual(service.states["dign1461"]["today"], 10)
 
     def test_poonggo_total_remains_authoritative_over_poong_today(self):
         result = {
