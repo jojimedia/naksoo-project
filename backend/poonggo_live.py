@@ -14,7 +14,7 @@ import os
 import re
 from collections import deque
 from contextlib import suppress
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
@@ -46,6 +46,10 @@ MAX_SEEN_IDS = max(1_000, int(os.environ.get("NAKSOO_LIVE_SEEN_IDS", "10000")))
 
 _BROADCAST_INFO = re.compile(
     r'broadcastInfo:\{streamerId:"(?P<user>[^"]+)".*?donationAmount:"(?P<amount>\d+)"',
+    re.DOTALL,
+)
+_STREAM_INFO = re.compile(
+    r'streamNo:"(?P<stream>[^"]+)",streamerId:"(?P<user>[^"]+)".*?isLive:(?P<live>true|false)',
     re.DOTALL,
 )
 _DONOR_LIST = re.compile(r"list:\[(?P<items>.*?)\],pagination:\{", re.DOTALL)
@@ -98,6 +102,52 @@ def parse_poonggo_daily_fans(html: str, user_id: str) -> list[dict[str, Any]]:
     return [{**fan, "rank": index + 1} for index, fan in enumerate(fans)]
 
 
+def parse_poonggo_stream(html: str, user_id: str) -> dict[str, Any] | None:
+    for match in _STREAM_INFO.finditer(html):
+        if match.group("user").lower() == user_id.lower():
+            return {
+                "broadcast_no": match.group("stream"),
+                "is_live": match.group("live") == "true",
+            }
+    return None
+
+
+def merge_fans(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for fans in groups:
+        for fan in fans:
+            key = str(fan.get("user_id") or fan.get("nickname") or "").lower()
+            if not key:
+                continue
+            current = merged.get(key)
+            if current is None:
+                merged[key] = dict(fan)
+            else:
+                current["balloons"] = int(current.get("balloons") or 0) + int(
+                    fan.get("balloons") or 0
+                )
+                if fan.get("nickname"):
+                    current["nickname"] = fan["nickname"]
+    ordered = sorted(merged.values(), key=lambda fan: int(fan.get("balloons") or 0), reverse=True)
+    return [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)]
+
+
+def merge_fans_max(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge two observations without double counting the same donor."""
+
+    merged: dict[str, dict[str, Any]] = {}
+    for fans in groups:
+        for fan in fans:
+            key = str(fan.get("user_id") or fan.get("nickname") or "").lower()
+            if not key:
+                continue
+            current = merged.get(key)
+            if current is None or int(fan.get("balloons") or 0) > int(current.get("balloons") or 0):
+                merged[key] = dict(fan)
+    ordered = sorted(merged.values(), key=lambda fan: int(fan.get("balloons") or 0), reverse=True)
+    return [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)]
+
+
 def _iso_now() -> str:
     return datetime.now(KST).isoformat()
 
@@ -115,24 +165,48 @@ async def fetch_poonggo_snapshot(
 ) -> dict[str, Any]:
     now = (now or datetime.now(KST)).astimezone(KST)
     date = now.date().isoformat()
+    previous_date = (now.date() - timedelta(days=1)).isoformat()
     daily_url = f"{POONGGO_BASE_URL}/station/{user_id}/daily"
     monthly_url = f"{POONGGO_BASE_URL}/station/{user_id}/monthly"
-    daily, monthly = await asyncio.gather(
+    daily, monthly, previous_daily = await asyncio.gather(
         client.get(daily_url, params={"date": date, "perPage": 100}),
         client.get(monthly_url, params={"date": f"{now.year}-{now.month:02d}-01"}),
+        client.get(daily_url, params={"date": previous_date, "perPage": 100}),
+        return_exceptions=True,
     )
+    if isinstance(daily, Exception):
+        raise daily
+    if isinstance(monthly, Exception):
+        raise monthly
     daily.raise_for_status()
     monthly.raise_for_status()
+    stream = parse_poonggo_stream(daily.text, user_id)
+    today = parse_poonggo_total(daily.text, user_id)
+    fans = parse_poonggo_daily_fans(daily.text, user_id)
+    source = "poonggo_snapshot"
+
+    # Poonggo splits one broadcast at midnight.  The SOOP/live counter does
+    # not, so join the two calendar slices when their broadcast number is the
+    # same. This remains valid after the stream ends because both pages retain
+    # that broadcast number.
+    if isinstance(previous_daily, httpx.Response) and previous_daily.is_success:
+        previous_stream = parse_poonggo_stream(previous_daily.text, user_id)
+        if stream and previous_stream and stream["broadcast_no"] == previous_stream["broadcast_no"]:
+            today += parse_poonggo_total(previous_daily.text, user_id)
+            fans = merge_fans(parse_poonggo_daily_fans(previous_daily.text, user_id), fans)
+            source = "poonggo_broadcast_snapshot"
+
     return {
         "user_id": user_id,
         "date": date,
         "year": now.year,
         "month": now.month,
-        "today": parse_poonggo_total(daily.text, user_id),
+        "today": today,
         "total": parse_poonggo_total(monthly.text, user_id),
-        "fans": parse_poonggo_daily_fans(daily.text, user_id),
+        "fans": fans,
+        "broadcast_no": (stream or {}).get("broadcast_no", ""),
         "observed_at": _iso_now(),
-        "source": "poonggo_snapshot",
+        "source": source,
     }
 
 
@@ -211,6 +285,13 @@ class PoonggoLiveService:
         public_metadata = {key: value for key, value in metadata.items() if key != "semaphore"}
         async with self.lock:
             previous = self.states.get(user_id) or {}
+            incoming_broadcast = str(
+                snapshot.get("broadcast_no") or metadata.get("broadcast_no") or ""
+            )
+            same_broadcast = bool(
+                incoming_broadcast
+                and str(previous.get("broadcast_no") or "") == incoming_broadcast
+            )
             if (
                 expected_revision is not None
                 and int(previous.get("_event_revision") or 0) != expected_revision
@@ -223,6 +304,16 @@ class PoonggoLiveService:
                     "today": max(int(snapshot.get("today") or 0), int(previous.get("today") or 0)),
                     "total": max(int(snapshot.get("total") or 0), int(previous.get("total") or 0)),
                     "fans": previous.get("fans") or snapshot.get("fans") or [],
+                }
+            elif same_broadcast and str(previous.get("source") or "") == "poonggo_sse":
+                # Poonggo HTML can lag behind its live stream. Never let a
+                # delayed snapshot reduce a value already observed over SSE.
+                snapshot = {
+                    **snapshot,
+                    "today": max(int(snapshot.get("today") or 0), int(previous.get("today") or 0)),
+                    "total": max(int(snapshot.get("total") or 0), int(previous.get("total") or 0)),
+                    "fans": merge_fans_max(snapshot.get("fans") or [], previous.get("fans") or []),
+                    "source": "poonggo_sse",
                 }
             next_state = {
                 **previous,
@@ -263,7 +354,16 @@ class PoonggoLiveService:
             current_month = (now.year, now.month)
             stored_month = (int(state.get("year") or 0), int(state.get("month") or 0))
             if state.get("date") != current_date:
-                state = {**state, "date": current_date, "today": 0, "fans": []}
+                same_broadcast = bool(
+                    state.get("broadcast_no")
+                    and metadata.get("broadcast_no")
+                    and str(state["broadcast_no"]) == str(metadata["broadcast_no"])
+                )
+                state = (
+                    {**state, "date": current_date}
+                    if same_broadcast
+                    else {**state, "date": current_date, "today": 0, "fans": []}
+                )
             if stored_month != current_month:
                 state = {**state, "year": now.year, "month": now.month, "total": 0}
             state = {

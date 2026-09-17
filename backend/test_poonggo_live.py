@@ -8,14 +8,20 @@ from poonggo_live import (
     PoonggoLiveService,
     fetch_poonggo_snapshot,
     parse_poonggo_daily_fans,
+    parse_poonggo_stream,
     parse_poonggo_total,
 )
 
 
-def page(user_id: str, amount: int) -> str:
+def page(user_id: str, amount: int, stream_no: str | None = None) -> str:
     return (
         '<script>sidebar:{donationAmount:"999999"},'
-        f'broadcastInfo:{{streamerId:"{user_id}",stationName:"test",'
+        + (
+            f'streamNo:"{stream_no}",streamerId:"{user_id}",streamerNickname:"test",isLive:false}},'
+            if stream_no
+            else ""
+        )
+        + f'broadcastInfo:{{streamerId:"{user_id}",stationName:"test",'
         f'donationAmount:"{amount}",donationCount:"1"}},'
         'list:[{donatorId:"fan1",donatorNickname:"큰손",totalAmount:"100",'
         'donationCount:"1"}],pagination:{page:1,total:1}</script>'
@@ -39,10 +45,26 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
             result = await fetch_poonggo_snapshot(
                 client, "03apple", datetime(2026, 9, 16, 15, tzinfo=KST)
             )
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 3)
         self.assertEqual(result["today"], 61222)
         self.assertEqual(result["total"], 186716)
         self.assertEqual(result["fans"][0]["balloons"], 100)
+
+    async def test_snapshot_joins_midnight_slices_of_same_broadcast(self):
+        def handle(request: httpx.Request):
+            if request.url.path.endswith("/monthly"):
+                return httpx.Response(200, text=page("tlsdbqls118", 110515))
+            amount = 10 if request.url.params["date"] == "2026-09-17" else 110505
+            return httpx.Response(200, text=page("tlsdbqls118", amount, "297161987"))
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            result = await fetch_poonggo_snapshot(
+                client, "tlsdbqls118", datetime(2026, 9, 17, 1, tzinfo=KST)
+            )
+        self.assertEqual(parse_poonggo_stream(page("tlsdbqls118", 10, "297161987"), "tlsdbqls118")["broadcast_no"], "297161987")
+        self.assertEqual(result["today"], 110515)
+        self.assertEqual(result["fans"][0]["balloons"], 200)
+        self.assertEqual(result["source"], "poonggo_broadcast_snapshot")
 
     async def test_donation_is_immediate_and_deduplicated(self):
         service = PoonggoLiveService()
@@ -78,6 +100,24 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.states["03apple"]["total"], 1050)
         self.assertEqual(service.states["03apple"]["fans"][0]["balloons"], 150)
         self.assertEqual(len(service.pending_events), 1)
+
+        await service.apply_snapshot(
+            metadata,
+            {
+                "date": datetime.now(KST).date().isoformat(),
+                "year": datetime.now(KST).year,
+                "month": datetime.now(KST).month,
+                "today": 120,
+                "total": 1020,
+                "fans": [{"rank": 1, "user_id": "fan1", "nickname": "큰손", "balloons": 120}],
+                "broadcast_no": "123",
+                "observed_at": datetime.now(KST).isoformat(),
+                "source": "poonggo_snapshot",
+            },
+        )
+        self.assertEqual(service.states["03apple"]["today"], 150)
+        self.assertEqual(service.states["03apple"]["total"], 1050)
+        self.assertEqual(service.states["03apple"]["source"], "poonggo_sse")
 
     def test_poonggo_total_remains_authoritative_over_poong_today(self):
         result = {
