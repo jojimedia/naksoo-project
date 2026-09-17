@@ -14,7 +14,7 @@ import os
 import re
 from collections import deque
 from contextlib import suppress
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -124,8 +124,48 @@ def merge_fans_max(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
             current = merged.get(key)
             if current is None or int(fan.get("balloons") or 0) > int(current.get("balloons") or 0):
                 merged[key] = dict(fan)
+    ordered = sorted(
+        merged.values(), key=lambda fan: int(fan.get("balloons") or 0), reverse=True
+    )
+    return [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)]
+
+
+def merge_fans_sum(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Add donor totals from distinct calendar slices of one real broadcast."""
+
+    merged: dict[str, dict[str, Any]] = {}
+    for fans in groups:
+        for fan in fans:
+            key = str(fan.get("user_id") or fan.get("nickname") or "").lower()
+            if not key:
+                continue
+            current = merged.get(key)
+            if current is None:
+                merged[key] = dict(fan)
+            else:
+                current["balloons"] = int(current.get("balloons") or 0) + int(
+                    fan.get("balloons") or 0
+                )
+                if fan.get("nickname"):
+                    current["nickname"] = fan["nickname"]
     ordered = sorted(merged.values(), key=lambda fan: int(fan.get("balloons") or 0), reverse=True)
     return [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)]
+
+
+def parse_broadcast_start_date(value: Any) -> date | None:
+    """Parse SOOP's authoritative broadStart value as a KST calendar date."""
+
+    if not value:
+        return None
+    text = str(value).strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=KST)
+        return parsed.astimezone(KST).date()
+    except ValueError:
+        match = re.match(r"^(\d{4})[-/.](\d{2})[-/.](\d{2})", text)
+        return date.fromisoformat("-".join(match.groups())) if match else None
 
 
 def _iso_now() -> str:
@@ -142,33 +182,52 @@ async def fetch_poonggo_snapshot(
     client: httpx.AsyncClient,
     user_id: str,
     now: datetime | None = None,
+    broadcast_start: Any = None,
+    broadcast_no: str | None = None,
 ) -> dict[str, Any]:
     now = (now or datetime.now(KST)).astimezone(KST)
-    date = now.date().isoformat()
+    current_date = now.date()
+    session_date = parse_broadcast_start_date(broadcast_start) if broadcast_no else None
+    if session_date and (
+        session_date > current_date or current_date - session_date > timedelta(days=3)
+    ):
+        session_date = None
+    reporting_date = session_date or current_date
+    dates = [
+        reporting_date + timedelta(days=offset)
+        for offset in range((current_date - reporting_date).days + 1)
+    ]
     daily_url = f"{POONGGO_BASE_URL}/station/{user_id}/daily"
     monthly_url = f"{POONGGO_BASE_URL}/station/{user_id}/monthly"
-    daily, monthly = await asyncio.gather(
-        client.get(daily_url, params={"date": date, "perPage": 100}),
+    responses = await asyncio.gather(
+        *(
+            client.get(daily_url, params={"date": value.isoformat(), "perPage": 100})
+            for value in dates
+        ),
         client.get(monthly_url, params={"date": f"{now.year}-{now.month:02d}-01"}),
     )
-    daily.raise_for_status()
+    daily_responses = responses[:-1]
+    monthly = responses[-1]
+    for daily in daily_responses:
+        daily.raise_for_status()
     monthly.raise_for_status()
-    stream = parse_poonggo_stream(daily.text, user_id)
-    today = parse_poonggo_total(daily.text, user_id)
-    fans = parse_poonggo_daily_fans(daily.text, user_id)
+    today = sum(parse_poonggo_total(daily.text, user_id) for daily in daily_responses)
+    fans = merge_fans_sum(
+        *(parse_poonggo_daily_fans(daily.text, user_id) for daily in daily_responses)
+    )
 
     return {
         "user_id": user_id,
-        "date": date,
+        "date": reporting_date.isoformat(),
         "year": now.year,
         "month": now.month,
         "today": today,
         "total": parse_poonggo_total(monthly.text, user_id),
         "fans": fans,
-        "broadcast_no": (stream or {}).get("broadcast_no", ""),
-        "counting_mode": "calendar_day_v2",
+        "broadcast_no": str(broadcast_no or ""),
+        "counting_mode": "broadcast_session_v3" if session_date else "calendar_day_v2",
         "observed_at": _iso_now(),
-        "source": "poonggo_calendar_snapshot",
+        "source": "poonggo_session_snapshot" if session_date else "poonggo_calendar_snapshot",
     }
 
 
@@ -254,6 +313,26 @@ class PoonggoLiveService:
                 incoming_broadcast
                 and str(previous.get("broadcast_no") or "") == incoming_broadcast
             )
+            if snapshot.get("counting_mode") == "broadcast_session_v3":
+                if same_broadcast:
+                    session_offset = int(previous.get("session_offset") or 0)
+                elif (
+                    previous.get("counting_mode") == "broadcast_session_v3"
+                    and previous.get("date") == snapshot.get("date")
+                ):
+                    # A new BNO on the same day is a new broadcast. Poonggo's
+                    # daily page is cumulative, so remove all earlier session
+                    # totals carried by the previous state.
+                    session_offset = int(previous.get("session_offset") or 0) + int(
+                        previous.get("today") or 0
+                    )
+                else:
+                    session_offset = 0
+                snapshot = {
+                    **snapshot,
+                    "today": max(0, int(snapshot.get("today") or 0) - session_offset),
+                    "session_offset": session_offset,
+                }
             if (
                 expected_revision is not None
                 and int(previous.get("_event_revision") or 0) != expected_revision
@@ -270,7 +349,7 @@ class PoonggoLiveService:
             elif (
                 same_broadcast
                 and previous.get("date") == snapshot.get("date")
-                and previous.get("counting_mode") == "calendar_day_v2"
+                and previous.get("counting_mode") == snapshot.get("counting_mode")
                 and str(previous.get("source") or "") == "poonggo_sse"
             ):
                 # Poonggo HTML can lag behind its live stream. Never let a
@@ -288,7 +367,7 @@ class PoonggoLiveService:
                 **snapshot,
                 "user_id": metadata["user_id"],
                 "connected": bool(previous.get("connected")),
-                "counting_mode": "calendar_day_v2",
+                "counting_mode": snapshot.get("counting_mode") or "calendar_day_v2",
                 "_event_revision": int(previous.get("_event_revision") or 0),
             }
             self.states[user_id] = next_state
@@ -318,19 +397,32 @@ class PoonggoLiveService:
                 "today": 0,
                 "total": 0,
             }
-            current_date = now.date().isoformat()
             current_month = (now.year, now.month)
             stored_month = (int(state.get("year") or 0), int(state.get("month") or 0))
-            if state.get("date") != current_date or state.get("counting_mode") != "calendar_day_v2":
-                # The dashboard's "today" is a calendar-day slice. Broadcast
-                # continuity is tracked by broadcast_no, but a stream crossing
-                # midnight must not carry yesterday's amount into today's row.
+            session_date = parse_broadcast_start_date(metadata.get("broadcast_start"))
+            session_mode = "broadcast_session_v3" if session_date else "calendar_day_v2"
+            reporting_date = (session_date or now.date()).isoformat()
+            same_broadcast = bool(
+                metadata.get("broadcast_no")
+                and str(state.get("broadcast_no") or "") == str(metadata["broadcast_no"])
+            )
+            if (
+                state.get("date") != reporting_date
+                or state.get("counting_mode") != session_mode
+                or not same_broadcast
+            ):
+                # A real SOOP broadcast keeps its broadStart date across
+                # midnight.  A different BNO is a new session even on the
+                # same calendar day.
                 state = {
                     **state,
-                    "date": current_date,
+                    "date": reporting_date,
                     "today": 0,
                     "fans": [],
-                    "counting_mode": "calendar_day_v2",
+                    "counting_mode": session_mode,
+                    "session_offset": int(state.get("session_offset") or 0)
+                    if state.get("date") == reporting_date
+                    else 0,
                 }
             if stored_month != current_month:
                 state = {**state, "year": now.year, "month": now.month, "total": 0}
@@ -342,7 +434,7 @@ class PoonggoLiveService:
                 "observed_at": _event_time(event.get("occurredAt") or event.get("occurred_at")),
                 "source": "poonggo_sse",
                 "connected": True,
-                "counting_mode": "calendar_day_v2",
+                "counting_mode": session_mode,
                 "_event_revision": int(state.get("_event_revision") or 0) + 1,
             }
             donor_id = str(
@@ -443,7 +535,12 @@ class PoonggoLiveService:
                     async with self.lock:
                         revision = int((self.states.get(key) or {}).get("_event_revision") or 0)
                     async with semaphore:
-                        snapshot = await fetch_poonggo_snapshot(client, metadata["user_id"])
+                        snapshot = await fetch_poonggo_snapshot(
+                            client,
+                            metadata["user_id"],
+                            broadcast_start=metadata.get("broadcast_start"),
+                            broadcast_no=str(metadata.get("broadcast_no") or ""),
+                        )
                     await self.apply_snapshot(metadata, snapshot, expected_revision=revision)
                 except asyncio.CancelledError:
                     raise
@@ -475,6 +572,7 @@ class PoonggoLiveService:
                     "crew_name": str(item.get("crew_name") or ""),
                     "nickname": str(item.get("nickname") or user_id),
                     "broadcast_no": str(item["broadcast_no"]),
+                    "broadcast_start": item.get("broadcast_start"),
                     "semaphore": semaphore,
                 }
 
@@ -526,6 +624,13 @@ class PoonggoLiveService:
                 async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
                     for metadata in members.values():
                         try:
+                            previous = self.states.get(str(metadata["user_id"]).lower()) or {}
+                            if previous.get("counting_mode") == "broadcast_session_v3":
+                                # The calendar page cannot reconstruct a
+                                # completed cross-midnight session. Preserve
+                                # the final session snapshot/SSE value until a
+                                # new authoritative SOOP BNO starts.
+                                continue
                             snapshot = await fetch_poonggo_snapshot(client, metadata["user_id"])
                             await self.apply_snapshot(metadata, snapshot)
                         except asyncio.CancelledError:

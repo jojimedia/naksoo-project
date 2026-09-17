@@ -66,6 +66,38 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["fans"][0]["balloons"], 100)
         self.assertEqual(result["source"], "poonggo_calendar_snapshot")
 
+    async def test_snapshot_joins_dates_only_from_authoritative_soop_start(self):
+        def handle(request: httpx.Request):
+            if request.url.path.endswith("/monthly"):
+                return httpx.Response(200, text=page("dign1461", 200000))
+            amount = 19115 if request.url.params["date"] == "2026-09-17" else 77930
+            # Poonggo repeats this page-level number, but it is deliberately
+            # ignored. The SOOP broadStart argument decides the session.
+            return httpx.Response(200, text=page("dign1461", amount, "wrong-page-id"))
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            same_day = await fetch_poonggo_snapshot(
+                client,
+                "dign1461",
+                datetime(2026, 9, 17, 1, tzinfo=KST),
+                broadcast_start="2026-09-17 00:10:00",
+                broadcast_no="real-soop-2",
+            )
+            across_midnight = await fetch_poonggo_snapshot(
+                client,
+                "dign1461",
+                datetime(2026, 9, 17, 1, tzinfo=KST),
+                broadcast_start="2026-09-16 23:10:00",
+                broadcast_no="real-soop-1",
+            )
+
+        self.assertEqual(same_day["today"], 19115)
+        self.assertEqual(same_day["date"], "2026-09-17")
+        self.assertEqual(same_day["broadcast_no"], "real-soop-2")
+        self.assertEqual(across_midnight["today"], 97045)
+        self.assertEqual(across_midnight["date"], "2026-09-16")
+        self.assertEqual(across_midnight["fans"][0]["balloons"], 200)
+
     async def test_donation_is_immediate_and_deduplicated(self):
         service = PoonggoLiveService()
         metadata = {
@@ -122,7 +154,7 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.states["03apple"]["total"], 1050)
         self.assertEqual(service.states["03apple"]["source"], "poonggo_sse")
 
-    async def test_same_broadcast_resets_calendar_today_at_midnight(self):
+    async def test_same_real_broadcast_keeps_start_date_at_midnight(self):
         service = PoonggoLiveService()
         now = datetime.now(KST)
         metadata = {
@@ -130,6 +162,7 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
             "crew_name": "광우상사",
             "nickname": "혜밍",
             "broadcast_no": "297165045",
+            "broadcast_start": "2026-09-16 23:10:00",
         }
         await service.apply_snapshot(
             metadata,
@@ -141,7 +174,7 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
                 "total": 77930,
                 "fans": [],
                 "broadcast_no": "297165045",
-                "counting_mode": "calendar_day_v2",
+                "counting_mode": "broadcast_session_v3",
                 "observed_at": now.isoformat(),
                 "source": "poonggo_calendar_snapshot",
             },
@@ -156,8 +189,35 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
                 "occurred_at": now.isoformat(),
             },
         )
-        self.assertEqual(service.states["dign1461"]["date"], now.date().isoformat())
-        self.assertEqual(service.states["dign1461"]["today"], 10)
+        self.assertEqual(service.states["dign1461"]["date"], "2026-09-16")
+        self.assertEqual(service.states["dign1461"]["today"], 77940)
+
+    async def test_new_broadcast_same_day_subtracts_previous_session(self):
+        service = PoonggoLiveService()
+        now = datetime(2026, 9, 17, 20, tzinfo=KST)
+        first = {
+            "user_id": "dign1461",
+            "crew_name": "광우상사",
+            "nickname": "혜밍",
+            "broadcast_no": "first",
+            "broadcast_start": "2026-09-17 10:00:00",
+        }
+        second = {**first, "broadcast_no": "second", "broadcast_start": "2026-09-17 19:00:00"}
+        await service.apply_snapshot(first, {
+            "date": "2026-09-17", "year": 2026, "month": 9,
+            "today": 19000, "total": 100000, "fans": [],
+            "broadcast_no": "first", "counting_mode": "broadcast_session_v3",
+            "observed_at": now.isoformat(), "source": "poonggo_session_snapshot",
+        })
+        await service.apply_snapshot(second, {
+            "date": "2026-09-17", "year": 2026, "month": 9,
+            "today": 22000, "total": 103000, "fans": [],
+            "broadcast_no": "second", "counting_mode": "broadcast_session_v3",
+            "observed_at": now.isoformat(), "source": "poonggo_session_snapshot",
+        })
+        state = service.states["dign1461"]
+        self.assertEqual(state["today"], 3000)
+        self.assertEqual(state["session_offset"], 19000)
 
     def test_poonggo_total_remains_authoritative_over_poong_today(self):
         result = {

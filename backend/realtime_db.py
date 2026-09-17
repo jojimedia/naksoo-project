@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS streamer_live_totals (
     daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb,
     source TEXT NOT NULL,
     counting_mode TEXT NOT NULL DEFAULT 'legacy',
+    session_offset BIGINT NOT NULL DEFAULT 0,
     connected BOOLEAN NOT NULL DEFAULT FALSE,
     observed_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -145,6 +146,7 @@ CREATE TABLE IF NOT EXISTS streamer_live_totals (
 
 ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS counting_mode TEXT NOT NULL DEFAULT 'legacy';
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS session_offset BIGINT NOT NULL DEFAULT 0;
 """
 
 
@@ -396,7 +398,7 @@ def load_live_totals() -> list[dict[str, Any]]:
             """
             SELECT streamer_id, crew_name, nickname, broadcast_no,
                    reporting_date, year, month, today_balloons,
-                   month_balloons, daily_fans, source, counting_mode, connected, observed_at
+                   month_balloons, daily_fans, source, counting_mode, session_offset, connected, observed_at
             FROM streamer_live_totals
             WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
             """
@@ -415,6 +417,7 @@ def load_live_totals() -> list[dict[str, Any]]:
             "fans": row["daily_fans"] or [],
             "source": str(row["source"]),
             "counting_mode": str(row["counting_mode"] or "legacy"),
+            "session_offset": int(row["session_offset"] or 0),
             # A restored row is not connected until its upstream task opens.
             "connected": False,
             "observed_at": row["observed_at"].isoformat(),
@@ -469,8 +472,8 @@ def persist_live_updates(
                     INSERT INTO streamer_live_totals (
                       streamer_id, crew_name, nickname, broadcast_no,
                       reporting_date, year, month, today_balloons,
-                      month_balloons, daily_fans, source, counting_mode, connected, observed_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s)
+                      month_balloons, daily_fans, source, counting_mode, session_offset, connected, observed_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s)
                     ON CONFLICT (streamer_id) DO UPDATE SET
                       crew_name = EXCLUDED.crew_name,
                       nickname = EXCLUDED.nickname,
@@ -483,6 +486,7 @@ def persist_live_updates(
                       daily_fans = EXCLUDED.daily_fans,
                       source = EXCLUDED.source,
                       counting_mode = EXCLUDED.counting_mode,
+                      session_offset = EXCLUDED.session_offset,
                       connected = EXCLUDED.connected,
                       observed_at = EXCLUDED.observed_at,
                       updated_at = NOW()
@@ -496,6 +500,7 @@ def persist_live_updates(
                         _as_json(row.get("fans") or []),
                         row.get("source") or "poonggo_sse",
                         row.get("counting_mode") or "legacy",
+                        int(row.get("session_offset") or 0),
                         bool(row.get("connected")),
                         _as_datetime(row.get("observed_at")) or observed_at,
                     ),
