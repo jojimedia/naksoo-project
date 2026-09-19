@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS streamer_live_totals (
     nickname TEXT NOT NULL DEFAULT '',
     broadcast_no TEXT,
     reporting_date DATE NOT NULL,
+    display_date DATE,
     year SMALLINT NOT NULL,
     month SMALLINT NOT NULL CHECK (month BETWEEN 1 AND 12),
     today_balloons BIGINT NOT NULL DEFAULT 0,
@@ -139,6 +140,7 @@ CREATE TABLE IF NOT EXISTS streamer_live_totals (
     source TEXT NOT NULL,
     counting_mode TEXT NOT NULL DEFAULT 'legacy',
     session_offset BIGINT NOT NULL DEFAULT 0,
+    finalized BOOLEAN NOT NULL DEFAULT FALSE,
     connected BOOLEAN NOT NULL DEFAULT FALSE,
     observed_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -147,6 +149,8 @@ CREATE TABLE IF NOT EXISTS streamer_live_totals (
 ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS counting_mode TEXT NOT NULL DEFAULT 'legacy';
 ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS session_offset BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS display_date DATE;
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS finalized BOOLEAN NOT NULL DEFAULT FALSE;
 """
 
 
@@ -397,10 +401,11 @@ def load_live_totals() -> list[dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT streamer_id, crew_name, nickname, broadcast_no,
-                   reporting_date, year, month, today_balloons,
-                   month_balloons, daily_fans, source, counting_mode, session_offset, connected, observed_at
+                   reporting_date, COALESCE(display_date, reporting_date) AS display_date,
+                   year, month, today_balloons, month_balloons, daily_fans,
+                   source, counting_mode, session_offset, finalized, connected, observed_at
             FROM streamer_live_totals
-            WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+            WHERE COALESCE(display_date, reporting_date) >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
             """
         ).fetchall()
     return [
@@ -410,6 +415,7 @@ def load_live_totals() -> list[dict[str, Any]]:
             "nickname": str(row["nickname"] or row["streamer_id"]),
             "broadcast_no": str(row["broadcast_no"] or ""),
             "date": row["reporting_date"].isoformat(),
+            "display_date": row["display_date"].isoformat(),
             "year": int(row["year"]),
             "month": int(row["month"]),
             "today": int(row["today_balloons"]),
@@ -418,6 +424,7 @@ def load_live_totals() -> list[dict[str, Any]]:
             "source": str(row["source"]),
             "counting_mode": str(row["counting_mode"] or "legacy"),
             "session_offset": int(row["session_offset"] or 0),
+            "finalized": bool(row["finalized"]),
             # A restored row is not connected until its upstream task opens.
             "connected": False,
             "observed_at": row["observed_at"].isoformat(),
@@ -471,14 +478,16 @@ def persist_live_updates(
                     """
                     INSERT INTO streamer_live_totals (
                       streamer_id, crew_name, nickname, broadcast_no,
-                      reporting_date, year, month, today_balloons,
-                      month_balloons, daily_fans, source, counting_mode, session_offset, connected, observed_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s)
+                      reporting_date, display_date, year, month, today_balloons,
+                      month_balloons, daily_fans, source, counting_mode, session_offset,
+                      finalized, connected, observed_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (streamer_id) DO UPDATE SET
                       crew_name = EXCLUDED.crew_name,
                       nickname = EXCLUDED.nickname,
                       broadcast_no = EXCLUDED.broadcast_no,
                       reporting_date = EXCLUDED.reporting_date,
+                      display_date = EXCLUDED.display_date,
                       year = EXCLUDED.year,
                       month = EXCLUDED.month,
                       today_balloons = EXCLUDED.today_balloons,
@@ -487,6 +496,7 @@ def persist_live_updates(
                       source = EXCLUDED.source,
                       counting_mode = EXCLUDED.counting_mode,
                       session_offset = EXCLUDED.session_offset,
+                      finalized = EXCLUDED.finalized,
                       connected = EXCLUDED.connected,
                       observed_at = EXCLUDED.observed_at,
                       updated_at = NOW()
@@ -495,19 +505,25 @@ def persist_live_updates(
                         row["user_id"], row.get("crew_name") or "",
                         row.get("nickname") or row["user_id"],
                         row.get("broadcast_no"), row["date"],
+                        row.get("display_date") or row["date"],
                         int(row["year"]), int(row["month"]),
                         int(row["today"]), int(row["total"]),
                         _as_json(row.get("fans") or []),
                         row.get("source") or "poonggo_sse",
                         row.get("counting_mode") or "legacy",
                         int(row.get("session_offset") or 0),
+                        bool(row.get("finalized")),
                         bool(row.get("connected")),
                         _as_datetime(row.get("observed_at")) or observed_at,
                     ),
                 )
-                day = int(str(row["date"])[-2:])
-                conn.execute(
-                    """
+                session_date = str(row["date"])
+                if (int(session_date[:4]), int(session_date[5:7])) == (
+                    int(row["year"]), int(row["month"])
+                ):
+                    day = int(session_date[-2:])
+                    conn.execute(
+                        """
                     UPDATE streamer_month_current
                     SET total_balloons = %s,
                         daily_balloons = (
@@ -525,13 +541,30 @@ def persist_live_updates(
                         last_changed_at = %s
                     WHERE streamer_id = %s AND year = %s AND month = %s
                     """,
-                    (
-                        int(row["total"]), day, day, int(row["today"]),
-                        row.get("source") or "poonggo_sse", observed_at,
-                        observed_at, observed_at, row["user_id"],
-                        int(row["year"]), int(row["month"]),
-                    ),
-                )
+                        (
+                            int(row["total"]), day, day, int(row["today"]),
+                            row.get("source") or "poonggo_sse", observed_at,
+                            observed_at, observed_at, row["user_id"],
+                            int(row["year"]), int(row["month"]),
+                        ),
+                    )
+                else:
+                    # A broadcast crossing a month boundary belongs to its
+                    # start date, not an impossible day in the new month.
+                    conn.execute(
+                        """
+                        UPDATE streamer_month_current
+                        SET total_balloons = %s, data_source = %s,
+                            source_observed_at = %s, last_collected_at = %s,
+                            last_changed_at = %s
+                        WHERE streamer_id = %s AND year = %s AND month = %s
+                        """,
+                        (
+                            int(row["total"]), row.get("source") or "poonggo_sse",
+                            observed_at, observed_at, observed_at, row["user_id"],
+                            int(row["year"]), int(row["month"]),
+                        ),
+                    )
 
 
 
@@ -542,16 +575,32 @@ def get_collector_members() -> list[dict[str, Any]]:
         rows = conn.execute(
             "SELECT crew_name, user_id, nickname, note FROM members ORDER BY crew_name, id"
         ).fetchall()
-    return [
-        {
-            "crew_name": str(row["crew_name"]),
-            "user_id": str(row["user_id"]),
-            "nickname": str(row["nickname"] or row["user_id"]),
-            "note": str(row["note"] or ""),
-            "is_on_leave": str(row["note"] or "").strip().lower() == "휴직",
-        }
-        for row in rows
-    ]
+        try:
+            crew_rows = conn.execute("SELECT crew_name FROM crews").fetchall()
+        except Exception:
+            crew_rows = []
+    canonical = {
+        str(row["crew_name"]).strip().lower(): str(row["crew_name"]).strip()
+        for row in crew_rows
+        if str(row.get("crew_name") or "").strip()
+    }
+    canonical["fa"] = "FA"
+    output = []
+    for row in rows:
+        raw_crew = str(row["crew_name"] or "").strip()
+        crew_name = canonical.get(raw_crew.lower(), raw_crew)
+        if raw_crew.upper() == "FA":
+            crew_name = "FA"
+        output.append(
+            {
+                "crew_name": crew_name,
+                "user_id": str(row["user_id"]),
+                "nickname": str(row["nickname"] or row["user_id"]),
+                "note": str(row["note"] or ""),
+                "is_on_leave": str(row["note"] or "").strip().lower() == "휴직",
+            }
+        )
+    return output
 
 
 def get_collector_state(year: int, month: int) -> dict[tuple[str, str], dict[str, Any]]:

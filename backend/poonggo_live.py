@@ -14,7 +14,7 @@ import os
 import re
 from collections import deque
 from contextlib import suppress
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 
 import httpx
@@ -34,12 +34,6 @@ from realtime_db import (
 POONGGO_BASE_URL = "https://poonggo.com"
 POONGGO_SSE_URL = "https://sse2.poonggo.com"
 RECONCILE_SECONDS = max(60, int(os.environ.get("NAKSOO_POONGGO_RECONCILE_SECONDS", "90")))
-ROSTER_RECONCILE_SECONDS = max(
-    300, int(os.environ.get("NAKSOO_POONGGO_ROSTER_RECONCILE_SECONDS", "7200"))
-)
-ROSTER_RECONCILE_DELAY = max(
-    0.1, float(os.environ.get("NAKSOO_POONGGO_ROSTER_RECONCILE_DELAY", "0.5"))
-)
 FLUSH_SECONDS = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_SECONDS", "2")))
 FLUSH_EVENT_COUNT = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_EVENT_COUNT", "20")))
 MAX_SEEN_IDS = max(1_000, int(os.environ.get("NAKSOO_LIVE_SEEN_IDS", "10000")))
@@ -48,14 +42,18 @@ _BROADCAST_INFO = re.compile(
     r'broadcastInfo:\{streamerId:"(?P<user>[^"]+)".*?donationAmount:"(?P<amount>\d+)"',
     re.DOTALL,
 )
-_STREAM_INFO = re.compile(
-    r'streamNo:"(?P<stream>[^"]+)",streamerId:"(?P<user>[^"]+)".*?isLive:(?P<live>true|false)',
-    re.DOTALL,
-)
 _DONOR_LIST = re.compile(r"list:\[(?P<items>.*?)\],pagination:\{", re.DOTALL)
 _DONOR = re.compile(
     r'\{donatorId:"(?P<id>(?:\\.|[^"])*)",donatorNickname:"(?P<nick>(?:\\.|[^"])*)",'
     r'totalAmount:"(?P<amount>\d+)"',
+    re.DOTALL,
+)
+_LIVE_STATION = re.compile(
+    r'streamer:\{streamNo:"(?P<stream>[^"]+)",streamerId:"(?P<user>[^"]+)"'
+)
+_LIVE_INFO = re.compile(
+    r'liveInfo:\{[^}]*?startedAt:new Date\((?P<started>\d+)\)'
+    r'[^}]*?donationAmount:"(?P<amount>\d+)"',
     re.DOTALL,
 )
 
@@ -102,16 +100,6 @@ def parse_poonggo_daily_fans(html: str, user_id: str) -> list[dict[str, Any]]:
     return [{**fan, "rank": index + 1} for index, fan in enumerate(fans)]
 
 
-def parse_poonggo_stream(html: str, user_id: str) -> dict[str, Any] | None:
-    for match in _STREAM_INFO.finditer(html):
-        if match.group("user").lower() == user_id.lower():
-            return {
-                "broadcast_no": match.group("stream"),
-                "is_live": match.group("live") == "true",
-            }
-    return None
-
-
 def merge_fans_max(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Merge two observations without double counting the same donor."""
 
@@ -124,30 +112,6 @@ def merge_fans_max(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
             current = merged.get(key)
             if current is None or int(fan.get("balloons") or 0) > int(current.get("balloons") or 0):
                 merged[key] = dict(fan)
-    ordered = sorted(
-        merged.values(), key=lambda fan: int(fan.get("balloons") or 0), reverse=True
-    )
-    return [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)]
-
-
-def merge_fans_sum(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Add donor totals from distinct calendar slices of one real broadcast."""
-
-    merged: dict[str, dict[str, Any]] = {}
-    for fans in groups:
-        for fan in fans:
-            key = str(fan.get("user_id") or fan.get("nickname") or "").lower()
-            if not key:
-                continue
-            current = merged.get(key)
-            if current is None:
-                merged[key] = dict(fan)
-            else:
-                current["balloons"] = int(current.get("balloons") or 0) + int(
-                    fan.get("balloons") or 0
-                )
-                if fan.get("nickname"):
-                    current["nickname"] = fan["nickname"]
     ordered = sorted(merged.values(), key=lambda fan: int(fan.get("balloons") or 0), reverse=True)
     return [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)]
 
@@ -168,6 +132,21 @@ def parse_broadcast_start_date(value: Any) -> date | None:
         return date.fromisoformat("-".join(match.groups())) if match else None
 
 
+def parse_poonggo_live_total(html: str, user_id: str, broadcast_no: str) -> tuple[int, date]:
+    """Read the requested broadcast, never the station's calendar summary."""
+
+    station = _LIVE_STATION.search(html)
+    if not station or (station.group("user").lower(), station.group("stream")) != (
+        user_id.lower(), str(broadcast_no)
+    ):
+        raise ValueError(f"Poonggo live broadcast mismatch for {user_id}/{broadcast_no}")
+    live = _LIVE_INFO.search(html, station.end())
+    if not live:
+        raise ValueError(f"Poonggo live total unavailable for {user_id}/{broadcast_no}")
+    started = datetime.fromtimestamp(int(live.group("started")) / 1000, KST).date()
+    return int(live.group("amount")), started
+
+
 def _iso_now() -> str:
     return datetime.now(KST).isoformat()
 
@@ -185,49 +164,33 @@ async def fetch_poonggo_snapshot(
     broadcast_start: Any = None,
     broadcast_no: str | None = None,
 ) -> dict[str, Any]:
+    if not broadcast_no:
+        raise ValueError("A SOOP broadcast number is required for a live snapshot")
     now = (now or datetime.now(KST)).astimezone(KST)
-    current_date = now.date()
-    session_date = parse_broadcast_start_date(broadcast_start) if broadcast_no else None
-    if session_date and (
-        session_date > current_date or current_date - session_date > timedelta(days=3)
-    ):
-        session_date = None
-    reporting_date = session_date or current_date
-    dates = [
-        reporting_date + timedelta(days=offset)
-        for offset in range((current_date - reporting_date).days + 1)
-    ]
-    daily_url = f"{POONGGO_BASE_URL}/station/{user_id}/daily"
+    live_url = f"{POONGGO_BASE_URL}/station/{user_id}/{broadcast_no}"
     monthly_url = f"{POONGGO_BASE_URL}/station/{user_id}/monthly"
-    responses = await asyncio.gather(
-        *(
-            client.get(daily_url, params={"date": value.isoformat(), "perPage": 100})
-            for value in dates
-        ),
+    live, monthly = await asyncio.gather(
+        client.get(live_url),
         client.get(monthly_url, params={"date": f"{now.year}-{now.month:02d}-01"}),
     )
-    daily_responses = responses[:-1]
-    monthly = responses[-1]
-    for daily in daily_responses:
-        daily.raise_for_status()
+    live.raise_for_status()
     monthly.raise_for_status()
-    today = sum(parse_poonggo_total(daily.text, user_id) for daily in daily_responses)
-    fans = merge_fans_sum(
-        *(parse_poonggo_daily_fans(daily.text, user_id) for daily in daily_responses)
-    )
+    today, reporting_date = parse_poonggo_live_total(live.text, user_id, broadcast_no)
 
     return {
         "user_id": user_id,
         "date": reporting_date.isoformat(),
+        "display_date": now.date().isoformat(),
         "year": now.year,
         "month": now.month,
         "today": today,
         "total": parse_poonggo_total(monthly.text, user_id),
-        "fans": fans,
+        "fans": [],
         "broadcast_no": str(broadcast_no or ""),
-        "counting_mode": "broadcast_session_v3" if session_date else "calendar_day_v2",
+        "counting_mode": "broadcast_live_v4",
+        "finalized": False,
         "observed_at": _iso_now(),
-        "source": "poonggo_session_snapshot" if session_date else "poonggo_calendar_snapshot",
+        "source": "poonggo_live_snapshot",
     }
 
 
@@ -235,6 +198,8 @@ class PoonggoLiveService:
     def __init__(self) -> None:
         self.states: dict[str, dict[str, Any]] = {}
         self.stream_tasks: dict[str, asyncio.Task] = {}
+        self.stream_metadata: dict[str, dict[str, Any]] = {}
+        self.finalize_tasks: set[asyncio.Task] = set()
         self.subscribers: set[asyncio.Queue[str]] = set()
         self.pending_events: list[dict[str, Any]] = []
         self.dirty_ids: set[str] = set()
@@ -301,6 +266,7 @@ class PoonggoLiveService:
         metadata: dict[str, Any],
         snapshot: dict[str, Any],
         expected_revision: int | None = None,
+        only_if_current_broadcast: bool = False,
     ) -> None:
         user_id = str(metadata["user_id"]).lower()
         public_metadata = {key: value for key, value in metadata.items() if key != "semaphore"}
@@ -313,27 +279,16 @@ class PoonggoLiveService:
                 incoming_broadcast
                 and str(previous.get("broadcast_no") or "") == incoming_broadcast
             )
-            if snapshot.get("counting_mode") == "broadcast_session_v3":
-                if same_broadcast:
-                    session_offset = int(previous.get("session_offset") or 0)
-                elif (
-                    previous.get("counting_mode") == "broadcast_session_v3"
-                    and previous.get("date") == snapshot.get("date")
-                ):
-                    # A new BNO on the same day is a new broadcast. Poonggo's
-                    # daily page is cumulative, so remove all earlier session
-                    # totals carried by the previous state.
-                    session_offset = int(previous.get("session_offset") or 0) + int(
-                        previous.get("today") or 0
-                    )
-                else:
-                    session_offset = 0
-                snapshot = {
-                    **snapshot,
-                    "today": max(0, int(snapshot.get("today") or 0) - session_offset),
-                    "session_offset": session_offset,
-                }
+            if only_if_current_broadcast and not same_broadcast:
+                return
+            same_live_session = (
+                same_broadcast
+                and previous.get("counting_mode") == "broadcast_live_v4"
+                and snapshot.get("counting_mode") == "broadcast_live_v4"
+            )
             if (
+                same_live_session
+                and
                 expected_revision is not None
                 and int(previous.get("_event_revision") or 0) != expected_revision
             ):
@@ -346,28 +301,33 @@ class PoonggoLiveService:
                     "total": max(int(snapshot.get("total") or 0), int(previous.get("total") or 0)),
                     "fans": previous.get("fans") or snapshot.get("fans") or [],
                 }
-            elif (
-                same_broadcast
-                and previous.get("date") == snapshot.get("date")
-                and previous.get("counting_mode") == snapshot.get("counting_mode")
-                and str(previous.get("source") or "") == "poonggo_sse"
-            ):
-                # Poonggo HTML can lag behind its live stream. Never let a
-                # delayed snapshot reduce a value already observed over SSE.
+            elif same_live_session:
+                # The broadcast's live HTML can lag behind SSE or a previous
+                # live snapshot. Its cumulative counter must stay monotonic.
                 snapshot = {
                     **snapshot,
                     "today": max(int(snapshot.get("today") or 0), int(previous.get("today") or 0)),
                     "total": max(int(snapshot.get("total") or 0), int(previous.get("total") or 0)),
                     "fans": merge_fans_max(snapshot.get("fans") or [], previous.get("fans") or []),
-                    "source": "poonggo_sse",
+                    "source": (
+                        "poonggo_live_final"
+                        if snapshot.get("source") == "poonggo_live_final"
+                        else (
+                            "poonggo_sse"
+                            if previous.get("source") == "poonggo_sse"
+                            else snapshot.get("source")
+                        )
+                    ),
                 }
+            if same_live_session:
+                snapshot["fans"] = previous.get("fans") or []
             next_state = {
                 **previous,
                 **public_metadata,
                 **snapshot,
                 "user_id": metadata["user_id"],
                 "connected": bool(previous.get("connected")),
-                "counting_mode": snapshot.get("counting_mode") or "calendar_day_v2",
+                "counting_mode": snapshot.get("counting_mode") or "broadcast_live_v4",
                 "_event_revision": int(previous.get("_event_revision") or 0),
             }
             self.states[user_id] = next_state
@@ -399,30 +359,27 @@ class PoonggoLiveService:
             }
             current_month = (now.year, now.month)
             stored_month = (int(state.get("year") or 0), int(state.get("month") or 0))
-            session_date = parse_broadcast_start_date(metadata.get("broadcast_start"))
-            session_mode = "broadcast_session_v3" if session_date else "calendar_day_v2"
-            reporting_date = (session_date or now.date()).isoformat()
             same_broadcast = bool(
                 metadata.get("broadcast_no")
                 and str(state.get("broadcast_no") or "") == str(metadata["broadcast_no"])
             )
+            session_date = parse_broadcast_start_date(metadata.get("broadcast_start"))
+            reporting_date = (
+                str(state["date"])
+                if same_broadcast and state.get("counting_mode") == "broadcast_live_v4"
+                else (session_date or now.date()).isoformat()
+            )
             if (
                 state.get("date") != reporting_date
-                or state.get("counting_mode") != session_mode
+                or state.get("counting_mode") != "broadcast_live_v4"
                 or not same_broadcast
             ):
-                # A real SOOP broadcast keeps its broadStart date across
-                # midnight.  A different BNO is a new session even on the
-                # same calendar day.
                 state = {
                     **state,
                     "date": reporting_date,
                     "today": 0,
                     "fans": [],
-                    "counting_mode": session_mode,
-                    "session_offset": int(state.get("session_offset") or 0)
-                    if state.get("date") == reporting_date
-                    else 0,
+                    "counting_mode": "broadcast_live_v4",
                 }
             if stored_month != current_month:
                 state = {**state, "year": now.year, "month": now.month, "total": 0}
@@ -430,11 +387,13 @@ class PoonggoLiveService:
                 **state,
                 **public_metadata,
                 "today": int(state.get("today") or 0) + amount,
+                "display_date": now.date().isoformat(),
                 "total": int(state.get("total") or 0) + amount,
                 "observed_at": _event_time(event.get("occurredAt") or event.get("occurred_at")),
                 "source": "poonggo_sse",
                 "connected": True,
-                "counting_mode": session_mode,
+                "counting_mode": "broadcast_live_v4",
+                "finalized": False,
                 "_event_revision": int(state.get("_event_revision") or 0) + 1,
             }
             donor_id = str(
@@ -551,6 +510,43 @@ class PoonggoLiveService:
     async def _stream_member(self, metadata: dict[str, Any]) -> None:
         await asyncio.gather(self._consume_sse(metadata), self._reconcile(metadata))
 
+    async def _finalize_stream(self, metadata: dict[str, Any]) -> None:
+        """Keep the last broadcast value after SOOP reports that it ended."""
+
+        user_id = str(metadata["user_id"]).lower()
+        broadcast_no = str(metadata["broadcast_no"])
+        await asyncio.sleep(3)
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            for attempt in range(2):
+                try:
+                    snapshot = await fetch_poonggo_snapshot(
+                        client,
+                        metadata["user_id"],
+                        broadcast_start=metadata.get("broadcast_start"),
+                        broadcast_no=broadcast_no,
+                    )
+                    snapshot["source"] = "poonggo_live_final"
+                    await self.apply_snapshot(
+                        metadata, snapshot, only_if_current_broadcast=True
+                    )
+                    break
+                except Exception as error:
+                    print(f"[{user_id}] final live snapshot attempt {attempt + 1} failed: {error}")
+                    if attempt == 0:
+                        await asyncio.sleep(3)
+
+        async with self.lock:
+            state = self.states.get(user_id)
+            if not state or str(state.get("broadcast_no") or "") != broadcast_no:
+                return
+            state["finalized"] = True
+            state["connected"] = False
+            state["display_date"] = datetime.now(KST).date().isoformat()
+            self.dirty_ids.add(user_id)
+            self.changed.set()
+            payload = dict(state)
+        self._broadcast("total", payload)
+
     async def sync_streams(self) -> None:
         semaphore = asyncio.Semaphore(2)
         while True:
@@ -579,9 +575,15 @@ class PoonggoLiveService:
             for key, task in tuple(self.stream_tasks.items()):
                 current = self.states.get(key) or {}
                 wanted = desired.get(key)
-                if wanted is None or str(current.get("broadcast_no") or "") not in {"", wanted["broadcast_no"]}:
+                metadata = self.stream_metadata.get(key)
+                if wanted is None or (metadata and metadata["broadcast_no"] != wanted["broadcast_no"]):
                     task.cancel()
                     self.stream_tasks.pop(key, None)
+                    self.stream_metadata.pop(key, None)
+                    if metadata:
+                        final_task = asyncio.create_task(self._finalize_stream(metadata))
+                        self.finalize_tasks.add(final_task)
+                        final_task.add_done_callback(self.finalize_tasks.discard)
                     if current:
                         current["connected"] = False
                         self._broadcast("status", current)
@@ -590,62 +592,8 @@ class PoonggoLiveService:
                 task = self.stream_tasks.get(key)
                 if task is None or task.done():
                     self.stream_tasks[key] = asyncio.create_task(self._stream_member(metadata))
+                    self.stream_metadata[key] = metadata
             await asyncio.sleep(5)
-
-    async def reconcile_roster_forever(self) -> None:
-        """Slowly correct every member from Poonggo without delaying startup.
-
-        Live members already have a 90-second exact snapshot lane.  This
-        independent sweep covers offline/missed-live members at the requested
-        two-hour cadence, one station at a time, so a stale Poong.today value
-        cannot remain in today's ranking indefinitely.
-        """
-
-        await asyncio.sleep(5)
-        while True:
-            started = asyncio.get_running_loop().time()
-            try:
-                cached = get_cached_result() or {}
-                live_ids = set(self.stream_tasks)
-                members: dict[str, dict[str, Any]] = {}
-                for item in cached.get("items") or []:
-                    user_id = str(item.get("user_id") or "").strip()
-                    if not user_id or item.get("is_on_leave"):
-                        continue
-                    key = user_id.lower()
-                    if key in live_ids:
-                        continue
-                    members[key] = {
-                        "user_id": user_id,
-                        "crew_name": str(item.get("crew_name") or ""),
-                        "nickname": str(item.get("nickname") or user_id),
-                    }
-
-                async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
-                    for metadata in members.values():
-                        try:
-                            previous = self.states.get(str(metadata["user_id"]).lower()) or {}
-                            if previous.get("counting_mode") == "broadcast_session_v3":
-                                # The calendar page cannot reconstruct a
-                                # completed cross-midnight session. Preserve
-                                # the final session snapshot/SSE value until a
-                                # new authoritative SOOP BNO starts.
-                                continue
-                            snapshot = await fetch_poonggo_snapshot(client, metadata["user_id"])
-                            await self.apply_snapshot(metadata, snapshot)
-                        except asyncio.CancelledError:
-                            raise
-                        except Exception as error:
-                            print(f"[{metadata['user_id']}] Poonggo roster snapshot failed: {error}")
-                        await asyncio.sleep(ROSTER_RECONCILE_DELAY)
-                print(f"Poonggo roster reconciliation complete: {len(members)} offline members.")
-            except asyncio.CancelledError:
-                raise
-            except Exception as error:
-                print(f"Poonggo roster reconciliation failed: {error}")
-
-            elapsed = asyncio.get_running_loop().time() - started
-            await asyncio.sleep(max(5, ROSTER_RECONCILE_SECONDS - elapsed))
 
     async def flush_forever(self) -> None:
         while True:
@@ -674,11 +622,7 @@ class PoonggoLiveService:
 
     async def run(self) -> None:
         await self.restore()
-        await asyncio.gather(
-            self.sync_streams(),
-            self.reconcile_roster_forever(),
-            self.flush_forever(),
-        )
+        await asyncio.gather(self.sync_streams(), self.flush_forever())
 
 
 def create_live_app(service: PoonggoLiveService) -> FastAPI:

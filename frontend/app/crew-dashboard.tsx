@@ -68,6 +68,9 @@ type AdminSession = {
 type LiveTotal = {
   user_id: string;
   date: string;
+  display_date?: string;
+  counting_mode?: string;
+  finalized?: boolean;
   year: number;
   month: number;
   today: number;
@@ -102,9 +105,13 @@ function applyLiveTotalsToCrew(
   const today = getKstDateKey();
   const members = crew.members.map((member) => {
     const live = totals.get(member.user_id.toLowerCase());
+    const visibleDate =
+      live?.counting_mode === "broadcast_live_v4"
+        ? live.display_date
+        : live?.date;
     if (
       !live ||
-      live.date !== today ||
+      visibleDate !== today ||
       live.year !== currentPeriod.year ||
       live.month !== currentPeriod.month
     ) {
