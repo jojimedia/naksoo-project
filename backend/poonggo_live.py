@@ -33,7 +33,7 @@ from realtime_db import (
 
 POONGGO_BASE_URL = "https://poonggo.com"
 POONGGO_SSE_URL = "https://sse2.poonggo.com"
-RECONCILE_SECONDS = max(60, int(os.environ.get("NAKSOO_POONGGO_RECONCILE_SECONDS", "90")))
+RECONCILE_SECONDS = max(60, int(os.environ.get("NAKSOO_POONGGO_RECONCILE_SECONDS", "60")))
 FLUSH_SECONDS = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_SECONDS", "2")))
 FLUSH_EVENT_COUNT = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_EVENT_COUNT", "20")))
 MAX_SEEN_IDS = max(1_000, int(os.environ.get("NAKSOO_LIVE_SEEN_IDS", "10000")))
@@ -53,7 +53,12 @@ _LIVE_STATION = re.compile(
 )
 _LIVE_INFO = re.compile(
     r'liveInfo:\{[^}]*?startedAt:new Date\((?P<started>\d+)\)'
-    r'[^}]*?donationAmount:"(?P<amount>\d+)"',
+    r'[^}]*?donationAmount:"(?P<amount>\d+)"[^}]*?donationCount:"(?P<count>\d+)"',
+    re.DOTALL,
+)
+_LIVE_DONATION = re.compile(
+    r'\{id:"(?P<id>[^\"]+)",donatorId:"(?P<user>(?:\\.|[^\"])*)",'
+    r'donatorNickname:"(?P<nick>(?:\\.|[^\"])*)",amount:"(?P<amount>\d+)"',
     re.DOTALL,
 )
 
@@ -147,6 +152,66 @@ def parse_poonggo_live_total(html: str, user_id: str, broadcast_no: str) -> tupl
     return int(live.group("amount")), started
 
 
+def parse_poonggo_live_donations(
+    html: str, user_id: str, broadcast_no: str
+) -> tuple[list[dict[str, Any]], list[str], bool]:
+    """Aggregate the broadcast's own donation list, never a calendar-day list."""
+
+    station = _LIVE_STATION.search(html)
+    if not station or (station.group("user").lower(), station.group("stream")) != (
+        user_id.lower(), str(broadcast_no)
+    ):
+        raise ValueError(f"Poonggo live broadcast mismatch for {user_id}/{broadcast_no}")
+    live = _LIVE_INFO.search(html, station.end())
+    if not live:
+        raise ValueError(f"Poonggo live donations unavailable for {user_id}/{broadcast_no}")
+    opening = html.find("donations:[", live.end())
+    if opening < 0:
+        raise ValueError(f"Poonggo live donation list missing for {user_id}/{broadcast_no}")
+    start = opening + len("donations:")
+    depth, quoted, escaped = 0, False, False
+    end = -1
+    for index in range(start, len(html)):
+        char = html[index]
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                end = index
+                break
+    if end < 0:
+        raise ValueError(f"Poonggo live donation list incomplete for {user_id}/{broadcast_no}")
+
+    donations = list(_LIVE_DONATION.finditer(html[start + 1:end]))
+    complete = len(donations) == int(live.group("count"))
+    fans: dict[str, dict[str, Any]] = {}
+    for donation in donations:
+        donor_id = _decode_js_string(donation.group("user"))
+        nickname = _decode_js_string(donation.group("nick"))
+        key = (donor_id or nickname).lower()
+        if not key:
+            continue
+        fan = fans.setdefault(key, {"user_id": donor_id, "nickname": nickname, "balloons": 0})
+        fan["balloons"] += int(donation.group("amount"))
+        fan["nickname"] = nickname
+    ordered = sorted(fans.values(), key=lambda fan: fan["balloons"], reverse=True)
+    return (
+        [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)],
+        [donation.group("id") for donation in donations],
+        complete,
+    )
+
+
 def _iso_now() -> str:
     return datetime.now(KST).isoformat()
 
@@ -176,6 +241,9 @@ async def fetch_poonggo_snapshot(
     live.raise_for_status()
     monthly.raise_for_status()
     today, reporting_date = parse_poonggo_live_total(live.text, user_id, broadcast_no)
+    fans, donation_ids, fans_complete = parse_poonggo_live_donations(
+        live.text, user_id, broadcast_no
+    )
 
     return {
         "user_id": user_id,
@@ -185,7 +253,9 @@ async def fetch_poonggo_snapshot(
         "month": now.month,
         "today": today,
         "total": parse_poonggo_total(monthly.text, user_id),
-        "fans": [],
+        "fans": fans,
+        "_donation_ids": donation_ids,
+        "_fans_complete": fans_complete,
         "broadcast_no": str(broadcast_no or ""),
         "counting_mode": "broadcast_live_v4",
         "finalized": False,
@@ -270,6 +340,9 @@ class PoonggoLiveService:
     ) -> None:
         user_id = str(metadata["user_id"]).lower()
         public_metadata = {key: value for key, value in metadata.items() if key != "semaphore"}
+        snapshot = dict(snapshot)
+        donation_ids = snapshot.pop("_donation_ids", [])
+        fans_complete = snapshot.pop("_fans_complete", False)
         async with self.lock:
             previous = self.states.get(user_id) or {}
             incoming_broadcast = str(
@@ -286,24 +359,20 @@ class PoonggoLiveService:
                 and previous.get("counting_mode") == "broadcast_live_v4"
                 and snapshot.get("counting_mode") == "broadcast_live_v4"
             )
-            if (
+            in_flight_event = (
                 same_live_session
-                and
-                expected_revision is not None
+                and expected_revision is not None
                 and int(previous.get("_event_revision") or 0) != expected_revision
+            )
+            recent_event = (
+                same_live_session
+                and float(previous.get("_last_sse_at") or 0) > datetime.now(KST).timestamp() - 20
+            )
+            if in_flight_event or (
+                recent_event and int(snapshot.get("today") or 0) < int(previous.get("today") or 0)
             ):
-                # A gift arrived while both HTML snapshots were in flight.
-                # Keep the immediately applied event and let the next quiet
-                # reconciliation establish the exact authoritative baseline.
-                snapshot = {
-                    **snapshot,
-                    "today": max(int(snapshot.get("today") or 0), int(previous.get("today") or 0)),
-                    "total": max(int(snapshot.get("total") or 0), int(previous.get("total") or 0)),
-                    "fans": previous.get("fans") or snapshot.get("fans") or [],
-                }
-            elif same_live_session:
-                # The broadcast's live HTML can lag behind SSE or a previous
-                # live snapshot. Its cumulative counter must stay monotonic.
+                # An HTML response can briefly lag a newly received SSE gift.
+                # Retry the exact broadcast baseline on the next reconciliation.
                 snapshot = {
                     **snapshot,
                     "today": max(int(snapshot.get("today") or 0), int(previous.get("today") or 0)),
@@ -312,15 +381,13 @@ class PoonggoLiveService:
                     "source": (
                         "poonggo_live_final"
                         if snapshot.get("source") == "poonggo_live_final"
-                        else (
-                            "poonggo_sse"
-                            if previous.get("source") == "poonggo_sse"
-                            else snapshot.get("source")
-                        )
+                        else "poonggo_sse"
                     ),
                 }
-            if same_live_session:
-                snapshot["fans"] = previous.get("fans") or []
+            elif same_live_session and not fans_complete:
+                snapshot["fans"] = merge_fans_max(snapshot.get("fans") or [], previous.get("fans") or [])
+            for donation_id in donation_ids:
+                self._remember_id(str(donation_id))
             next_state = {
                 **previous,
                 **public_metadata,
@@ -395,6 +462,7 @@ class PoonggoLiveService:
                 "counting_mode": "broadcast_live_v4",
                 "finalized": False,
                 "_event_revision": int(state.get("_event_revision") or 0) + 1,
+                "_last_sse_at": now.timestamp(),
             }
             donor_id = str(
                 event.get("donatorId")

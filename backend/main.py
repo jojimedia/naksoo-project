@@ -299,11 +299,33 @@ async def fetch_live_status(client, user_id):
     result = str(channel.get("RESULT"))
     is_password = channel.get("BPWD") == "Y"
     is_live = result == "1"
+    broadcast_no = channel.get("BNO") or None
 
-    if not is_password and result in {"-6", "-8"} and channel.get("TITLE"):
-        # Restricted playback is not evidence of an ended broadcast. Confirm
-        # public presence without attempting to access the restricted stream.
-        is_live = user_id.lower() in await fetch_public_live_ids(client)
+    if not is_password and result in {"-6", "-8"}:
+        # The SOOP player hides BNO for adult streams, and the shared public
+        # roster can omit them entirely. Poonggo's station page exposes both
+        # the current live flag and the broadcast number without playback.
+        try:
+            station_response = await client.get(f"https://poonggo.com/station/{user_id}")
+            station_response.raise_for_status()
+            station = next(
+                (
+                    match for match in re.finditer(
+                        r'streamer:\{streamNo:"(?P<no>[^\"]*)",streamerId:"(?P<id>[^\"]+)"[^}]*?isLive:(?P<live>true|false)',
+                        station_response.text,
+                    )
+                    if match.group("id").lower() == user_id.lower()
+                ),
+                None,
+            )
+            if station is not None:
+                is_live = station.group("live") == "true" and bool(station.group("no"))
+                broadcast_no = station.group("no") if is_live else None
+            else:
+                is_live = False
+        except (httpx.HTTPError, ValueError) as error:
+            print(f"[{user_id}] Poonggo restricted LIVE status failed: {error}")
+            is_live = user_id.lower() in await fetch_public_live_ids(client)
 
     return {
         "is_live": is_live and not is_password,
@@ -311,7 +333,7 @@ async def fetch_live_status(client, user_id):
         # Keep these fields with the ranking cache so the web UI can render a
         # live badge/thumbnail without starting another browser-side polling
         # loop for every member.
-        "broadcast_no": channel.get("BNO") or None,
+        "broadcast_no": broadcast_no,
         "broadcast_title": channel.get("TITLE") or None,
         "viewer_count": channel.get("CTUSER") or None,
     }

@@ -9,6 +9,7 @@ from poonggo_live import (
     PoonggoLiveService,
     fetch_poonggo_snapshot,
     parse_poonggo_daily_fans,
+    parse_poonggo_live_donations,
     parse_poonggo_live_total,
     parse_poonggo_total,
 )
@@ -34,11 +35,25 @@ def live_page(user_id: str, stream_no: str, amount: int, started_ms: int) -> str
         '<script>sidebar:{donationAmount:"999999"},'
         f'streamer:{{streamNo:"{stream_no}",streamerId:"{user_id}",isLive:true}},'
         f'liveInfo:{{startedAt:new Date({started_ms}),endedAt:null,'
-        f'donationAmount:"{amount}",donationCount:"1"}},donations:[]</script>'
+        f'donationAmount:"{amount}",donationCount:"0"}},donations:[]</script>'
     )
 
 
 class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
+    def test_broadcast_donors_sum_to_live_total(self):
+        html = (
+            '<script>streamer:{streamNo:"297247895",streamerId:"dhtnqls1238",isLive:true}},'
+            'liveInfo:{startedAt:new Date(1789824038000),donationAmount:"15618",donationCount:"3"},'
+            'donations:[{id:"1",donatorId:"fan1",donatorNickname:"큰손",amount:"10000"},'
+            '{id:"2",donatorId:"fan2",donatorNickname:"후원자",amount:"5618"},'
+            '{id:"3",donatorId:"fan1",donatorNickname:"큰손",amount:"0"}]</script>'
+        )
+        fans, ids, complete = parse_poonggo_live_donations(html, "dhtnqls1238", "297247895")
+        self.assertTrue(complete)
+        self.assertEqual(ids, ["1", "2", "3"])
+        self.assertEqual(sum(fan["balloons"] for fan in fans), 15618)
+        self.assertEqual([fan["nickname"] for fan in fans], ["큰손", "후원자"])
+
     def test_parser_uses_station_summary_not_sidebar(self):
         self.assertEqual(parse_poonggo_total(page("03apple", 61222), "03apple"), 61222)
         self.assertEqual(parse_poonggo_daily_fans(page("03apple", 61222), "03apple")[0]["nickname"], "큰손")
@@ -127,6 +142,31 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.states["03apple"]["today"], 150)
         self.assertEqual(service.states["03apple"]["total"], 1050)
         self.assertEqual(service.states["03apple"]["source"], "poonggo_sse")
+
+    async def test_quiet_live_snapshot_corrects_inflated_value_and_donors(self):
+        service = PoonggoLiveService()
+        now = datetime.now(KST)
+        metadata = {"user_id": "dhtnqls1238", "broadcast_no": "297247895"}
+        base = {
+            "date": now.date().isoformat(), "display_date": now.date().isoformat(),
+            "year": now.year, "month": now.month, "broadcast_no": "297247895",
+            "counting_mode": "broadcast_live_v4", "observed_at": now.isoformat(),
+            "source": "poonggo_live_snapshot", "total": 50000,
+        }
+        await service.apply_snapshot(metadata, {
+            **base, "today": 97045,
+            "fans": [{"user_id": "stale", "nickname": "stale", "balloons": 97045}],
+            "_fans_complete": True,
+        })
+        await service.apply_snapshot(metadata, {
+            **base, "today": 15618, "total": 40000,
+            "fans": [{"user_id": "fan", "nickname": "큰손", "balloons": 15618}],
+            "_fans_complete": True,
+        })
+        state = service.states["dhtnqls1238"]
+        self.assertEqual(state["today"], 15618)
+        self.assertEqual(state["total"], 40000)
+        self.assertEqual([fan["user_id"] for fan in state["fans"]], ["fan"])
 
     async def test_same_real_broadcast_keeps_start_date_at_midnight(self):
         service = PoonggoLiveService()
