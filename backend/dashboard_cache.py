@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
-from live_totals import KST, chart_date
+from live_totals import KST
 
 
 def _number(value: Any) -> int:
@@ -60,6 +60,7 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
     previous = result.get("previous_period") or {}
     current_year, current_month = _number(current.get("year")), _number(current.get("month"))
     display_day = now.day
+    is_current_calendar_month = (current_year, current_month) == (now.year, now.month)
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for item in result.get("items") or []:
         if not item.get("success") or not item.get("crew_name") or not item.get("user_id"):
@@ -74,15 +75,11 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
         for rank, item in enumerate(active, 1):
             cur, prev = item.get("current_month") or {}, item.get("previous_month") or {}
             current_total, previous_total = _number(cur.get("total_balloons")), _number(prev.get("total_balloons"))
-            today = _daily(cur, display_day)
-            if today <= 0:
-                yesterday = now - timedelta(days=1)
-                source = cur if (yesterday.year, yesterday.month) == (current_year, current_month) else prev
-                today = _daily(source, yesterday.day)
-            reporting_date = chart_date(now)
+            today = _daily(cur, display_day) if is_current_calendar_month else 0
+            reporting_date = now.date().isoformat()
             for source in (cur, prev):
                 realtime = source.get("realtime_totals") or {}
-                if realtime.get("date") == reporting_date.isoformat() and realtime.get("today") is not None:
+                if is_current_calendar_month and realtime.get("date") == reporting_date and realtime.get("today") is not None:
                     today = _number(realtime["today"])
             members.append({"rank": rank, "user_id": str(item["user_id"]), "nickname": str(item.get("nickname") or item["user_id"]), "profile_image_url": _profile(str(item["user_id"]), item.get("profile_image_url")), "broadcast_start": item.get("broadcast_start"), "is_live": bool(item.get("is_live")), "broadcast_no": item.get("broadcast_no"), "broadcast_title": item.get("broadcast_title"), "viewer_count": item.get("viewer_count"), "current_balloons": current_total, "previous_balloons": previous_total, "change_balloons": current_total - previous_total, "change_rate": round(((current_total - previous_total) / previous_total * 100) if previous_total else (100 if current_total else 0), 1), "display_day_balloons": today, "current_daily_balloons": cur.get("daily_balloons") or [], "previous_daily_balloons": prev.get("daily_balloons") or [], "monthly_fans": [], "monthly_top_fans": _top_fans(cur), "is_on_leave": False})
         total = sum(member["current_balloons"] for member in members)

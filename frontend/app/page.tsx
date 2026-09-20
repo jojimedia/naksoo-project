@@ -405,26 +405,6 @@ function getDailyBalloonsForDate(
   return period?.daily_balloons.find((daily) => daily.day === day)?.balloons ?? 0;
 }
 
-function hasDailyEntryForDate(
-  period: MonthlyStats | null,
-  day: number,
-) {
-  return Boolean(period?.daily_balloons.some((daily) => daily.day === day));
-}
-
-function getPreviousCalendarDate(
-  date: Pick<ReturnType<typeof getKstDateParts>, "year" | "month" | "day">,
-) {
-  const utc = new Date(Date.UTC(date.year, date.month - 1, date.day));
-  utc.setUTCDate(utc.getUTCDate() - 1);
-
-  return {
-    year: utc.getUTCFullYear(),
-    month: utc.getUTCMonth() + 1,
-    day: utc.getUTCDate(),
-  };
-}
-
 function getMonthlyStatsForDate(
   item: RankingItem,
   result: NaksooResult,
@@ -447,12 +427,9 @@ function getDailyBalloonsForDisplayDate(
     "year" | "month" | "day"
   >,
 ) {
-  // Match Poong's reporting day (KST minus eight hours). An explicit zero
-  // must win over the legacy fallback to yesterday.
-  const reporting = getKstDateParts(
-    new Date(Date.now() - 8 * 60 * 60 * 1000),
-  );
-  const reportingDate = formatDateParts(reporting);
+  // The live overlay handles broadcasts crossing midnight. Calendar-day
+  // fallback must never show yesterday's total under today's label.
+  const reportingDate = formatDateParts(displayDate);
   for (const month of [item.current_month, item.previous_month]) {
     if (
       month.realtime_totals?.date === reportingDate &&
@@ -462,22 +439,9 @@ function getDailyBalloonsForDisplayDate(
     }
   }
 
-  const todayPeriod = getMonthlyStatsForDate(item, result, displayDate);
-  const todayHasEntry = hasDailyEntryForDate(todayPeriod, displayDate.day);
-  const todayBalloons = todayHasEntry
-    ? getDailyBalloonsForDate(todayPeriod, displayDate.day)
-    : null;
-
-  // 풍투는 다음 방송일 슬롯을 0으로 미리 두는 경우가 있다.
-  // 오늘 항목이 없거나 0이면, 방송 시작 전으로 보고 전일 값을 쓴다.
-  if (todayBalloons != null && todayBalloons > 0) {
-    return todayBalloons;
-  }
-
-  const previousDate = getPreviousCalendarDate(displayDate);
   return getDailyBalloonsForDate(
-    getMonthlyStatsForDate(item, result, previousDate),
-    previousDate.day,
+    getMonthlyStatsForDate(item, result, displayDate),
+    displayDate.day,
   );
 }
 

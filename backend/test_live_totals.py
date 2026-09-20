@@ -122,6 +122,19 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(member["display_day_balloons"], today)
             self.assertEqual(member["current_balloons"], 140)
 
+    def test_dashboard_does_not_show_yesterday_as_today(self):
+        result = sample()
+        result["items"][0]["current_month"]["daily_balloons"] = [
+            {"day": 19, "balloons": 34767},
+        ]
+        result["items"][0]["current_month"]["realtime_totals"] = {
+            "date": "2026-09-19", "today": 34767,
+        }
+        with patch("dashboard_cache.datetime") as clock:
+            clock.now.return_value = datetime(2026, 9, 20, 2, tzinfo=KST)
+            dashboard = build_dashboard(result)
+        self.assertEqual(dashboard["crews"][0]["members"][0]["display_day_balloons"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
