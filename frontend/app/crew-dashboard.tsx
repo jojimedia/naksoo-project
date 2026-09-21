@@ -78,6 +78,14 @@ type LiveTotal = {
   observed_at: string;
   source: string;
   connected?: boolean;
+  previous_date?: string | null;
+  previous_balloons?: number;
+  previous_fans?: Array<{
+    rank?: number;
+    user_id: string;
+    nickname: string;
+    balloons: number;
+  }>;
   fans?: Array<{
     rank?: number;
     user_id: string;
@@ -86,41 +94,89 @@ type LiveTotal = {
   }>;
 };
 
-function getKstDateKey() {
+function getKstDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Seoul",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(new Date());
+  }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
+}
+
+function getYesterdayDateKey(today: string) {
+  const date = new Date(`${today}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function getDateLabel(dateKey: string) {
+  const [, month, day] = dateKey.split("-");
+  return `${Number(month)}/${Number(day)}`;
 }
 
 function applyLiveTotalsToCrew(
   crew: CrewCardData,
   totals: Map<string, LiveTotal>,
   currentPeriod: CrewDashboardData["current_period"],
+  today: string,
 ) {
-  const today = getKstDateKey();
+  const yesterday = getYesterdayDateKey(today);
+  const [yesterdayYear, yesterdayMonth, yesterdayDay] = yesterday.split("-").map(Number);
+  const yesterdayIsCurrentMonth =
+    yesterdayYear === currentPeriod.year && yesterdayMonth === currentPeriod.month;
+  const yesterdayIsPreviousMonth =
+    yesterdayYear === (currentPeriod.month === 1 ? currentPeriod.year - 1 : currentPeriod.year) &&
+    yesterdayMonth === (currentPeriod.month === 1 ? 12 : currentPeriod.month - 1);
   const members = crew.members.map((member) => {
     const live = totals.get(member.user_id.toLowerCase());
-    const visibleDate =
-      live?.counting_mode === "broadcast_live_v4"
-        ? live.display_date
-        : live?.date;
+    const yesterdayDays = yesterdayIsCurrentMonth
+      ? member.current_daily_balloons
+      : yesterdayIsPreviousMonth
+        ? member.previous_daily_balloons
+        : [];
+    const yesterdayLive =
+      live?.counting_mode === "broadcast_live_v4" &&
+      live.date === yesterday &&
+      live.year === currentPeriod.year &&
+      live.month === currentPeriod.month;
+    const storedYesterday = live?.previous_date === yesterday;
+    const yesterdayValue = yesterdayLive
+      ? Number(live.today)
+      : storedYesterday
+        ? Number(live.previous_balloons ?? 0)
+        : (yesterdayDays.find((entry) => entry.day === yesterdayDay)?.balloons ?? 0);
+    const yesterdayFans = yesterdayLive
+      ? (live.fans ?? [])
+      : storedYesterday
+        ? (live.previous_fans ?? [])
+        : [];
+    const withYesterday = {
+      ...member,
+      display_day_balloons: yesterdayLive ? 0 : member.display_day_balloons,
+      daily_fans: yesterdayLive ? [] : member.daily_fans,
+      yesterday_balloons: yesterdayValue,
+      yesterday_fans: yesterdayFans.map((fan, index) => ({
+        rank: index + 1,
+        user_id: fan.user_id,
+        nickname: fan.nickname,
+        balloons: Number(fan.balloons),
+      })),
+    };
+    const visibleDate = live?.date;
     if (
       !live ||
       visibleDate !== today ||
       live.year !== currentPeriod.year ||
       live.month !== currentPeriod.month
     ) {
-      return member;
+      return withYesterday;
     }
     const current = Number(live.total);
     const previous = member.previous_balloons;
     return {
-      ...member,
+      ...withYesterday,
       current_balloons: current,
       display_day_balloons: Number(live.today),
       daily_fans: (live.fans ?? []).map((fan, index) => ({
@@ -507,15 +563,19 @@ function DonorStreamerRow({
   );
 }
 
-function OverallRankingCard({ rows }: { rows: OverallMember[] }) {
-  const [mode, setMode] = useState<"month" | "today">("month");
+function dailyRankingScore(row: OverallMember, mode: "yesterday" | "today") {
+  return mode === "yesterday" ? (row.member.yesterday_balloons ?? 0) : row.member.display_day_balloons;
+}
+
+function OverallRankingCard({ rows, yesterdayLabel }: { rows: OverallMember[]; yesterdayLabel: string }) {
+  const [mode, setMode] = useState<"month" | "yesterday" | "today">("month");
   const visibleRows = useMemo(
     () =>
       rows
         .slice()
         .sort((a, b) =>
-          mode === "today"
-            ? b.member.display_day_balloons - a.member.display_day_balloons
+          mode !== "month"
+            ? dailyRankingScore(b, mode) - dailyRankingScore(a, mode)
             : b.member.current_balloons - a.member.current_balloons,
         )
         .map((row, index) => ({
@@ -529,10 +589,22 @@ function OverallRankingCard({ rows }: { rows: OverallMember[] }) {
     <PeriodRankingCard
       title="전체순위"
       headerColor="#5b4bdb"
-      scoreLabel={mode === "today" ? "오늘" : "별풍선"}
+      scoreLabel={mode === "yesterday" ? yesterdayLabel : mode === "today" ? "오늘" : "별풍선"}
       rows={visibleRows}
       headerTabs={
         <div className="mt-2 flex gap-1">
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 text-[11px] font-bold transition ${
+              mode === "yesterday"
+                ? "border-[#6ee7b7]/70 bg-[#064e3b]/55 text-[#a7f3d0]"
+                : "border-white/20 bg-black/10 text-white/75 hover:text-white"
+            }`}
+            aria-pressed={mode === "yesterday"}
+            onClick={() => setMode("yesterday")}
+          >
+            어제
+          </button>
           <button
             type="button"
             className={`rounded border px-2.5 py-1 text-[11px] font-bold transition ${
@@ -553,18 +625,19 @@ function OverallRankingCard({ rows }: { rows: OverallMember[] }) {
             }`}
             onClick={() => setMode("today")}
           >
-            오늘의 별풍선
+            오늘
           </button>
         </div>
       }
       getRowProps={
-        mode === "today"
+        mode !== "month"
           ? (row) => ({
-              scoreOverride: row.member.display_day_balloons,
-              scoreToneValue: row.member.display_day_balloons,
-              todayBalloonsOverride: row.member.display_day_balloons,
-              fansOverride: row.member.daily_fans ?? [],
-              fanPanelTitle: "오늘의 후원자",
+              scoreOverride: dailyRankingScore(row, mode),
+              scoreToneValue: dailyRankingScore(row, mode),
+              todayBalloonsOverride: dailyRankingScore(row, mode),
+              fansOverride: mode === "yesterday" ? (row.member.yesterday_fans ?? []) : (row.member.daily_fans ?? []),
+              fanPanelTitle: mode === "yesterday" ? `${yesterdayLabel} 후원자` : "오늘의 후원자",
+              dailyScoreLabel: mode === "yesterday" ? yesterdayLabel : "오늘",
               liveBroadcastMode: true,
             })
           : undefined
@@ -599,6 +672,7 @@ function PeriodRankingCard({
       balloons: number;
     }>;
     fanPanelTitle?: string;
+    dailyScoreLabel?: string;
     liveBroadcastMode?: boolean;
     todayBalloonsOverride?: number;
   };
@@ -647,6 +721,7 @@ function PeriodRankingCard({
                 scoreSubLabel={props.scoreSubLabel}
                 fansOverride={props.fansOverride}
                 fanPanelTitle={props.fanPanelTitle}
+                dailyScoreLabel={props.dailyScoreLabel}
                 liveBroadcastMode={props.liveBroadcastMode}
                 todayBalloonsOverride={props.todayBalloonsOverride}
               />
@@ -793,22 +868,29 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [liveTotals, setLiveTotals] = useState<Map<string, LiveTotal>>(
     () => new Map(),
   );
+  const [todayDateKey, setTodayDateKey] = useState(getKstDateKey);
+  const yesterdayLabel = getDateLabel(getYesterdayDateKey(todayDateKey));
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const liveCrews = useMemo(
     () =>
       data.crews.map((crew) =>
-        applyLiveTotalsToCrew(crew, liveTotals, data.current_period),
+        applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey),
       ),
-    [data.crews, data.current_period, liveTotals],
+    [data.crews, data.current_period, liveTotals, todayDateKey],
   );
   const liveFaCrew = useMemo(
     () =>
       data.fa_crew
-        ? applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period)
+        ? applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period, todayDateKey)
         : null,
-    [data.current_period, data.fa_crew, liveTotals],
+    [data.current_period, data.fa_crew, liveTotals, todayDateKey],
   );
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setTodayDateKey(getKstDateKey()), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
   const rankingCrews = useMemo(
     () => (liveFaCrew ? [...liveCrews, liveFaCrew] : liveCrews),
     [liveCrews, liveFaCrew],
@@ -1264,7 +1346,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             }`}
           >
             {showOverall && !isSearching ? (
-              <OverallRankingCard rows={overallRows} />
+              <OverallRankingCard rows={overallRows} yesterdayLabel={yesterdayLabel} />
             ) : showKings && !isSearching ? (
               <KingsRankingCard rows={kingRows} />
             ) : showFa && !isSearching ? (
@@ -1289,6 +1371,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                     membersOnly={isSearching}
                     expandMembers={isSearching}
                     searchQuery={query}
+                    yesterdayLabel={yesterdayLabel}
                   />
                 </div>
               ))

@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -231,6 +231,31 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         state = service.states["dign1461"]
         self.assertEqual(state["today"], 3000)
         self.assertEqual(state["broadcast_no"], "second")
+
+    async def test_new_broadcast_preserves_yesterday_session_details(self):
+        service = PoonggoLiveService()
+        now = datetime.now(KST)
+        yesterday = (now.date() - timedelta(days=1)).isoformat()
+        old = {"user_id": "test", "broadcast_no": "old"}
+        new = {"user_id": "test", "broadcast_no": "new"}
+        common = {
+            "display_date": yesterday, "year": now.year, "month": now.month,
+            "total": 1000, "counting_mode": "broadcast_live_v4",
+            "observed_at": now.isoformat(), "source": "poonggo_live_snapshot",
+        }
+        await service.apply_snapshot(old, {
+            **common, "date": yesterday, "today": 300, "broadcast_no": "old",
+            "fans": [{"user_id": "fan", "nickname": "후원자", "balloons": 300}],
+        })
+        await service.apply_snapshot(new, {
+            **common, "date": now.date().isoformat(), "display_date": now.date().isoformat(),
+            "today": 10, "broadcast_no": "new", "fans": [],
+        })
+        state = service.states["test"]
+        self.assertEqual(state["today"], 10)
+        self.assertEqual(state["previous_date"], yesterday)
+        self.assertEqual(state["previous_balloons"], 300)
+        self.assertEqual(state["previous_fans"][0]["nickname"], "후원자")
 
     async def test_broadcast_end_keeps_last_sse_value(self):
         service = PoonggoLiveService()

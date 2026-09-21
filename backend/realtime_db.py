@@ -151,6 +151,39 @@ ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS counting_mode TEXT NOT
 ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS session_offset BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS display_date DATE;
 ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS finalized BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS streamer_live_sessions (
+    streamer_id TEXT NOT NULL,
+    broadcast_no TEXT NOT NULL,
+    crew_name TEXT NOT NULL DEFAULT '',
+    nickname TEXT NOT NULL DEFAULT '',
+    reporting_date DATE NOT NULL,
+    display_date DATE NOT NULL,
+    year SMALLINT NOT NULL,
+    month SMALLINT NOT NULL CHECK (month BETWEEN 1 AND 12),
+    today_balloons BIGINT NOT NULL DEFAULT 0,
+    month_balloons BIGINT NOT NULL DEFAULT 0,
+    daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source TEXT NOT NULL,
+    finalized BOOLEAN NOT NULL DEFAULT FALSE,
+    observed_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (streamer_id, broadcast_no)
+);
+
+CREATE INDEX IF NOT EXISTS streamer_live_sessions_date_idx
+    ON streamer_live_sessions (reporting_date DESC, streamer_id);
+
+INSERT INTO streamer_live_sessions (
+  streamer_id, broadcast_no, crew_name, nickname, reporting_date, display_date,
+  year, month, today_balloons, month_balloons, daily_fans, source, finalized, observed_at
+)
+SELECT streamer_id, broadcast_no, crew_name, nickname, reporting_date,
+       COALESCE(display_date, reporting_date), year, month, today_balloons,
+       month_balloons, daily_fans, source, finalized, observed_at
+FROM streamer_live_totals
+WHERE COALESCE(broadcast_no, '') <> ''
+ON CONFLICT (streamer_id, broadcast_no) DO NOTHING;
 """
 
 
@@ -400,12 +433,24 @@ def load_live_totals() -> list[dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT streamer_id, crew_name, nickname, broadcast_no,
-                   reporting_date, COALESCE(display_date, reporting_date) AS display_date,
-                   year, month, today_balloons, month_balloons, daily_fans,
-                   source, counting_mode, session_offset, finalized, connected, observed_at
-            FROM streamer_live_totals
-            WHERE COALESCE(display_date, reporting_date) >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+            SELECT current_row.streamer_id, current_row.crew_name, current_row.nickname, current_row.broadcast_no,
+                   current_row.reporting_date, COALESCE(current_row.display_date, current_row.reporting_date) AS display_date,
+                   current_row.year, current_row.month, current_row.today_balloons, current_row.month_balloons,
+                   current_row.daily_fans, current_row.source, current_row.counting_mode,
+                   current_row.session_offset, current_row.finalized, current_row.connected, current_row.observed_at,
+                   previous.reporting_date AS previous_date,
+                   previous.today_balloons AS previous_balloons,
+                   previous.daily_fans AS previous_fans
+            FROM streamer_live_totals current_row
+            LEFT JOIN LATERAL (
+              SELECT session.reporting_date, session.today_balloons, session.daily_fans
+              FROM streamer_live_sessions session
+              WHERE session.streamer_id = current_row.streamer_id
+                AND session.reporting_date = (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+              ORDER BY session.observed_at DESC
+              LIMIT 1
+            ) previous ON TRUE
+            WHERE COALESCE(current_row.display_date, current_row.reporting_date) >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
             """
         ).fetchall()
     return [
@@ -428,6 +473,9 @@ def load_live_totals() -> list[dict[str, Any]]:
             # A restored row is not connected until its upstream task opens.
             "connected": False,
             "observed_at": row["observed_at"].isoformat(),
+            "previous_date": row["previous_date"].isoformat() if row["previous_date"] else None,
+            "previous_balloons": int(row["previous_balloons"] or 0),
+            "previous_fans": row["previous_fans"] or [],
         }
         for row in rows
     ]
@@ -474,6 +522,39 @@ def persist_live_updates(
                 )
 
             for row in updates:
+                if row.get("broadcast_no"):
+                    conn.execute(
+                        """
+                        INSERT INTO streamer_live_sessions (
+                          streamer_id, broadcast_no, crew_name, nickname,
+                          reporting_date, display_date, year, month, today_balloons,
+                          month_balloons, daily_fans, source, finalized, observed_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+                        ON CONFLICT (streamer_id, broadcast_no) DO UPDATE SET
+                          crew_name = EXCLUDED.crew_name,
+                          nickname = EXCLUDED.nickname,
+                          reporting_date = EXCLUDED.reporting_date,
+                          display_date = EXCLUDED.display_date,
+                          year = EXCLUDED.year,
+                          month = EXCLUDED.month,
+                          today_balloons = EXCLUDED.today_balloons,
+                          month_balloons = EXCLUDED.month_balloons,
+                          daily_fans = EXCLUDED.daily_fans,
+                          source = EXCLUDED.source,
+                          finalized = EXCLUDED.finalized,
+                          observed_at = EXCLUDED.observed_at,
+                          updated_at = NOW()
+                        """,
+                        (
+                            row["user_id"], str(row["broadcast_no"]),
+                            row.get("crew_name") or "", row.get("nickname") or row["user_id"],
+                            row["date"], row.get("display_date") or row["date"],
+                            int(row["year"]), int(row["month"]), int(row["today"]),
+                            int(row["total"]), _as_json(row.get("fans") or []),
+                            row.get("source") or "poonggo_sse", bool(row.get("finalized")),
+                            _as_datetime(row.get("observed_at")) or observed_at,
+                        ),
+                    )
                 conn.execute(
                     """
                     INSERT INTO streamer_live_totals (

@@ -227,6 +227,7 @@ export function FanRanking({
   changeBalloons,
   changeRate,
   todayBalloons,
+  dailyScoreLabel = "오늘",
   liveBroadcastMode = false,
   fanPanelTitle = "이달의 후원자",
 }: {
@@ -235,6 +236,7 @@ export function FanRanking({
   changeBalloons: number;
   changeRate: number;
   todayBalloons: number;
+  dailyScoreLabel?: string;
   liveBroadcastMode?: boolean;
   fanPanelTitle?: string;
 }) {
@@ -245,7 +247,7 @@ export function FanRanking({
     <div className="mx-1 mb-3 rounded border border-[#3a3548] bg-[#211e2b] px-2 py-2">
       {liveBroadcastMode ? (
         <div className="mb-2 flex items-center justify-between rounded border border-[#3a3548] bg-[#17151f] px-2 py-1.5">
-          <p className="text-[12px] font-semibold text-[#a8a2b8]">오늘 별풍선</p>
+          <p className="text-[12px] font-semibold text-[#a8a2b8]">{dailyScoreLabel} 별풍선</p>
           <p className="text-[13px] font-bold tabular-nums text-[#e5e7eb]">
             {formatNumber(todayBalloons)}
           </p>
@@ -320,6 +322,7 @@ export default function StreamerMemberRow({
   fanPanelTitle,
   liveBroadcastMode = false,
   todayBalloonsOverride,
+  dailyScoreLabel,
   guestbookEnabled = false,
   isAdmin = false,
   hasNewGuestbook = false,
@@ -344,6 +347,7 @@ export default function StreamerMemberRow({
   fanPanelTitle?: string;
   liveBroadcastMode?: boolean;
   todayBalloonsOverride?: number;
+  dailyScoreLabel?: string;
   guestbookEnabled?: boolean;
   isAdmin?: boolean;
   hasNewGuestbook?: boolean;
@@ -510,6 +514,7 @@ export default function StreamerMemberRow({
             changeBalloons={member.change_balloons}
             changeRate={member.change_rate}
             todayBalloons={panelTodayBalloons}
+            dailyScoreLabel={dailyScoreLabel}
             liveBroadcastMode={liveBroadcastMode}
             fanPanelTitle={
               fanPanelTitle ??

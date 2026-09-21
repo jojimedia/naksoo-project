@@ -14,7 +14,7 @@ import os
 import re
 from collections import deque
 from contextlib import suppress
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -352,6 +352,19 @@ class PoonggoLiveService:
                 incoming_broadcast
                 and str(previous.get("broadcast_no") or "") == incoming_broadcast
             )
+            previous_session: dict[str, Any] = {}
+            yesterday = (datetime.now(KST).date() - timedelta(days=1)).isoformat()
+            if (
+                previous
+                and not same_broadcast
+                and previous.get("counting_mode") == "broadcast_live_v4"
+                and previous.get("date") == yesterday
+            ):
+                previous_session = {
+                    "previous_date": yesterday,
+                    "previous_balloons": int(previous.get("today") or 0),
+                    "previous_fans": previous.get("fans") or [],
+                }
             if only_if_current_broadcast and not same_broadcast:
                 return
             same_live_session = (
@@ -390,6 +403,7 @@ class PoonggoLiveService:
                 self._remember_id(str(donation_id))
             next_state = {
                 **previous,
+                **previous_session,
                 **public_metadata,
                 **snapshot,
                 "user_id": metadata["user_id"],
