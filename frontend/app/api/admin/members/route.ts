@@ -136,12 +136,11 @@ export async function POST(request: Request) {
 
     assertCrewAccess(session, crewName);
 
-    // An FA member is already validated and has collected history. Moving it
-    // must not trigger another SOOP lookup or reset its nickname/statistics.
     const existing = await findMemberByUserId(userId);
-    const validated = existing
+    const refreshed = await validateSoopUser(existing?.user_id ?? userId);
+    const validated = refreshed ?? (existing
       ? { user_id: existing.user_id, nickname: existing.nickname }
-      : await validateSoopUser(userId);
+      : null);
 
     if (!validated) {
       return jsonError("유효하지 않은 SOOP ID입니다.");

@@ -1129,7 +1129,7 @@ export default function AdminPanelModal({
                           ? "선택됨"
                           : candidate.selectable
                             ? "선택"
-                            : "등록됨"}
+                            : `${displayCrewName(candidate.existing_crew_name ?? "다른 크루")} 소속`}
                       </span>
                     </button>
                   ))}
