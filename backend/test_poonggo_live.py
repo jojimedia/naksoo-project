@@ -40,6 +40,24 @@ def live_page(user_id: str, stream_no: str, amount: int, started_ms: int) -> str
 
 
 class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_restore_retries_and_keeps_finalized_donors(self):
+        service = PoonggoLiveService()
+        restored = {
+            "user_id": "rox0x0x",
+            "today": 20556,
+            "fans": [{"user_id": "fan", "nickname": "후원자", "balloons": 20556}],
+            "finalized": True,
+        }
+        with (
+            patch("poonggo_live.load_live_totals", side_effect=[RuntimeError("db starting"), [restored]]),
+            patch("poonggo_live.load_recent_donation_ids", return_value=[]),
+            patch("poonggo_live.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        ):
+            await service.restore()
+
+        sleep.assert_awaited_once_with(2)
+        self.assertEqual(service.snapshot()[0]["fans"][0]["nickname"], "후원자")
+
     def test_broadcast_donors_sum_to_live_total(self):
         html = (
             '<script>streamer:{streamNo:"297247895",streamerId:"dhtnqls1238",isLive:true}},'

@@ -290,15 +290,22 @@ class PoonggoLiveService:
         return True
 
     async def restore(self) -> None:
-        try:
-            for row in load_live_totals():
-                self.states[str(row["user_id"]).lower()] = dict(row)
-            for donation_id in load_recent_donation_ids():
-                self._remember_id(str(donation_id))
-        except Exception as error:
-            # PostgreSQL may still be starting with the container. The normal
-            # flush retry and the first Poonggo snapshot repopulate this state.
-            print(f"Poonggo live restore delayed: {error}")
+        while True:
+            try:
+                rows = load_live_totals()
+                donation_ids = load_recent_donation_ids()
+                for row in rows:
+                    self.states[str(row["user_id"]).lower()] = dict(row)
+                for donation_id in donation_ids:
+                    self._remember_id(str(donation_id))
+                return
+            except Exception as error:
+                # A collector and PostgreSQL can restart at the same time.
+                # Do not continue with only currently-live streams: that would
+                # drop finalized broadcasts and their donor lists from the
+                # frontend snapshot until the next broadcast starts.
+                print(f"Poonggo live restore delayed: {error}")
+                await asyncio.sleep(2)
 
     def snapshot(self) -> list[dict[str, Any]]:
         return [
