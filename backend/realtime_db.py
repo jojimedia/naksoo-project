@@ -263,6 +263,27 @@ def _previous_period(year: int, month: int) -> dict[str, int]:
     return {"year": year, "month": month - 1}
 
 
+def _is_authoritative_live_source(source: Any) -> bool:
+    """Return whether a source contains the broadcast-session truth."""
+
+    value = str(source or "").lower()
+    return value.startswith(("poonggo_sse", "poonggo_live"))
+
+
+def _should_keep_live_snapshot(
+    previous_total: int | None,
+    incoming_total: int,
+    previous_source: Any,
+    incoming_source: Any,
+) -> bool:
+    return bool(
+        previous_total is not None
+        and incoming_total <= previous_total
+        and _is_authoritative_live_source(previous_source)
+        and not _is_authoritative_live_source(incoming_source)
+    )
+
+
 def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observed_at: datetime) -> None:
     streamer_id = str(item.get("user_id") or "")
     year = int(month_data.get("year") or 0)
@@ -287,9 +308,20 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
     effective_total = previous_total if should_keep_previous_total else total
     changed = previous_total is None or effective_total != previous_total
 
-    # The ranking cache must observe the same regression protection as the
-    # normalized row; otherwise the UI could briefly show a lower total.
-    if should_keep_previous_total and previous is not None:
+    # A slower detail refresh can finish after an SSE/live-final flush.  When
+    # both snapshots have the same month total, replacing the whole daily
+    # array lets the detail source copy today's live count into yesterday.
+    # Keep the broadcast-session snapshot until a newer live source changes it.
+    should_keep_live_snapshot = previous is not None and _should_keep_live_snapshot(
+        previous_total,
+        total,
+        previous["data_source"],
+        month_data.get("data_source"),
+    )
+
+    # The ranking cache must observe the same protection as the normalized
+    # row; otherwise the UI could still publish the stale detail snapshot.
+    if (should_keep_previous_total or should_keep_live_snapshot) and previous is not None:
         month_data["total_balloons"] = effective_total
         month_data["daily_balloons"] = previous["daily_balloons"]
         month_data["fans"] = previous["fans"]
