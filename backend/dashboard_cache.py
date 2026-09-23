@@ -29,6 +29,13 @@ def _daily(period: dict[str, Any], day: int) -> int:
     return 0
 
 
+def _daily_fans(period: dict[str, Any], day: int) -> list[dict[str, Any]]:
+    for value in period.get("daily_session_fans") or []:
+        if _number(value.get("day")) == day:
+            return value.get("fans") or []
+    return []
+
+
 def _top_fans(period: dict[str, Any]) -> list[dict[str, Any]]:
     fans = sorted(period.get("fans") or [], key=lambda x: _number(x.get("balloons")), reverse=True)[:10]
     return [{"rank": index + 1, "user_id": str(fan.get("user_id") or ""), "nickname": str(fan.get("nickname") or ""), "balloons": _number(fan.get("balloons"))} for index, fan in enumerate(fans)]
@@ -76,7 +83,7 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
             cur, prev = item.get("current_month") or {}, item.get("previous_month") or {}
             current_total, previous_total = _number(cur.get("total_balloons")), _number(prev.get("total_balloons"))
             today = _daily(cur, display_day) if is_current_calendar_month else 0
-            today_fans: list[dict[str, Any]] = []
+            today_fans = _daily_fans(cur, display_day) if is_current_calendar_month else []
             reporting_date = now.date().isoformat()
             for source in (cur, prev):
                 realtime = source.get("realtime_totals") or {}
@@ -91,7 +98,7 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
                 else prev
             )
             yesterday_total = _daily(yesterday_source, yesterday.day)
-            yesterday_fans: list[dict[str, Any]] = []
+            yesterday_fans = _daily_fans(yesterday_source, yesterday.day)
             for source in (cur, prev):
                 realtime = source.get("realtime_totals") or {}
                 if realtime.get("date") == yesterday_date and realtime.get("today") is not None:

@@ -24,10 +24,12 @@ from fastapi.responses import StreamingResponse
 
 from live_totals import KST
 from realtime_db import (
+    get_daily_fan_backfill_candidates,
     get_cached_result,
     load_live_totals,
     load_recent_donation_ids,
     persist_live_updates,
+    save_daily_fan_snapshot,
 )
 
 
@@ -37,6 +39,8 @@ RECONCILE_SECONDS = max(60, int(os.environ.get("NAKSOO_POONGGO_RECONCILE_SECONDS
 FLUSH_SECONDS = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_SECONDS", "2")))
 FLUSH_EVENT_COUNT = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_EVENT_COUNT", "20")))
 MAX_SEEN_IDS = max(1_000, int(os.environ.get("NAKSOO_LIVE_SEEN_IDS", "10000")))
+DAILY_FAN_BACKFILL_BATCH = max(1, int(os.environ.get("NAKSOO_DAILY_FAN_BACKFILL_BATCH", "5")))
+DAILY_FAN_BACKFILL_SECONDS = max(30, int(os.environ.get("NAKSOO_DAILY_FAN_BACKFILL_SECONDS", "30")))
 
 _BROADCAST_INFO = re.compile(
     r'broadcastInfo:\{streamerId:"(?P<user>[^"]+)".*?donationAmount:"(?P<amount>\d+)"',
@@ -262,6 +266,24 @@ async def fetch_poonggo_snapshot(
         "observed_at": _iso_now(),
         "source": "poonggo_live_snapshot",
     }
+
+
+async def fetch_poonggo_daily_fan_snapshot(
+    client: httpx.AsyncClient,
+    user_id: str,
+    reporting_date: str,
+) -> list[dict[str, Any]]:
+    """Fetch donors only; the daily total never replaces live-session truth."""
+
+    response = await client.get(
+        f"{POONGGO_BASE_URL}/station/{user_id}/daily",
+        params={"date": reporting_date},
+    )
+    response.raise_for_status()
+    # Validate that this is the requested station page before accepting an
+    # empty list as a durable result.
+    parse_poonggo_total(response.text, user_id)
+    return parse_poonggo_daily_fans(response.text, user_id)
 
 
 class PoonggoLiveService:
@@ -718,9 +740,47 @@ class PoonggoLiveService:
                     self.pending_events = events + self.pending_events
                     self.changed.set()
 
+    async def backfill_daily_fans_forever(self) -> None:
+        """Slowly repair donor lists for broadcasts missed by the SSE lane."""
+
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            while True:
+                try:
+                    candidates = get_daily_fan_backfill_candidates(
+                        DAILY_FAN_BACKFILL_BATCH
+                    )
+                    for index, candidate in enumerate(candidates):
+                        try:
+                            fans = await fetch_poonggo_daily_fan_snapshot(
+                                client, candidate["user_id"], candidate["date"]
+                            )
+                            save_daily_fan_snapshot(
+                                candidate["user_id"],
+                                candidate["date"],
+                                fans,
+                                datetime.now(KST),
+                            )
+                            print(
+                                f"[{candidate['user_id']}] daily donor fallback "
+                                f"date={candidate['date']} fans={len(fans)}"
+                            )
+                        except Exception as error:
+                            print(
+                                f"[{candidate['user_id']}] daily donor fallback failed: {error}"
+                            )
+                        if index + 1 < len(candidates):
+                            await asyncio.sleep(1)
+                except Exception as error:
+                    print(f"Daily donor backfill delayed: {error}")
+                await asyncio.sleep(DAILY_FAN_BACKFILL_SECONDS)
+
     async def run(self) -> None:
         await self.restore()
-        await asyncio.gather(self.sync_streams(), self.flush_forever())
+        await asyncio.gather(
+            self.sync_streams(),
+            self.flush_forever(),
+            self.backfill_daily_fans_forever(),
+        )
 
 
 def create_live_app(service: PoonggoLiveService) -> FastAPI:

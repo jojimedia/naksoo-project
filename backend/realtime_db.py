@@ -174,6 +174,16 @@ CREATE TABLE IF NOT EXISTS streamer_live_sessions (
 CREATE INDEX IF NOT EXISTS streamer_live_sessions_date_idx
     ON streamer_live_sessions (reporting_date DESC, streamer_id);
 
+CREATE TABLE IF NOT EXISTS streamer_daily_fan_snapshots (
+    streamer_id TEXT NOT NULL,
+    reporting_date DATE NOT NULL,
+    daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source TEXT NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (streamer_id, reporting_date)
+);
+
 INSERT INTO streamer_live_sessions (
   streamer_id, broadcast_no, crew_name, nickname, reporting_date, display_date,
   year, month, today_balloons, month_balloons, daily_fans, source, finalized, observed_at
@@ -304,6 +314,26 @@ def _merge_session_days(
     return [daily_by_day[day] for day in sorted(daily_by_day)]
 
 
+def _merge_daily_fans(
+    daily_fans: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep a compact date -> donor-list map in the ranking cache."""
+
+    by_day = {
+        int(value.get("day") or 0): dict(value)
+        for value in daily_fans
+        if int(value.get("day") or 0) > 0
+    }
+    for row in rows:
+        fans = row.get("daily_fans")
+        if not fans:
+            continue
+        day = int(row["reporting_date"].day)
+        by_day[day] = {"day": day, "fans": fans}
+    return [by_day[day] for day in sorted(by_day)]
+
+
 def _index_session_days(
     session_rows: list[dict[str, Any]],
 ) -> dict[tuple[str, int, int], list[dict[str, Any]]]:
@@ -328,9 +358,9 @@ def _realtime_session_rows(month_data: dict[str, Any]) -> list[dict[str, Any]]:
     if not _is_authoritative_live_source(realtime.get("source")):
         return []
     rows = []
-    for date_key, value_key in (
-        ("previous_date", "previous_balloons"),
-        ("date", "today"),
+    for date_key, value_key, fans_key in (
+        ("previous_date", "previous_balloons", "previous_fans"),
+        ("date", "today", "fans"),
     ):
         value = realtime.get(value_key)
         try:
@@ -340,7 +370,11 @@ def _realtime_session_rows(month_data: dict[str, Any]) -> list[dict[str, Any]]:
         if value is None:
             continue
         rows.append(
-            {"reporting_date": reporting_date, "today_balloons": int(value)}
+            {
+                "reporting_date": reporting_date,
+                "today_balloons": int(value),
+                "daily_fans": realtime.get(fans_key) or [],
+            }
         )
     return rows
 
@@ -351,6 +385,7 @@ def _upsert_month(
     month_data: dict[str, Any],
     observed_at: datetime,
     session_days: dict[tuple[str, int, int], list[dict[str, Any]]] | None = None,
+    fallback_fan_days: dict[tuple[str, int, int], list[dict[str, Any]]] | None = None,
 ) -> None:
     streamer_id = str(item.get("user_id") or "")
     year = int(month_data.get("year") or 0)
@@ -409,6 +444,16 @@ def _upsert_month(
     ]
     month_data["daily_balloons"] = _merge_session_days(
         month_data["daily_balloons"], hot_rows
+    )
+    fallback_rows = (fallback_fan_days or {}).get((streamer_id, year, month), [])
+    month_data["daily_session_fans"] = _merge_daily_fans(
+        month_data.get("daily_session_fans") or [], fallback_rows
+    )
+    month_data["daily_session_fans"] = _merge_daily_fans(
+        month_data["daily_session_fans"], session_rows
+    )
+    month_data["daily_session_fans"] = _merge_daily_fans(
+        month_data["daily_session_fans"], hot_rows
     )
 
     if previous_total is None:
@@ -502,22 +547,33 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
             session_rows = conn.execute(
                 """
                 SELECT DISTINCT ON (streamer_id, reporting_date)
-                       streamer_id, reporting_date, today_balloons
+                       streamer_id, reporting_date, today_balloons, daily_fans
                 FROM streamer_live_sessions
                 WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 120
                 ORDER BY streamer_id, reporting_date, observed_at DESC, broadcast_no DESC
                 """
             ).fetchall()
             session_days = _index_session_days(session_rows)
+            fallback_fan_rows = conn.execute(
+                """
+                SELECT streamer_id, reporting_date, daily_fans
+                FROM streamer_daily_fan_snapshots
+                WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+                """
+            ).fetchall()
+            fallback_fan_days = _index_session_days(fallback_fan_rows)
             for item in payload.get("items") or []:
                 _upsert_month(
-                    conn, item, item.get("current_month") or {}, observed_at, session_days
+                    conn, item, item.get("current_month") or {}, observed_at,
+                    session_days, fallback_fan_days
                 )
                 _upsert_month(
-                    conn, item, item.get("previous_month") or {}, observed_at, session_days
+                    conn, item, item.get("previous_month") or {}, observed_at,
+                    session_days, fallback_fan_days
                 )
                 _upsert_month(
-                    conn, item, item.get("older_month") or {}, observed_at, session_days
+                    conn, item, item.get("older_month") or {}, observed_at,
+                    session_days, fallback_fan_days
                 )
 
             _save_cache(conn, "current", payload, observed_at)
@@ -627,6 +683,78 @@ def load_recent_donation_ids() -> list[str]:
             """
         ).fetchall()
     return [str(row["donation_id"]) for row in rows]
+
+
+def get_daily_fan_backfill_candidates(limit: int = 5) -> list[dict[str, Any]]:
+    """Find positive today/yesterday rows that have no durable donor list."""
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            WITH daily AS (
+              SELECT month_row.streamer_id,
+                     (make_date(month_row.year, month_row.month, 1)
+                       + (((value->>'day')::int - 1) * INTERVAL '1 day'))::date AS reporting_date,
+                     (value->>'balloons')::bigint AS balloons
+              FROM streamer_month_current month_row
+              CROSS JOIN LATERAL jsonb_array_elements(month_row.daily_balloons) value
+              WHERE (value->>'day')::int BETWEEN 1 AND 31
+                AND (value->>'balloons')::bigint > 0
+            )
+            SELECT daily.streamer_id, daily.reporting_date, daily.balloons
+            FROM daily
+            WHERE daily.reporting_date BETWEEN
+                    (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+                    AND (NOW() AT TIME ZONE 'Asia/Seoul')::date
+              AND COALESCE((
+                SELECT jsonb_array_length(session.daily_fans)
+                FROM streamer_live_sessions session
+                WHERE session.streamer_id = daily.streamer_id
+                  AND session.reporting_date = daily.reporting_date
+                ORDER BY session.observed_at DESC, session.broadcast_no DESC
+                LIMIT 1
+              ), 0) = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM streamer_daily_fan_snapshots snapshot
+                WHERE snapshot.streamer_id = daily.streamer_id
+                  AND snapshot.reporting_date = daily.reporting_date
+              )
+            ORDER BY daily.reporting_date,
+                     md5(daily.streamer_id || to_char(NOW(), 'YYYYMMDDHH24MI'))
+            LIMIT %s
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+    return [
+        {
+            "user_id": str(row["streamer_id"]),
+            "date": row["reporting_date"].isoformat(),
+            "balloons": int(row["balloons"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def save_daily_fan_snapshot(
+    user_id: str,
+    reporting_date: str,
+    fans: list[dict[str, Any]],
+    observed_at: datetime,
+) -> None:
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO streamer_daily_fan_snapshots (
+              streamer_id, reporting_date, daily_fans, source, observed_at
+            ) VALUES (%s, %s, %s::jsonb, 'poonggo_daily_fallback', %s)
+            ON CONFLICT (streamer_id, reporting_date) DO UPDATE SET
+              daily_fans = EXCLUDED.daily_fans,
+              source = EXCLUDED.source,
+              observed_at = EXCLUDED.observed_at,
+              updated_at = NOW()
+            """,
+            (user_id, reporting_date, _as_json(fans), observed_at),
+        )
 
 
 def persist_live_updates(
@@ -987,4 +1115,8 @@ def cleanup_expired_data(now: datetime) -> None:
         conn.execute(
             "DELETE FROM live_donation_events WHERE occurred_at < %s",
             (history_from,),
+        )
+        conn.execute(
+            "DELETE FROM streamer_daily_fan_snapshots WHERE reporting_date < %s",
+            (history_from.date(),),
         )

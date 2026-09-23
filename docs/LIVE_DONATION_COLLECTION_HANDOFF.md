@@ -207,8 +207,19 @@ today = 40,000
   - 스트리머별 현재 핫 상태
   - `broadcast_no`, `reporting_date`, `display_date`, `today_balloons`, `month_balloons`
   - `daily_fans`, `counting_mode`, `finalized`, 연결 상태 및 관측 시각
+- `streamer_daily_fan_snapshots`
+  - SSE/방송 세션을 놓친 오늘·어제 방송의 후원자 목록만 저속 복구한다.
+  - 합계 숫자는 저장하지 않으며 라이브 세션의 일일 총량을 덮지 않는다.
 
 `persist_live_updates()`는 메모리 배치를 저장한 뒤 월간 캐시의 해당 일자 값도 갱신한다.
+
+방종 후 후원자 유지 규칙:
+
+1. 방송 세션의 `daily_fans`가 있으면 항상 최우선으로 쓴다.
+2. 세션을 놓쳤지만 일별 숫자가 양수이면 풍고 일일 페이지에서 후원자만 보충한다.
+3. 보충기는 30초마다 최대 5명을 순차 요청하며 요청 사이 1초를 둔다.
+4. 보충 페이지의 별풍선 합계는 사용하지 않는다. 숫자의 기준은 계속 방송별 라이브/SSE다.
+5. 날짜별 후원자는 `daily_session_fans`로 준비된 대시보드에 들어가므로 라이브가 끝나거나 날짜가 바뀌어도 유지된다.
 
 ### `backend/realtime_worker.py`
 
@@ -295,7 +306,7 @@ SSE 메모리값은 2초 단위 DB 배치보다 먼저 화면에 공개된다. �
 PYTHONPATH=backend:/tmp/naksoo-live-test-deps python3 -m unittest backend.test_poonggo_live -v
 ```
 
-2026-09-24 기준 격리된 환경에서 백엔드 전체 37개 테스트가 통과했다.
+2026-09-24 기준 격리된 환경에서 백엔드 전체 40개 테스트가 통과했다.
 
 ## 10. 배포 구조
 

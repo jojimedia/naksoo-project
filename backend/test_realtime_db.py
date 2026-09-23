@@ -4,6 +4,7 @@ from datetime import date
 from realtime_db import (
     _index_session_days,
     _is_authoritative_live_source,
+    _merge_daily_fans,
     _merge_session_days,
     _realtime_session_rows,
     _should_keep_live_snapshot,
@@ -82,6 +83,19 @@ class RealtimeDatabaseSourcePriorityTests(unittest.TestCase):
                 {"day": 23, "balloons": 111116},
             ],
         )
+
+    def test_session_donors_override_daily_fallback(self):
+        fallback = [{
+            "reporting_date": date(2026, 9, 23),
+            "daily_fans": [{"user_id": "fallback", "balloons": 5}],
+        }]
+        session = [{
+            "reporting_date": date(2026, 9, 23),
+            "daily_fans": [{"user_id": "live", "balloons": 10}],
+        }]
+        merged = _merge_daily_fans([], fallback)
+        merged = _merge_daily_fans(merged, session)
+        self.assertEqual(merged[0]["fans"][0]["user_id"], "live")
 
 
 if __name__ == "__main__":

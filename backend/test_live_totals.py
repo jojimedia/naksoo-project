@@ -197,6 +197,25 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(member["display_day_balloons"], 111116)
         self.assertEqual(member["yesterday_balloons"], 8)
 
+    def test_offline_yesterday_donors_come_from_durable_day_snapshot(self):
+        result = sample()
+        result["items"][0]["current_month"]["daily_balloons"] = [
+            {"day": 23, "balloons": 100},
+        ]
+        result["items"][0]["current_month"]["daily_session_fans"] = [
+            {
+                "day": 23,
+                "fans": [
+                    {"user_id": "fan", "nickname": "방종후원자", "balloons": 100}
+                ],
+            }
+        ]
+        with patch("dashboard_cache.datetime") as clock:
+            clock.now.return_value = datetime(2026, 9, 24, 12, tzinfo=KST)
+            member = build_dashboard(result)["crews"][0]["members"][0]
+        self.assertEqual(member["yesterday_balloons"], 100)
+        self.assertEqual(member["yesterday_fans"][0]["nickname"], "방종후원자")
+
 
 if __name__ == "__main__":
     unittest.main()

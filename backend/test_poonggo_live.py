@@ -8,6 +8,7 @@ from live_totals import KST, apply_totals
 from poonggo_live import (
     PoonggoLiveService,
     fetch_poonggo_snapshot,
+    fetch_poonggo_daily_fan_snapshot,
     parse_poonggo_daily_fans,
     parse_poonggo_live_donations,
     parse_poonggo_live_total,
@@ -40,6 +41,17 @@ def live_page(user_id: str, stream_no: str, amount: int, started_ms: int) -> str
 
 
 class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_daily_fallback_reads_donors_without_owning_total(self):
+        def handle(request: httpx.Request):
+            self.assertEqual(request.url.params["date"], "2026-09-23")
+            return httpx.Response(200, text=page("offline", 100))
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            fans = await fetch_poonggo_daily_fan_snapshot(
+                client, "offline", "2026-09-23"
+            )
+        self.assertEqual(fans[0]["nickname"], "큰손")
+
     async def test_restore_retries_and_keeps_finalized_donors(self):
         service = PoonggoLiveService()
         restored = {
