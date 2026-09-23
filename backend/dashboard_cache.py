@@ -76,19 +76,31 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
             cur, prev = item.get("current_month") or {}, item.get("previous_month") or {}
             current_total, previous_total = _number(cur.get("total_balloons")), _number(prev.get("total_balloons"))
             today = _daily(cur, display_day) if is_current_calendar_month else 0
+            today_fans: list[dict[str, Any]] = []
             reporting_date = now.date().isoformat()
             for source in (cur, prev):
                 realtime = source.get("realtime_totals") or {}
                 if is_current_calendar_month and realtime.get("date") == reporting_date and realtime.get("today") is not None:
                     today = _number(realtime["today"])
+                    today_fans = realtime.get("fans") or []
             yesterday = (now - timedelta(days=1)).date()
+            yesterday_date = yesterday.isoformat()
             yesterday_source = (
                 cur
                 if (current_year, current_month) == (yesterday.year, yesterday.month)
                 else prev
             )
             yesterday_total = _daily(yesterday_source, yesterday.day)
-            members.append({"rank": rank, "user_id": str(item["user_id"]), "nickname": str(item.get("nickname") or item["user_id"]), "profile_image_url": _profile(str(item["user_id"]), item.get("profile_image_url")), "broadcast_start": item.get("broadcast_start"), "is_live": bool(item.get("is_live")), "broadcast_no": item.get("broadcast_no"), "broadcast_title": item.get("broadcast_title"), "viewer_count": item.get("viewer_count"), "current_balloons": current_total, "previous_balloons": previous_total, "change_balloons": current_total - previous_total, "change_rate": round(((current_total - previous_total) / previous_total * 100) if previous_total else (100 if current_total else 0), 1), "display_day_balloons": today, "yesterday_balloons": yesterday_total, "monthly_fans": [], "monthly_top_fans": _top_fans(cur), "is_on_leave": False})
+            yesterday_fans: list[dict[str, Any]] = []
+            for source in (cur, prev):
+                realtime = source.get("realtime_totals") or {}
+                if realtime.get("date") == yesterday_date and realtime.get("today") is not None:
+                    yesterday_total = _number(realtime["today"])
+                    yesterday_fans = realtime.get("fans") or []
+                elif realtime.get("previous_date") == yesterday_date:
+                    yesterday_total = _number(realtime.get("previous_balloons"))
+                    yesterday_fans = realtime.get("previous_fans") or []
+            members.append({"rank": rank, "user_id": str(item["user_id"]), "nickname": str(item.get("nickname") or item["user_id"]), "profile_image_url": _profile(str(item["user_id"]), item.get("profile_image_url")), "broadcast_start": item.get("broadcast_start"), "is_live": bool(item.get("is_live")), "broadcast_no": item.get("broadcast_no"), "broadcast_title": item.get("broadcast_title"), "viewer_count": item.get("viewer_count"), "current_balloons": current_total, "previous_balloons": previous_total, "change_balloons": current_total - previous_total, "change_rate": round(((current_total - previous_total) / previous_total * 100) if previous_total else (100 if current_total else 0), 1), "display_day_balloons": today, "daily_fans": today_fans, "yesterday_balloons": yesterday_total, "yesterday_fans": yesterday_fans, "monthly_fans": [], "monthly_top_fans": _top_fans(cur), "is_on_leave": False})
         total = sum(member["current_balloons"] for member in members)
         average = round(total / len(members)) if members else 0
         kings = _patrons(active, 15)

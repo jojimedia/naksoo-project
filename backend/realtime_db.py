@@ -479,6 +479,8 @@ def load_live_totals() -> list[dict[str, Any]]:
               FROM streamer_live_sessions session
               WHERE session.streamer_id = current_row.streamer_id
                 AND session.reporting_date = (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+                AND session.reporting_date <> current_row.reporting_date
+                AND session.broadcast_no <> COALESCE(current_row.broadcast_no, '')
               ORDER BY session.observed_at DESC
               LIMIT 1
             ) previous ON TRUE

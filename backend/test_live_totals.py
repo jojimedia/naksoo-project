@@ -148,6 +148,24 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("current_daily_balloons", member)
         self.assertNotIn("previous_daily_balloons", member)
 
+    def test_dashboard_keeps_live_daily_donors_for_today_and_yesterday(self):
+        result = sample()
+        result["items"][0]["current_month"]["realtime_totals"] = {
+            "date": "2026-09-20", "today": 15,
+            "fans": [{"user_id": "today", "nickname": "오늘팬", "balloons": 15}],
+            "previous_date": "2026-09-19", "previous_balloons": 30,
+            "previous_fans": [
+                {"user_id": "yesterday", "nickname": "어제팬", "balloons": 30}
+            ],
+        }
+        with patch("dashboard_cache.datetime") as clock:
+            clock.now.return_value = datetime(2026, 9, 20, 2, tzinfo=KST)
+            member = build_dashboard(result)["crews"][0]["members"][0]
+        self.assertEqual(member["display_day_balloons"], 15)
+        self.assertEqual(member["daily_fans"][0]["nickname"], "오늘팬")
+        self.assertEqual(member["yesterday_balloons"], 30)
+        self.assertEqual(member["yesterday_fans"][0]["nickname"], "어제팬")
+
 
 if __name__ == "__main__":
     unittest.main()

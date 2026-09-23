@@ -275,6 +275,29 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["previous_balloons"], 300)
         self.assertEqual(state["previous_fans"][0]["nickname"], "후원자")
 
+    async def test_second_broadcast_on_yesterday_does_not_duplicate_previous_day(self):
+        service = PoonggoLiveService()
+        now = datetime.now(KST)
+        yesterday = (now.date() - timedelta(days=1)).isoformat()
+        base = {
+            "date": yesterday, "display_date": yesterday,
+            "year": now.year, "month": now.month, "total": 1000,
+            "counting_mode": "broadcast_live_v4", "observed_at": now.isoformat(),
+            "source": "poonggo_live_snapshot",
+        }
+        await service.apply_snapshot(
+            {"user_id": "test", "broadcast_no": "first"},
+            {**base, "broadcast_no": "first", "today": 300, "fans": []},
+        )
+        await service.apply_snapshot(
+            {"user_id": "test", "broadcast_no": "second"},
+            {**base, "broadcast_no": "second", "today": 50, "fans": []},
+        )
+        state = service.states["test"]
+        self.assertEqual(state["today"], 50)
+        self.assertNotIn("previous_date", state)
+        self.assertNotIn("previous_balloons", state)
+
     async def test_broadcast_end_keeps_last_sse_value(self):
         service = PoonggoLiveService()
         now = datetime.now(KST)

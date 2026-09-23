@@ -366,6 +366,7 @@ class PoonggoLiveService:
                 and not same_broadcast
                 and previous.get("counting_mode") == "broadcast_live_v4"
                 and previous.get("date") == yesterday
+                and snapshot.get("date") != yesterday
             ):
                 previous_session = {
                     "previous_date": yesterday,
@@ -418,6 +419,14 @@ class PoonggoLiveService:
                 "counting_mode": snapshot.get("counting_mode") or "broadcast_live_v4",
                 "_event_revision": int(previous.get("_event_revision") or 0),
             }
+            # A previous-session value is useful only when it represents a
+            # different reporting day.  Keeping the current broadcast in both
+            # slots made the UI show identical yesterday/today values after a
+            # restart or a second broadcast on the same date.
+            if next_state.get("previous_date") == next_state.get("date"):
+                next_state.pop("previous_date", None)
+                next_state.pop("previous_balloons", None)
+                next_state.pop("previous_fans", None)
             self.states[user_id] = next_state
             self.dirty_ids.add(user_id)
             self.changed.set()

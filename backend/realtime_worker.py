@@ -677,6 +677,10 @@ class RealtimeCollector:
                 "total": row["total"],
                 "observed_at": row["observed_at"],
                 "source": row.get("source") or "poonggo_sse",
+                "fans": row.get("fans") or [],
+                "previous_date": row.get("previous_date"),
+                "previous_balloons": row.get("previous_balloons"),
+                "previous_fans": row.get("previous_fans") or [],
             }
             for row in self.poonggo_live.snapshot()
         }
