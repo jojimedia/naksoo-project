@@ -25,7 +25,7 @@ import {
   type GuestbookPost,
 } from "@/lib/guestbook-shared";
 
-type CrewDashboardData = {
+export type CrewDashboardData = {
   data_version?: string | null;
   created_date: string;
   created_time: string;

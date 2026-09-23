@@ -29,9 +29,11 @@ The frontend hot path is now:
 
 ```text
 GET /
+  -> serve a prebuilt static loading shell (no database and no React list SSR)
+  -> browser GET /api/dashboard
   -> getCachedDashboardSnapshot("dashboard:current")
   -> SELECT payload_json, generated_at FROM ranking_cache WHERE cache_key = $1
-  -> render the already prepared CrewDashboard payload
+  -> render the already prepared CrewDashboard payload in the browser
   -> connect SSE and overlay live values in the browser
 ```
 
@@ -47,11 +49,14 @@ quickly. An admin mutation clears this process cache immediately.
     query.
   - Added a five-second prepared-snapshot memory cache.
 - `frontend/app/page.tsx`
-  - Removed the per-request `listMembers` / `listRegisteredCrewNames` overlay.
-  - Removed per-request raw-to-dashboard aggregation on the production hot
-    path.
-  - Retains a raw-cache fallback for a rolling deployment with an older
-    collector.
+  - Is now a static loading shell, so opening `/` performs no database query
+    and does not server-render every member card.
+- `frontend/app/dashboard-loader.tsx`
+  - Loads the one prepared dashboard snapshot after the static shell paints.
+  - Preserves month switching through the URL query string.
+- `frontend/app/api/dashboard/route.ts`
+  - Serves current or recent-month prepared snapshots.
+  - Adds short CDN caching and stale-while-revalidate.
 - `backend/dashboard_cache.py`
   - Replaced two complete daily arrays per streamer with the scalar
     `yesterday_balloons` in the prepared snapshot.
@@ -85,6 +90,7 @@ time or add a collector command for that member.
 
 - `frontend/node_modules/.bin/tsc --noEmit`: passed.
 - `frontend/npm run build`: passed (production build, all routes compiled).
+  The build output confirms `/` is static and only `/api/dashboard` is dynamic.
 - Backend full suite in an isolated virtualenv: 30 tests passed.
 - `python3 -m py_compile backend/dashboard_cache.py backend/realtime_db.py backend/realtime_worker.py`: passed.
 - `git diff --check`: passed.
@@ -121,7 +127,9 @@ Expected outcomes:
 - No members/crews query in the page request path.
 - One `ranking_cache` row read at most once per five seconds per frontend
   process.
-- Initial response materially smaller than the previous uncompressed ~1.48 MB.
+- Initial `/` response is the small static shell rather than the previous
+  uncompressed ~1.48 MB server-rendered dashboard.
+- `/api/dashboard` returns the prepared JSON with no ranking computation.
 - Live score/donor updates continue through SSE without waiting for snapshot
   regeneration.
 
