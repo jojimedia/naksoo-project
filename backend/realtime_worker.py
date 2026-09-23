@@ -666,8 +666,10 @@ class RealtimeCollector:
         # source request cannot undo a concurrent admin move/delete.
         output["items"] = align_members(output["items"], get_collector_members())
         output["count"] = len(output["items"])
-        apply_totals(output, saved_totals(latest))
-        apply_totals(output, self.chart_totals)
+        # Cached/chart values can recover the month total, but never own a
+        # calendar-day slot.  Only a broadcast-number session may do that.
+        apply_totals(output, saved_totals(latest), include_daily=False)
+        apply_totals(output, self.chart_totals, include_daily=False)
         poonggo_totals = {
             str(row["user_id"]): {
                 "date": row["date"],
@@ -698,7 +700,9 @@ class RealtimeCollector:
                         now = datetime.now(TIMEZONE)
                         output = get_cached_result()
                         if output:
-                            changed = apply_totals(output, self.chart_totals)
+                            changed = apply_totals(
+                                output, self.chart_totals, include_daily=False
+                            )
                             self._save_result(output, now)
                             print(f"Live chart saved: requests=2 changed={changed} observed={now.isoformat()} elapsed={(now-started).total_seconds():.2f}s")
                         record_source_collection_result(True, now)

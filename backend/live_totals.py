@@ -55,7 +55,7 @@ async def fetch_totals(client, now):
             for uid, total in monthly.items()}
 
 
-def apply_totals(result, snapshots, *, authoritative=False):
+def apply_totals(result, snapshots, *, authoritative=False, include_daily=True):
     changed = 0
     for item in result.get("items") or []:
         snapshot = snapshots.get(item.get("user_id"))
@@ -94,8 +94,16 @@ def apply_totals(result, snapshots, *, authoritative=False):
             if total != month.get("total_balloons") or previous.get("today") != today:
                 changed += 1
             month["total_balloons"] = total
-            month["realtime_totals"] = dict(snapshot, total=total, today=today)
-            if today is not None:
+            if include_daily:
+                month["realtime_totals"] = dict(snapshot, total=total, today=today)
+            else:
+                # The shared Poong.today chart uses an 08:00 reporting-day
+                # boundary.  Its monthly total is a useful low-cost fallback,
+                # but assigning its daily value to a KST calendar day copied
+                # one cross-midnight broadcast into both yesterday and today.
+                # Keep this observation separate from broadcast-session truth.
+                month["chart_totals"] = dict(snapshot, total=total, today=None)
+            if include_daily and today is not None:
                 day_number = int(snapshot["date"][-2:])
                 daily = [dict(row) for row in month.get("daily_balloons") or []
                          if row.get("day") != day_number]

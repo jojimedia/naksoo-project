@@ -233,3 +233,7 @@ Acceptance criteria:
 - The public page must never call upstream Poong/Poonggo APIs.
 - Do not restore full donor lists or two months of daily arrays to the initial
   RSC payload.
+- The shared Poong.today chart may update only the monthly fallback total. Its
+  08:00 reporting-day value must never be written into a KST daily slot.
+- `save_result` preloads recent broadcast-session day overrides with one query;
+  do not move that lookup inside the member/month upsert loop.

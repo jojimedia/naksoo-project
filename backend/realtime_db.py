@@ -284,7 +284,74 @@ def _should_keep_live_snapshot(
     )
 
 
-def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observed_at: datetime) -> None:
+def _merge_session_days(
+    daily_balloons: list[dict[str, Any]],
+    session_rows: list[dict[str, Any]],
+) -> list[dict[str, int]]:
+    """Overlay broadcast-start-day truth without duplicating a session."""
+
+    daily_by_day = {
+        int(value.get("day") or 0): dict(value)
+        for value in daily_balloons
+        if int(value.get("day") or 0) > 0
+    }
+    for session in session_rows:
+        day = int(session["reporting_date"].day)
+        daily_by_day[day] = {
+            "day": day,
+            "balloons": int(session["today_balloons"] or 0),
+        }
+    return [daily_by_day[day] for day in sorted(daily_by_day)]
+
+
+def _index_session_days(
+    session_rows: list[dict[str, Any]],
+) -> dict[tuple[str, int, int], list[dict[str, Any]]]:
+    """Group by broadcast start month, not the month-total observation."""
+
+    indexed: dict[tuple[str, int, int], list[dict[str, Any]]] = {}
+    for session in session_rows:
+        reporting_date = session["reporting_date"]
+        key = (
+            str(session["streamer_id"]),
+            int(reporting_date.year),
+            int(reporting_date.month),
+        )
+        indexed.setdefault(key, []).append(session)
+    return indexed
+
+
+def _realtime_session_rows(month_data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Turn the newest in-memory live overlay into day-authority rows."""
+
+    realtime = month_data.get("realtime_totals") or {}
+    if not _is_authoritative_live_source(realtime.get("source")):
+        return []
+    rows = []
+    for date_key, value_key in (
+        ("previous_date", "previous_balloons"),
+        ("date", "today"),
+    ):
+        value = realtime.get(value_key)
+        try:
+            reporting_date = datetime.fromisoformat(str(realtime.get(date_key))).date()
+        except (TypeError, ValueError):
+            continue
+        if value is None:
+            continue
+        rows.append(
+            {"reporting_date": reporting_date, "today_balloons": int(value)}
+        )
+    return rows
+
+
+def _upsert_month(
+    conn,
+    item: dict[str, Any],
+    month_data: dict[str, Any],
+    observed_at: datetime,
+    session_days: dict[tuple[str, int, int], list[dict[str, Any]]] | None = None,
+) -> None:
     streamer_id = str(item.get("user_id") or "")
     year = int(month_data.get("year") or 0)
     month = int(month_data.get("month") or 0)
@@ -308,10 +375,9 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
     effective_total = previous_total if should_keep_previous_total else total
     changed = previous_total is None or effective_total != previous_total
 
-    # A slower detail refresh can finish after an SSE/live-final flush.  When
-    # both snapshots have the same month total, replacing the whole daily
-    # array lets the detail source copy today's live count into yesterday.
-    # Keep the broadcast-session snapshot until a newer live source changes it.
+    # A slower detail refresh can finish after an SSE/live-final flush.
+    # Preserve the month counter, but do not preserve the entire old daily
+    # array: old chart code may have polluted it at the 08:00 boundary.
     should_keep_live_snapshot = previous is not None and _should_keep_live_snapshot(
         previous_total,
         total,
@@ -319,13 +385,31 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
         month_data.get("data_source"),
     )
 
-    # The ranking cache must observe the same protection as the normalized
-    # row; otherwise the UI could still publish the stale detail snapshot.
     if (should_keep_previous_total or should_keep_live_snapshot) and previous is not None:
         month_data["total_balloons"] = effective_total
-        month_data["daily_balloons"] = previous["daily_balloons"]
-        month_data["fans"] = previous["fans"]
-        month_data["data_source"] = previous["data_source"]
+        if not month_data.get("daily_balloons"):
+            month_data["daily_balloons"] = previous["daily_balloons"]
+        if not month_data.get("fans"):
+            month_data["fans"] = previous["fans"]
+
+    # Broadcast sessions are the only authoritative source for a day.  Apply
+    # the latest distinct broadcast for each start date after detail recovery,
+    # so request completion order cannot undo a live/final snapshot.
+    session_rows = (session_days or {}).get((streamer_id, year, month), [])
+    month_data["daily_balloons"] = _merge_session_days(
+        month_data.get("daily_balloons") or [], session_rows
+    )
+    # The in-memory SSE state is intentionally visible before its batched DB
+    # flush.  Apply it after persisted rows so an older session cannot win in
+    # that short window.
+    hot_rows = [
+        row
+        for row in _realtime_session_rows(month_data)
+        if (row["reporting_date"].year, row["reporting_date"].month) == (year, month)
+    ]
+    month_data["daily_balloons"] = _merge_session_days(
+        month_data["daily_balloons"], hot_rows
+    )
 
     if previous_total is None:
         event_type = "bootstrap"
@@ -376,8 +460,7 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
           is_live = EXCLUDED.is_live,
           is_password_broadcast = EXCLUDED.is_password_broadcast,
           total_balloons = GREATEST(streamer_month_current.total_balloons, EXCLUDED.total_balloons),
-          daily_balloons = CASE WHEN EXCLUDED.total_balloons >= streamer_month_current.total_balloons
-            THEN EXCLUDED.daily_balloons ELSE streamer_month_current.daily_balloons END,
+          daily_balloons = EXCLUDED.daily_balloons,
           fans = CASE WHEN EXCLUDED.total_balloons >= streamer_month_current.total_balloons
             THEN EXCLUDED.fans ELSE streamer_month_current.fans END,
           data_source = EXCLUDED.data_source,
@@ -413,10 +496,29 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
 
     with connect() as conn:
         with conn.transaction():
+            # One bounded query per save cycle.  Never query sessions once per
+            # member/month: that would turn a 123-member cycle into hundreds
+            # of DB round trips and undo the cached-dashboard speedup.
+            session_rows = conn.execute(
+                """
+                SELECT DISTINCT ON (streamer_id, reporting_date)
+                       streamer_id, reporting_date, today_balloons
+                FROM streamer_live_sessions
+                WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 120
+                ORDER BY streamer_id, reporting_date, observed_at DESC, broadcast_no DESC
+                """
+            ).fetchall()
+            session_days = _index_session_days(session_rows)
             for item in payload.get("items") or []:
-                _upsert_month(conn, item, item.get("current_month") or {}, observed_at)
-                _upsert_month(conn, item, item.get("previous_month") or {}, observed_at)
-                _upsert_month(conn, item, item.get("older_month") or {}, observed_at)
+                _upsert_month(
+                    conn, item, item.get("current_month") or {}, observed_at, session_days
+                )
+                _upsert_month(
+                    conn, item, item.get("previous_month") or {}, observed_at, session_days
+                )
+                _upsert_month(
+                    conn, item, item.get("older_month") or {}, observed_at, session_days
+                )
 
             _save_cache(conn, "current", payload, observed_at)
             _save_cache(conn, "dashboard:current", build_dashboard(payload), observed_at)

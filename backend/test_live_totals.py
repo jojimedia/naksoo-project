@@ -65,7 +65,7 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(caught.exception.retry_after, 120)
         self.assertEqual(len(calls), 1)
 
-    def test_slow_detail_cannot_overwrite_published_chart(self):
+    def test_slow_detail_keeps_month_total_without_copying_chart_day(self):
         published = sample()
         apply_totals(published, snapshot())
         old_detail = sample()
@@ -74,9 +74,19 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
             collector._save_result(old_detail, datetime.now(KST))
         month = save.call_args.args[0]["items"][0]["current_month"]
         self.assertEqual(month["total_balloons"], 140)
-        self.assertEqual(month["realtime_totals"]["today"], 45)
-        self.assertEqual(month["daily_balloons"][-1]["balloons"], 45)
+        self.assertNotIn("realtime_totals", month)
+        self.assertEqual(month["daily_balloons"][-1]["balloons"], 5)
         self.assertEqual(month["fans"][0]["balloons"], 50)
+
+    def test_shared_chart_never_writes_a_daily_slot(self):
+        result = sample()
+        before = copy.deepcopy(result["items"][0]["current_month"]["daily_balloons"])
+        apply_totals(result, snapshot(today=111116), include_daily=False)
+        month = result["items"][0]["current_month"]
+        self.assertEqual(month["daily_balloons"], before)
+        self.assertNotIn("realtime_totals", month)
+        self.assertIsNone(month["chart_totals"]["today"])
+        self.assertEqual(month["total_balloons"], 140)
 
     def test_month_boundary_does_not_add_previous_total_to_new_month(self):
         result = sample()
@@ -165,6 +175,27 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(member["daily_fans"][0]["nickname"], "오늘팬")
         self.assertEqual(member["yesterday_balloons"], 30)
         self.assertEqual(member["yesterday_fans"][0]["nickname"], "어제팬")
+
+    def test_ion_session_dates_override_duplicated_chart_days(self):
+        result = sample()
+        result["items"][0]["user_id"] = "qor0919"
+        result["items"][0]["nickname"] = "이온♥"
+        result["items"][0]["current_month"]["daily_balloons"] = [
+            {"day": 22, "balloons": 111116},
+            {"day": 23, "balloons": 111116},
+        ]
+        result["items"][0]["current_month"]["realtime_totals"] = {
+            "date": "2026-09-23",
+            "today": 111116,
+            "source": "poonggo_live_final",
+            "previous_date": "2026-09-22",
+            "previous_balloons": 8,
+        }
+        with patch("dashboard_cache.datetime") as clock:
+            clock.now.return_value = datetime(2026, 9, 23, 12, tzinfo=KST)
+            member = build_dashboard(result)["crews"][0]["members"][0]
+        self.assertEqual(member["display_day_balloons"], 111116)
+        self.assertEqual(member["yesterday_balloons"], 8)
 
 
 if __name__ == "__main__":
