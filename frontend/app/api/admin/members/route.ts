@@ -31,6 +31,8 @@ async function requireSession() {
 }
 
 async function queueRankingRefresh(loginId: string) {
+  // The server-rendered view reads membership directly. The collector checks
+  // only for missing IDs every five seconds, so do not queue a full crawl.
   void loginId;
   global.naksooRankingVersionMemoryCache?.clear();
   global.naksooRankingMemoryCache?.clear();
@@ -272,6 +274,7 @@ export async function PATCH(request: Request) {
     );
 
     const { version } = await getCrewMembersState(crewName);
+    await queueRankingRefresh(session.loginId);
 
     return NextResponse.json({
       ok: true,

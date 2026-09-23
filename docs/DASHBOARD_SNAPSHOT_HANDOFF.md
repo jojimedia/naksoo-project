@@ -85,15 +85,16 @@ time or add a collector command for that member.
 
 - `frontend/node_modules/.bin/tsc --noEmit`: passed.
 - `frontend/npm run build`: passed (production build, all routes compiled).
+- Backend full suite in an isolated virtualenv: 30 tests passed.
 - `python3 -m py_compile backend/dashboard_cache.py backend/realtime_db.py backend/realtime_worker.py`: passed.
 - `git diff --check`: passed.
 - Isolated compact-snapshot assertion: passed; yesterday was retained and both
   daily arrays were absent.
 
-Full local Python discovery could not run because the host Python does not have
-`httpx` and `psycopg`. Existing repository-wide ESLint failures are in
-pre-existing React effect/purity rules and are not caused by this snapshot
-change.
+The host Python did not contain the backend dependencies, so the full suite was
+run in a temporary virtualenv populated from `backend/requirements.txt`.
+Existing repository-wide ESLint failures are in pre-existing React
+effect/purity rules and are not caused by this snapshot change.
 
 ## Deployment order
 

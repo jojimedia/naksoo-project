@@ -259,7 +259,10 @@ function normalizeMonthlyStats(
     realtime_totals: isRecord(stats.realtime_totals)
       ? {
           date: String(stats.realtime_totals.date ?? ""),
-          today: stats.realtime_totals.today == null ? null : toNumber(stats.realtime_totals.today),
+          today:
+            stats.realtime_totals.today == null
+              ? null
+              : toNumber(stats.realtime_totals.today),
         }
       : undefined,
   };
@@ -415,9 +418,8 @@ function getDailyBalloonsForDisplayDate(
     "year" | "month" | "day"
   >,
 ) {
-  // Only a snapshot for the actual KST calendar date belongs under "today".
-  // A live broadcast crossing midnight is overlaid separately by its
-  // display_date; Poong's previous reporting day must not leak into today.
+  // The live overlay handles broadcasts crossing midnight. Calendar-day
+  // fallback must never show yesterday's total under today's label.
   const reportingDate = formatDateParts(displayDate);
   for (const month of [item.current_month, item.previous_month]) {
     if (
@@ -839,7 +841,8 @@ async function getCrewCardData(selectedPeriod?: Period) {
       };
     }
 
-    // Compatibility fallback while an older collector is being replaced.
+    // Safe fallback while an older collector has not created the prebuilt
+    // dashboard cache yet.
     const raw = await getCachedRanking(cacheKey);
     return raw
       ? makeCrewCardData(normalizeResult(raw as RawNaksooResult))
