@@ -6,6 +6,7 @@ import json
 import os
 import re
 import random
+import time
 from collections import Counter
 from io import StringIO
 from datetime import datetime, timedelta
@@ -239,6 +240,37 @@ async def fetch_station(client, user_id):
     }
 
 
+_public_live_ids = set()
+_public_live_checked_at = 0.0
+_public_live_lock = asyncio.Lock()
+
+
+async def fetch_public_live_ids(client):
+    """Read the shared public LIVE roster at most once per minute.
+
+    Adult/restricted broadcasts return a negative player RESULT even while
+    they are live.  The roster confirms presence without opening the stream.
+    """
+
+    global _public_live_ids, _public_live_checked_at
+    async with _public_live_lock:
+        if time.monotonic() - _public_live_checked_at < 60:
+            return _public_live_ids
+
+        response = await client.get(
+            "https://static.poong.today/broad/live",
+            headers=POONG_HEADERS,
+        )
+        response.raise_for_status()
+        values = [value.strip().lower() for value in response.text.strip().split(",") if value.strip()]
+        if any(not re.fullmatch(r"[a-z0-9_]+", value) for value in values):
+            raise ValueError("Invalid public LIVE list")
+
+        _public_live_ids = set(values)
+        _public_live_checked_at = time.monotonic()
+        return _public_live_ids
+
+
 async def fetch_live_status(client, user_id):
     """SOOPTV 생방송 정보 API에서 비번방 여부와 공개 방송 여부를 가져온다."""
 
@@ -264,14 +296,44 @@ async def fetch_live_status(client, user_id):
         raise source_error(f"live status 실패: {user_id} {res.status_code}", res)
 
     channel = res.json().get("CHANNEL", {})
+    result = str(channel.get("RESULT"))
+    is_password = channel.get("BPWD") == "Y"
+    is_live = result == "1"
+    broadcast_no = channel.get("BNO") or None
+
+    if not is_password and result in {"-6", "-8"}:
+        # The SOOP player hides BNO for adult streams, and the shared public
+        # roster can omit them entirely. Poonggo's station page exposes both
+        # the current live flag and the broadcast number without playback.
+        try:
+            station_response = await client.get(f"https://poonggo.com/station/{user_id}")
+            station_response.raise_for_status()
+            station = next(
+                (
+                    match for match in re.finditer(
+                        r'streamer:\{streamNo:"(?P<no>[^\"]*)",streamerId:"(?P<id>[^\"]+)"[^}]*?isLive:(?P<live>true|false)',
+                        station_response.text,
+                    )
+                    if match.group("id").lower() == user_id.lower()
+                ),
+                None,
+            )
+            if station is not None:
+                is_live = station.group("live") == "true" and bool(station.group("no"))
+                broadcast_no = station.group("no") if is_live else None
+            else:
+                is_live = False
+        except (httpx.HTTPError, ValueError) as error:
+            print(f"[{user_id}] Poonggo restricted LIVE status failed: {error}")
+            is_live = user_id.lower() in await fetch_public_live_ids(client)
 
     return {
-        "is_live": channel.get("RESULT") == 1 and channel.get("BPWD") != "Y",
-        "is_password": channel.get("BPWD") == "Y",
+        "is_live": is_live and not is_password,
+        "is_password": is_password,
         # Keep these fields with the ranking cache so the web UI can render a
         # live badge/thumbnail without starting another browser-side polling
         # loop for every member.
-        "broadcast_no": channel.get("BNO") or None,
+        "broadcast_no": broadcast_no,
         "broadcast_title": channel.get("TITLE") or None,
         "viewer_count": channel.get("CTUSER") or None,
     }
@@ -309,6 +371,11 @@ async def fetch_balloon(client, user_id, year, month):
     url = (
         "https://static.poong.today/bj/detail/get"
         f"?id={user_id}&year={year}&month={month}"
+        # Cloudtype's outbound path can otherwise receive an old CDN object
+        # even when the public broadcast page has already advanced.  The
+        # monthly detail endpoint is live data, so each collector poll must
+        # identify a fresh representation instead of reusing that object.
+        f"&cache_bust={int(datetime.now(TIMEZONE).timestamp() * 1000)}"
     )
 
     res = await client.get(url, headers=POONG_HEADERS)
@@ -1429,25 +1496,31 @@ def apply_member_sheet_metadata(items, members, period):
     """시트의 note/휴직 정보를 result.json에 반영한다."""
 
     member_map = {
-        (member["crew_name"], member["user_id"]): member
+        str(member.get("user_id") or "").lower(): member
         for member in members
+        if member.get("user_id")
     }
-    item_keys = {(item["crew_name"], item["user_id"]) for item in items}
+    item_ids = {
+        str(item.get("user_id") or "").lower()
+        for item in items
+        if item.get("user_id")
+    }
 
     for item in items:
-        member = member_map.get((item["crew_name"], item["user_id"]))
+        member = member_map.get(str(item.get("user_id") or "").lower())
         if not member:
             continue
 
         item["note"] = member.get("note", "")
         item["is_on_leave"] = member.get("is_on_leave", False)
+        item["crew_name"] = member.get("crew_name", item.get("crew_name"))
 
     for member in members:
         if not member.get("is_on_leave"):
             continue
 
-        key = (member["crew_name"], member["user_id"])
-        if key in item_keys:
+        key = str(member.get("user_id") or "").lower()
+        if not key or key in item_ids:
             continue
 
         items.append(build_on_leave_item(member, period))

@@ -106,6 +106,14 @@ function invalidateSheetsCache() {
   sheetCache.members = null;
 }
 
+/**
+ * 로그인처럼 권한 변경을 즉시 반영해야 하는 지점에서 사용한다.
+ * 일반 조회는 기존 TTL 캐시를 유지해 Google Sheets API 읽기 할당량을 아낀다.
+ */
+export function refreshGoogleSheetsCache() {
+  invalidateSheetsCache();
+}
+
 function getSheetId() {
   return process.env.GOOGLE_SHEET_ID ?? DEFAULT_SHEET_ID;
 }

@@ -1,8 +1,8 @@
 import { getTrimmedAverage } from "@/lib/stats";
 import { isFaCrew } from "@/lib/crews";
 import {
+  getCachedDashboardSnapshot,
   getCachedRanking,
-  getCachedRankingVersion,
   getDevelopmentRanking,
   isPostgresConfigured,
 } from "@/lib/ranking-cache";
@@ -10,15 +10,6 @@ import {
 import CrewDashboard from "./crew-dashboard";
 
 export const dynamic = "force-dynamic";
-
-declare global {
-  // The PostgreSQL JSON is the durable cache. This is a short-lived prepared
-  // view cache so repeated requests do not re-shape and serialize all ranking
-  // data on every page visit.
-  var naksooCrewCardMemoryCache:
-    | Map<string, { value: CrewCardData; version: string | null }>
-    | undefined;
-}
 
 type DailyBalloons = {
   day: number;
@@ -45,8 +36,8 @@ type CrewMember = {
   change_balloons: number;
   change_rate: number;
   display_day_balloons: number;
-  current_daily_balloons: DailyBalloons[];
-  previous_daily_balloons: DailyBalloons[];
+  current_daily_balloons?: DailyBalloons[];
+  previous_daily_balloons?: DailyBalloons[];
   monthly_fans: Fan[];
   monthly_top_fans: Fan[];
   is_on_leave?: boolean;
@@ -84,6 +75,7 @@ type CrewCard = {
 };
 
 type CrewCardData = {
+  data_version?: string | null;
   created_date: string;
   created_time: string;
   display_date: {
@@ -105,6 +97,7 @@ type CrewCardData = {
 };
 
 type MonthlyStats = {
+  realtime_totals?: { date: string; today: number | null };
   year: number;
   month: number;
   total_balloons: number;
@@ -263,6 +256,12 @@ function normalizeMonthlyStats(
     total_balloons: toNumber(stats.total_balloons),
     daily_balloons: normalizeDailyBalloons(stats.daily_balloons),
     fans: normalizeFans(stats.fans),
+    realtime_totals: isRecord(stats.realtime_totals)
+      ? {
+          date: String(stats.realtime_totals.date ?? ""),
+          today: stats.realtime_totals.today == null ? null : toNumber(stats.realtime_totals.today),
+        }
+      : undefined,
   };
 }
 
@@ -394,26 +393,6 @@ function getDailyBalloonsForDate(
   return period?.daily_balloons.find((daily) => daily.day === day)?.balloons ?? 0;
 }
 
-function hasDailyEntryForDate(
-  period: MonthlyStats | null,
-  day: number,
-) {
-  return Boolean(period?.daily_balloons.some((daily) => daily.day === day));
-}
-
-function getPreviousCalendarDate(
-  date: Pick<ReturnType<typeof getKstDateParts>, "year" | "month" | "day">,
-) {
-  const utc = new Date(Date.UTC(date.year, date.month - 1, date.day));
-  utc.setUTCDate(utc.getUTCDate() - 1);
-
-  return {
-    year: utc.getUTCFullYear(),
-    month: utc.getUTCMonth() + 1,
-    day: utc.getUTCDate(),
-  };
-}
-
 function getMonthlyStatsForDate(
   item: RankingItem,
   result: NaksooResult,
@@ -436,22 +415,22 @@ function getDailyBalloonsForDisplayDate(
     "year" | "month" | "day"
   >,
 ) {
-  const todayPeriod = getMonthlyStatsForDate(item, result, displayDate);
-  const todayHasEntry = hasDailyEntryForDate(todayPeriod, displayDate.day);
-  const todayBalloons = todayHasEntry
-    ? getDailyBalloonsForDate(todayPeriod, displayDate.day)
-    : null;
-
-  // 풍투는 다음 방송일 슬롯을 0으로 미리 두는 경우가 있다.
-  // 오늘 항목이 없거나 0이면, 방송 시작 전으로 보고 전일 값을 쓴다.
-  if (todayBalloons != null && todayBalloons > 0) {
-    return todayBalloons;
+  // Only a snapshot for the actual KST calendar date belongs under "today".
+  // A live broadcast crossing midnight is overlaid separately by its
+  // display_date; Poong's previous reporting day must not leak into today.
+  const reportingDate = formatDateParts(displayDate);
+  for (const month of [item.current_month, item.previous_month]) {
+    if (
+      month.realtime_totals?.date === reportingDate &&
+      month.realtime_totals.today != null
+    ) {
+      return month.realtime_totals.today;
+    }
   }
 
-  const previousDate = getPreviousCalendarDate(displayDate);
   return getDailyBalloonsForDate(
-    getMonthlyStatsForDate(item, result, previousDate),
-    previousDate.day,
+    getMonthlyStatsForDate(item, result, displayDate),
+    displayDate.day,
   );
 }
 
@@ -837,14 +816,6 @@ async function getCrewCardData(selectedPeriod?: Period) {
     ? `period:${selectedPeriod.year}-${String(selectedPeriod.month).padStart(2, "0")}`
     : "current";
   const dashboardCacheKey = `dashboard:${cacheKey}`;
-  const memoryCache = global.naksooCrewCardMemoryCache ??= new Map();
-  const fromMemory = memoryCache.get(cacheKey);
-  const version = isPostgresConfigured()
-    ? await getCachedRankingVersion(dashboardCacheKey)
-    : null;
-  if (fromMemory && fromMemory.version === version) {
-    return fromMemory.value;
-  }
 
   if (!isPostgresConfigured()) {
     try {
@@ -852,7 +823,6 @@ async function getCrewCardData(selectedPeriod?: Period) {
       const data = developmentRanking
         ? makeCrewCardData(normalizeResult(developmentRanking as RawNaksooResult))
         : emptyData();
-      memoryCache.set(cacheKey, { value: data, version });
       return data;
     } catch (error) {
       console.error("Failed to load development ranking API", error);
@@ -861,23 +831,19 @@ async function getCrewCardData(selectedPeriod?: Period) {
   }
 
   try {
-    const prepared = await getCachedRanking(
-      dashboardCacheKey,
-      Boolean(fromMemory && fromMemory.version !== version),
-    );
-    let data: CrewCardData;
-    if (prepared && typeof prepared === "object" && "crews" in prepared) {
-      data = prepared as CrewCardData;
-    } else {
-      // During the first collector deployment the prepared key does not exist
-      // yet. Keep the existing ranking cache as a safe one-cycle fallback.
-      const raw = await getCachedRanking(cacheKey);
-      data = raw
-        ? makeCrewCardData(normalizeResult(raw as RawNaksooResult))
-        : emptyData();
+    const snapshot = await getCachedDashboardSnapshot(dashboardCacheKey);
+    if (snapshot?.value && typeof snapshot.value === "object" && "crews" in snapshot.value) {
+      return {
+        ...(snapshot.value as CrewCardData),
+        data_version: snapshot.version,
+      };
     }
-    memoryCache.set(cacheKey, { value: data, version });
-    return data;
+
+    // Compatibility fallback while an older collector is being replaced.
+    const raw = await getCachedRanking(cacheKey);
+    return raw
+      ? makeCrewCardData(normalizeResult(raw as RawNaksooResult))
+      : emptyData();
   } catch (error) {
     console.error("Failed to load PostgreSQL ranking cache", error);
     return emptyData();

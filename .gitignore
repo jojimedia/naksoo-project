@@ -12,3 +12,5 @@ backend/data/*
 # Google service account keys (never commit)
 naksoo-*.json
 *-credentials.json
+.vercel
+.env*

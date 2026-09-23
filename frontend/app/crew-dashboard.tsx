@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import AdminLoginModal from "./admin-login-modal";
 import AdminPanelModal from "./admin-panel-modal";
 import MemberRequestModal from "./member-request-modal";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/guestbook-shared";
 
 type CrewDashboardData = {
+  data_version?: string | null;
   created_date: string;
   created_time: string;
   current_period: {
@@ -58,23 +60,159 @@ type OverallMember = {
   member: CrewCardData["members"][number];
 };
 
-type UpdateStatus = {
-  label: string;
-  className: string;
-};
-
 type AdminSession = {
   login_id: string;
   crews: string[];
 };
 
-function formatUpdatedAt(data: CrewDashboardData) {
-  return `${Number(data.created_date.slice(0, 4))}년 ${Number(
-    data.created_date.slice(5, 7),
-  )}월 ${Number(data.created_date.slice(8, 10))}일 ${data.created_time.slice(
-    0,
-    5,
-  )} 업데이트 출처: 풍투`;
+type LiveTotal = {
+  user_id: string;
+  date: string;
+  display_date?: string;
+  counting_mode?: string;
+  finalized?: boolean;
+  year: number;
+  month: number;
+  today: number;
+  total: number;
+  observed_at: string;
+  source: string;
+  connected?: boolean;
+  previous_date?: string | null;
+  previous_balloons?: number;
+  previous_fans?: Array<{
+    rank?: number;
+    user_id: string;
+    nickname: string;
+    balloons: number;
+  }>;
+  fans?: Array<{
+    rank?: number;
+    user_id: string;
+    nickname: string;
+    balloons: number;
+  }>;
+};
+
+function getKstDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function getYesterdayDateKey(today: string) {
+  const date = new Date(`${today}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function getDateLabel(dateKey: string) {
+  const [, month, day] = dateKey.split("-");
+  return `${Number(month)}/${Number(day)}`;
+}
+
+function applyLiveTotalsToCrew(
+  crew: CrewCardData,
+  totals: Map<string, LiveTotal>,
+  currentPeriod: CrewDashboardData["current_period"],
+  today: string,
+) {
+  const yesterday = getYesterdayDateKey(today);
+  const [yesterdayYear, yesterdayMonth, yesterdayDay] = yesterday.split("-").map(Number);
+  const yesterdayIsCurrentMonth =
+    yesterdayYear === currentPeriod.year && yesterdayMonth === currentPeriod.month;
+  const yesterdayIsPreviousMonth =
+    yesterdayYear === (currentPeriod.month === 1 ? currentPeriod.year - 1 : currentPeriod.year) &&
+    yesterdayMonth === (currentPeriod.month === 1 ? 12 : currentPeriod.month - 1);
+  const members = crew.members.map((member) => {
+    const live = totals.get(member.user_id.toLowerCase());
+    const yesterdayDays = yesterdayIsCurrentMonth
+      ? (member.current_daily_balloons ?? [])
+      : yesterdayIsPreviousMonth
+        ? (member.previous_daily_balloons ?? [])
+        : [];
+    const yesterdayLive =
+      live?.counting_mode === "broadcast_live_v4" &&
+      live.date === yesterday &&
+      live.year === currentPeriod.year &&
+      live.month === currentPeriod.month;
+    const storedYesterday = live?.previous_date === yesterday;
+    const yesterdayValue = yesterdayLive
+      ? Number(live.today)
+      : storedYesterday
+        ? Number(live.previous_balloons ?? 0)
+        : (member.yesterday_balloons ??
+          yesterdayDays.find((entry) => entry.day === yesterdayDay)?.balloons ??
+          0);
+    const yesterdayFans = yesterdayLive
+      ? (live.fans ?? [])
+      : storedYesterday
+        ? (live.previous_fans ?? [])
+        : [];
+    const withYesterday = {
+      ...member,
+      display_day_balloons: yesterdayLive ? 0 : member.display_day_balloons,
+      daily_fans: yesterdayLive ? [] : member.daily_fans,
+      yesterday_balloons: yesterdayValue,
+      yesterday_fans: yesterdayFans.map((fan, index) => ({
+        rank: index + 1,
+        user_id: fan.user_id,
+        nickname: fan.nickname,
+        balloons: Number(fan.balloons),
+      })),
+    };
+    const visibleDate = live?.date;
+    if (
+      !live ||
+      visibleDate !== today ||
+      live.year !== currentPeriod.year ||
+      live.month !== currentPeriod.month
+    ) {
+      return withYesterday;
+    }
+    const current = Number(live.total);
+    const previous = member.previous_balloons;
+    return {
+      ...withYesterday,
+      current_balloons: current,
+      display_day_balloons: Number(live.today),
+      daily_fans: (live.fans ?? []).map((fan, index) => ({
+        rank: index + 1,
+        user_id: fan.user_id,
+        nickname: fan.nickname,
+        balloons: Number(fan.balloons),
+      })),
+      change_balloons: current - previous,
+      change_rate:
+        previous > 0
+          ? Number((((current - previous) / previous) * 100).toFixed(1))
+          : current > 0
+            ? 100
+            : 0,
+    };
+  });
+  const active = members.filter((member) => !member.is_on_leave);
+  const ranked = active
+    .slice()
+    .sort((a, b) => b.current_balloons - a.current_balloons)
+    .map((member, index) => ({ ...member, rank: index + 1 }));
+  const leaves = members.filter((member) => member.is_on_leave);
+  return {
+    ...crew,
+    members: [...ranked, ...leaves],
+    current_total_balloons: active.reduce(
+      (sum, member) => sum + member.current_balloons,
+      0,
+    ),
+    average_current_balloons: getTrimmedAverage(
+      active.map((member) => member.current_balloons),
+    ),
+  };
 }
 
 function normalizeSearch(value: string) {
@@ -153,41 +291,6 @@ function HighlightText({ text, query }: { text: string; query: string }) {
       {text.slice(index + keyword.length)}
     </>
   );
-}
-
-function getUpdateStatus(data: CrewDashboardData): UpdateStatus {
-  const updatedAt = new Date(`${data.created_date}T${data.created_time}+09:00`);
-  const diffHours = (Date.now() - updatedAt.getTime()) / 1000 / 60 / 60;
-
-  if (!Number.isFinite(diffHours)) {
-    return {
-      label: formatUpdatedAt(data),
-      className:
-        "border-[#3a3548] bg-[#17151f]/70 text-[#8d879c]",
-    };
-  }
-
-  if (diffHours >= 24) {
-    return {
-      label: `${formatUpdatedAt(data)} · 업데이트 지연`,
-      className:
-        "border-[#dc2626]/40 bg-[#dc2626]/10 text-[#fca5a5]",
-    };
-  }
-
-  if (diffHours >= 12) {
-    return {
-      label: `${formatUpdatedAt(data)} · 확인 필요`,
-      className:
-        "border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#fbbf24]",
-    };
-  }
-
-  return {
-    label: formatUpdatedAt(data),
-    className:
-      "border-[#3a3548] bg-[#17151f]/70 text-[#8d879c]",
-  };
 }
 
 function aggregateDonors(
@@ -462,13 +565,85 @@ function DonorStreamerRow({
   );
 }
 
-function OverallRankingCard({ rows }: { rows: OverallMember[] }) {
+function dailyRankingScore(row: OverallMember, mode: "yesterday" | "today") {
+  return mode === "yesterday" ? (row.member.yesterday_balloons ?? 0) : row.member.display_day_balloons;
+}
+
+function OverallRankingCard({ rows, yesterdayLabel }: { rows: OverallMember[]; yesterdayLabel: string }) {
+  const [mode, setMode] = useState<"month" | "yesterday" | "today">("month");
+  const visibleRows = useMemo(
+    () =>
+      rows
+        .slice()
+        .sort((a, b) =>
+          mode !== "month"
+            ? dailyRankingScore(b, mode) - dailyRankingScore(a, mode)
+            : b.member.current_balloons - a.member.current_balloons,
+        )
+        .map((row, index) => ({
+          ...row,
+          member: { ...row.member, rank: index + 1 },
+        })),
+    [mode, rows],
+  );
+
   return (
     <PeriodRankingCard
       title="전체순위"
       headerColor="#5b4bdb"
-      scoreLabel="별풍선"
-      rows={rows}
+      scoreLabel={mode === "yesterday" ? yesterdayLabel : mode === "today" ? "오늘" : "별풍선"}
+      rows={visibleRows}
+      headerTabs={
+        <div className="mt-2 flex gap-1">
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 text-[11px] font-bold transition ${
+              mode === "yesterday"
+                ? "border-[#6ee7b7]/70 bg-[#064e3b]/55 text-[#a7f3d0]"
+                : "border-white/20 bg-black/10 text-white/75 hover:text-white"
+            }`}
+            aria-pressed={mode === "yesterday"}
+            onClick={() => setMode("yesterday")}
+          >
+            어제
+          </button>
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 text-[11px] font-bold transition ${
+              mode === "month"
+                ? "border-white/40 bg-white/20 text-white"
+                : "border-white/20 bg-black/10 text-white/75 hover:text-white"
+            }`}
+            onClick={() => setMode("month")}
+          >
+            월간 별풍선
+          </button>
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 text-[11px] font-bold transition ${
+              mode === "today"
+                ? "border-[#6ee7b7]/70 bg-[#064e3b]/55 text-[#a7f3d0]"
+                : "border-white/20 bg-black/10 text-white/75 hover:text-white"
+            }`}
+            onClick={() => setMode("today")}
+          >
+            오늘
+          </button>
+        </div>
+      }
+      getRowProps={
+        mode !== "month"
+          ? (row) => ({
+              scoreOverride: dailyRankingScore(row, mode),
+              scoreToneValue: dailyRankingScore(row, mode),
+              todayBalloonsOverride: dailyRankingScore(row, mode),
+              fansOverride: mode === "yesterday" ? (row.member.yesterday_fans ?? []) : (row.member.daily_fans ?? []),
+              fanPanelTitle: mode === "yesterday" ? `${yesterdayLabel} 후원자` : "오늘의 후원자",
+              dailyScoreLabel: mode === "yesterday" ? yesterdayLabel : "오늘",
+              liveBroadcastMode: true,
+            })
+          : undefined
+      }
     />
   );
 }
@@ -478,6 +653,7 @@ function PeriodRankingCard({
   headerColor,
   scoreLabel,
   headerNote,
+  headerTabs,
   rows,
   getRowProps,
 }: {
@@ -485,6 +661,7 @@ function PeriodRankingCard({
   headerColor: string;
   scoreLabel: string;
   headerNote?: string;
+  headerTabs?: React.ReactNode;
   rows: OverallMember[];
   getRowProps?: (row: OverallMember) => {
     scoreOverride?: number;
@@ -497,6 +674,7 @@ function PeriodRankingCard({
       balloons: number;
     }>;
     fanPanelTitle?: string;
+    dailyScoreLabel?: string;
     liveBroadcastMode?: boolean;
     todayBalloonsOverride?: number;
   };
@@ -512,6 +690,7 @@ function PeriodRankingCard({
                 {headerNote}
               </p>
             ) : null}
+            {headerTabs}
           </div>
           <p className="rounded bg-black/10 px-2.5 py-1.5 text-[12px] font-bold">
             {rows.length}명
@@ -544,6 +723,7 @@ function PeriodRankingCard({
                 scoreSubLabel={props.scoreSubLabel}
                 fansOverride={props.fansOverride}
                 fanPanelTitle={props.fanPanelTitle}
+                dailyScoreLabel={props.dailyScoreLabel}
                 liveBroadcastMode={props.liveBroadcastMode}
                 todayBalloonsOverride={props.todayBalloonsOverride}
               />
@@ -677,6 +857,7 @@ function FaRankingCard({
 }
 
 export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("members");
   const [showOverall, setShowOverall] = useState(false);
@@ -686,16 +867,118 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showMemberRequestModal, setShowMemberRequestModal] = useState(false);
+  const [liveTotals, setLiveTotals] = useState<Map<string, LiveTotal>>(
+    () => new Map(),
+  );
+  const [todayDateKey, setTodayDateKey] = useState(getKstDateKey);
+  const yesterdayLabel = getDateLabel(getYesterdayDateKey(todayDateKey));
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
-  const rankingCrews = useMemo(
-    () => (data.fa_crew ? [...data.crews, data.fa_crew] : data.crews),
-    [data.crews, data.fa_crew],
+  const liveCrews = useMemo(
+    () =>
+      data.crews.map((crew) =>
+        applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey),
+      ),
+    [data.crews, data.current_period, liveTotals, todayDateKey],
   );
+  const liveFaCrew = useMemo(
+    () =>
+      data.fa_crew
+        ? applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period, todayDateKey)
+        : null,
+    [data.current_period, data.fa_crew, liveTotals, todayDateKey],
+  );
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setTodayDateKey(getKstDateKey()), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+  const rankingCrews = useMemo(
+    () => (liveFaCrew ? [...liveCrews, liveFaCrew] : liveCrews),
+    [liveCrews, liveFaCrew],
+  );
+
+  useEffect(() => {
+    const configured = process.env.NEXT_PUBLIC_NAKSOO_LIVE_URL?.trim() || "";
+    const eventUrl = configured
+      ? `${configured.replace(/\/$/, "")}/live/events`
+      : "/api/live/events";
+    const source = new EventSource(eventUrl);
+
+    const applyOne = (item: LiveTotal) => {
+      if (!item?.user_id) return;
+      setLiveTotals((current) => {
+        const next = new Map(current);
+        next.set(item.user_id.toLowerCase(), item);
+        return next;
+      });
+    };
+    const onSnapshot = (event: MessageEvent<string>) => {
+      try {
+        const items = JSON.parse(event.data) as LiveTotal[];
+        setLiveTotals(
+          new Map(
+            items
+              .filter((item) => item?.user_id)
+              .map((item) => [item.user_id.toLowerCase(), item]),
+          ),
+        );
+      } catch {
+        // The normal PostgreSQL/version path remains the fallback.
+      }
+    };
+    const onTotal = (event: MessageEvent<string>) => {
+      try {
+        applyOne(JSON.parse(event.data) as LiveTotal);
+      } catch {
+        // Ignore a malformed single event and keep the last good snapshot.
+      }
+    };
+    source.addEventListener("snapshot", onSnapshot as EventListener);
+    source.addEventListener("total", onTotal as EventListener);
+    return () => source.close();
+  }, []);
+
+  // Poll only the tiny cache version. The full React server payload is fetched
+  // only after the collector has published changed dashboard data.
+  useEffect(() => {
+    let cancelled = false;
+    let refreshing = false;
+    const params = new URLSearchParams(window.location.search);
+    const year = params.get("year");
+    const month = params.get("month");
+    const query = year && month ? `?year=${year}&month=${month}` : "";
+
+    const refreshIfChanged = async () => {
+      if (document.visibilityState !== "visible" || refreshing) return;
+      try {
+        const response = await fetch(`/api/dashboard-version${query}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { version?: string | null };
+        if (!cancelled && payload.version && payload.version !== data.data_version) {
+          refreshing = true;
+          router.refresh();
+        }
+      } catch {
+        // Keep the current snapshot during a short network interruption.
+      }
+    };
+
+    const onVisibilityChange = () => void refreshIfChanged();
+    const intervalId = window.setInterval(refreshIfChanged, 5_000);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [data.data_version, router]);
 
   const crews = useMemo(() => {
     // 홈/검색 카드에는 소속 크루만 표시한다. FA는 카드로 넣지 않는다.
-    const sourceCrews = data.crews;
+    const sourceCrews = liveCrews;
 
     if (!isSearching) {
       return sourceCrews;
@@ -726,7 +1009,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         };
       })
       .filter((crew) => crew.members.length > 0);
-  }, [data.crews, isSearching, search]);
+  }, [isSearching, liveCrews, search]);
   const donorResults = useMemo(() => {
     if (!isSearching || searchMode !== "donors") {
       return [];
@@ -739,11 +1022,11 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     [rankingCrews],
   );
   const faRows = useMemo(() => {
-    if (!data.fa_crew) {
+    if (!liveFaCrew) {
       return [];
     }
 
-    return data.fa_crew.members
+    return liveFaCrew.members
       .filter((member) => !member.is_on_leave)
       .slice()
       .sort((a, b) => b.current_balloons - a.current_balloons)
@@ -755,14 +1038,13 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
           rank: index + 1,
         },
       }));
-  }, [data.fa_crew]);
+  }, [liveFaCrew]);
   const hasResults =
     (showOverall || showKings || showFa) && !isSearching
       ? true
       : searchMode === "donors" && isSearching
         ? donorResults.length > 0
         : crews.length > 0;
-  const updateStatus = getUpdateStatus(data);
   const overallRows = useMemo(
     () =>
       rankingCrews
@@ -1000,7 +1282,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               className="rounded-full border border-[#3a3548] bg-[#17151f] px-2.5 py-1.5 text-[11px] font-medium text-[#d8d4ff] transition hover:border-[#a99cff]/40"
               onClick={() => setShowMemberRequestModal(true)}
             >
-              스트리머 등록 신청
+              스트리머 수정/등록 신청
             </button>
             <button
               type="button"
@@ -1021,11 +1303,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                 }}
               />
             </button>
-            <button
-              className={`rounded-full border px-2.5 py-1.5 text-[11px] font-medium leading-tight ${updateStatus.className}`}
-            >
-              {updateStatus.label}
-            </button>
           </div>
         </div>
       </header>
@@ -1037,7 +1314,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             className="rounded-full border border-[#3a3548] bg-[#17151f] px-2.5 py-1.5 text-[11px] font-medium text-[#d8d4ff]"
             onClick={() => setShowMemberRequestModal(true)}
           >
-            스트리머 등록 신청
+            스트리머 수정/등록 신청
           </button>
           <button
             type="button"
@@ -1058,11 +1335,6 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
               }}
             />
           </button>
-          <button
-            className={`rounded-full border px-2.5 py-1.5 text-[11px] font-medium leading-tight ${updateStatus.className}`}
-          >
-            {updateStatus.label}
-          </button>
         </div>
 
         {hasResults ? (
@@ -1076,7 +1348,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
             }`}
           >
             {showOverall && !isSearching ? (
-              <OverallRankingCard rows={overallRows} />
+              <OverallRankingCard rows={overallRows} yesterdayLabel={yesterdayLabel} />
             ) : showKings && !isSearching ? (
               <KingsRankingCard rows={kingRows} />
             ) : showFa && !isSearching ? (
@@ -1101,6 +1373,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
                     membersOnly={isSearching}
                     expandMembers={isSearching}
                     searchQuery={query}
+                    yesterdayLabel={yesterdayLabel}
                   />
                 </div>
               ))

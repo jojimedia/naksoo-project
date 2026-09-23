@@ -9,10 +9,51 @@ declare global {
   var naksooRankingVersionMemoryCache:
     | Map<string, { version: string | null; expiresAt: number }>
     | undefined;
+  var naksooDashboardSnapshotMemoryCache:
+    | Map<string, { value: unknown; version: string | null; expiresAt: number }>
+    | undefined;
 }
 
 const RANKING_MEMORY_CACHE_TTL_MS = 45_000;
 const RANKING_VERSION_CHECK_TTL_MS = 2_000;
+const DASHBOARD_SNAPSHOT_TTL_MS = 5_000;
+
+/**
+ * Read the collector-prepared dashboard as one versioned row. This is the hot
+ * path for the home page: no raw ranking reshaping and no second version query.
+ */
+export async function getCachedDashboardSnapshot(
+  cacheKey = "dashboard:current",
+): Promise<{ value: unknown; version: string | null } | null> {
+  const pool = getPostgresPool();
+  if (!pool) return null;
+
+  const cache = global.naksooDashboardSnapshotMemoryCache ??= new Map();
+  const fromMemory = cache.get(cacheKey);
+  if (fromMemory && fromMemory.expiresAt > Date.now()) {
+    return { value: fromMemory.value, version: fromMemory.version };
+  }
+
+  const result = await pool.query<{
+    payload_json: unknown;
+    generated_at: Date | string;
+  }>(
+    "SELECT payload_json, generated_at FROM ranking_cache WHERE cache_key = $1",
+    [cacheKey],
+  );
+  const row = result.rows[0];
+  if (!row?.payload_json) return null;
+
+  const version = row.generated_at
+    ? new Date(row.generated_at).toISOString()
+    : null;
+  cache.set(cacheKey, {
+    value: row.payload_json,
+    version,
+    expiresAt: Date.now() + DASHBOARD_SNAPSHOT_TTL_MS,
+  });
+  return { value: row.payload_json, version };
+}
 
 export function getPostgresPool(): Pool | null {
   const password = process.env.PGPASSWORD;

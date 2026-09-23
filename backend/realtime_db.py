@@ -111,6 +111,79 @@ CREATE TABLE IF NOT EXISTS collector_lease (
     lease_until TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS live_donation_events (
+    donation_id TEXT PRIMARY KEY,
+    streamer_id TEXT NOT NULL,
+    broadcast_no TEXT,
+    amount BIGINT NOT NULL CHECK (amount > 0),
+    occurred_at TIMESTAMPTZ NOT NULL,
+    payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS live_donation_events_streamer_idx
+    ON live_donation_events (streamer_id, occurred_at DESC);
+
+CREATE TABLE IF NOT EXISTS streamer_live_totals (
+    streamer_id TEXT PRIMARY KEY,
+    crew_name TEXT NOT NULL DEFAULT '',
+    nickname TEXT NOT NULL DEFAULT '',
+    broadcast_no TEXT,
+    reporting_date DATE NOT NULL,
+    display_date DATE,
+    year SMALLINT NOT NULL,
+    month SMALLINT NOT NULL CHECK (month BETWEEN 1 AND 12),
+    today_balloons BIGINT NOT NULL DEFAULT 0,
+    month_balloons BIGINT NOT NULL DEFAULT 0,
+    daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source TEXT NOT NULL,
+    counting_mode TEXT NOT NULL DEFAULT 'legacy',
+    session_offset BIGINT NOT NULL DEFAULT 0,
+    finalized BOOLEAN NOT NULL DEFAULT FALSE,
+    connected BOOLEAN NOT NULL DEFAULT FALSE,
+    observed_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS counting_mode TEXT NOT NULL DEFAULT 'legacy';
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS session_offset BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS display_date DATE;
+ALTER TABLE streamer_live_totals ADD COLUMN IF NOT EXISTS finalized BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS streamer_live_sessions (
+    streamer_id TEXT NOT NULL,
+    broadcast_no TEXT NOT NULL,
+    crew_name TEXT NOT NULL DEFAULT '',
+    nickname TEXT NOT NULL DEFAULT '',
+    reporting_date DATE NOT NULL,
+    display_date DATE NOT NULL,
+    year SMALLINT NOT NULL,
+    month SMALLINT NOT NULL CHECK (month BETWEEN 1 AND 12),
+    today_balloons BIGINT NOT NULL DEFAULT 0,
+    month_balloons BIGINT NOT NULL DEFAULT 0,
+    daily_fans JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source TEXT NOT NULL,
+    finalized BOOLEAN NOT NULL DEFAULT FALSE,
+    observed_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (streamer_id, broadcast_no)
+);
+
+CREATE INDEX IF NOT EXISTS streamer_live_sessions_date_idx
+    ON streamer_live_sessions (reporting_date DESC, streamer_id);
+
+INSERT INTO streamer_live_sessions (
+  streamer_id, broadcast_no, crew_name, nickname, reporting_date, display_date,
+  year, month, today_balloons, month_balloons, daily_fans, source, finalized, observed_at
+)
+SELECT streamer_id, broadcast_no, crew_name, nickname, reporting_date,
+       COALESCE(display_date, reporting_date), year, month, today_balloons,
+       month_balloons, daily_fans, source, finalized, observed_at
+FROM streamer_live_totals
+WHERE COALESCE(broadcast_no, '') <> ''
+ON CONFLICT (streamer_id, broadcast_no) DO NOTHING;
 """
 
 
@@ -190,6 +263,27 @@ def _previous_period(year: int, month: int) -> dict[str, int]:
     return {"year": year, "month": month - 1}
 
 
+def _is_authoritative_live_source(source: Any) -> bool:
+    """Return whether a source contains the broadcast-session truth."""
+
+    value = str(source or "").lower()
+    return value.startswith(("poonggo_sse", "poonggo_live"))
+
+
+def _should_keep_live_snapshot(
+    previous_total: int | None,
+    incoming_total: int,
+    previous_source: Any,
+    incoming_source: Any,
+) -> bool:
+    return bool(
+        previous_total is not None
+        and incoming_total <= previous_total
+        and _is_authoritative_live_source(previous_source)
+        and not _is_authoritative_live_source(incoming_source)
+    )
+
+
 def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observed_at: datetime) -> None:
     streamer_id = str(item.get("user_id") or "")
     year = int(month_data.get("year") or 0)
@@ -214,9 +308,20 @@ def _upsert_month(conn, item: dict[str, Any], month_data: dict[str, Any], observ
     effective_total = previous_total if should_keep_previous_total else total
     changed = previous_total is None or effective_total != previous_total
 
-    # The ranking cache must observe the same regression protection as the
-    # normalized row; otherwise the UI could briefly show a lower total.
-    if should_keep_previous_total and previous is not None:
+    # A slower detail refresh can finish after an SSE/live-final flush.  When
+    # both snapshots have the same month total, replacing the whole daily
+    # array lets the detail source copy today's live count into yesterday.
+    # Keep the broadcast-session snapshot until a newer live source changes it.
+    should_keep_live_snapshot = previous is not None and _should_keep_live_snapshot(
+        previous_total,
+        total,
+        previous["data_source"],
+        month_data.get("data_source"),
+    )
+
+    # The ranking cache must observe the same protection as the normalized
+    # row; otherwise the UI could still publish the stale detail snapshot.
+    if (should_keep_previous_total or should_keep_live_snapshot) and previous is not None:
         month_data["total_balloons"] = effective_total
         month_data["daily_balloons"] = previous["daily_balloons"]
         month_data["fans"] = previous["fans"]
@@ -354,6 +459,228 @@ def get_cached_result(cache_key: str = "current") -> dict[str, Any] | None:
     return row["payload_json"] if row else None
 
 
+def load_live_totals() -> list[dict[str, Any]]:
+    """Restore today's hot totals after a collector deployment/restart."""
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT current_row.streamer_id, current_row.crew_name, current_row.nickname, current_row.broadcast_no,
+                   current_row.reporting_date, COALESCE(current_row.display_date, current_row.reporting_date) AS display_date,
+                   current_row.year, current_row.month, current_row.today_balloons, current_row.month_balloons,
+                   current_row.daily_fans, current_row.source, current_row.counting_mode,
+                   current_row.session_offset, current_row.finalized, current_row.connected, current_row.observed_at,
+                   previous.reporting_date AS previous_date,
+                   previous.today_balloons AS previous_balloons,
+                   previous.daily_fans AS previous_fans
+            FROM streamer_live_totals current_row
+            LEFT JOIN LATERAL (
+              SELECT session.reporting_date, session.today_balloons, session.daily_fans
+              FROM streamer_live_sessions session
+              WHERE session.streamer_id = current_row.streamer_id
+                AND session.reporting_date = (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+              ORDER BY session.observed_at DESC
+              LIMIT 1
+            ) previous ON TRUE
+            WHERE COALESCE(current_row.display_date, current_row.reporting_date) >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
+            """
+        ).fetchall()
+    return [
+        {
+            "user_id": str(row["streamer_id"]),
+            "crew_name": str(row["crew_name"] or ""),
+            "nickname": str(row["nickname"] or row["streamer_id"]),
+            "broadcast_no": str(row["broadcast_no"] or ""),
+            "date": row["reporting_date"].isoformat(),
+            "display_date": row["display_date"].isoformat(),
+            "year": int(row["year"]),
+            "month": int(row["month"]),
+            "today": int(row["today_balloons"]),
+            "total": int(row["month_balloons"]),
+            "fans": row["daily_fans"] or [],
+            "source": str(row["source"]),
+            "counting_mode": str(row["counting_mode"] or "legacy"),
+            "session_offset": int(row["session_offset"] or 0),
+            "finalized": bool(row["finalized"]),
+            # A restored row is not connected until its upstream task opens.
+            "connected": False,
+            "observed_at": row["observed_at"].isoformat(),
+            "previous_date": row["previous_date"].isoformat() if row["previous_date"] else None,
+            "previous_balloons": int(row["previous_balloons"] or 0),
+            "previous_fans": row["previous_fans"] or [],
+        }
+        for row in rows
+    ]
+
+
+def load_recent_donation_ids() -> list[str]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT donation_id FROM live_donation_events
+            WHERE occurred_at >= NOW() - INTERVAL '2 days'
+            ORDER BY occurred_at DESC LIMIT 20000
+            """
+        ).fetchall()
+    return [str(row["donation_id"]) for row in rows]
+
+
+def persist_live_updates(
+    updates: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    observed_at: datetime,
+) -> None:
+    """Flush a hot-memory batch without re-upserting every member/month row."""
+
+    if not updates and not events:
+        return
+    with connect() as conn:
+        with conn.transaction():
+            for event in events:
+                conn.execute(
+                    """
+                    INSERT INTO live_donation_events (
+                      donation_id, streamer_id, broadcast_no, amount,
+                      occurred_at, payload_json
+                    ) VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                    ON CONFLICT (donation_id) DO NOTHING
+                    """,
+                    (
+                        event["donation_id"], event["user_id"],
+                        event.get("broadcast_no"), int(event["amount"]),
+                        _as_datetime(event.get("occurred_at")) or observed_at,
+                        _as_json(event.get("payload") or {}),
+                    ),
+                )
+
+            for row in updates:
+                if row.get("broadcast_no"):
+                    conn.execute(
+                        """
+                        INSERT INTO streamer_live_sessions (
+                          streamer_id, broadcast_no, crew_name, nickname,
+                          reporting_date, display_date, year, month, today_balloons,
+                          month_balloons, daily_fans, source, finalized, observed_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+                        ON CONFLICT (streamer_id, broadcast_no) DO UPDATE SET
+                          crew_name = EXCLUDED.crew_name,
+                          nickname = EXCLUDED.nickname,
+                          reporting_date = EXCLUDED.reporting_date,
+                          display_date = EXCLUDED.display_date,
+                          year = EXCLUDED.year,
+                          month = EXCLUDED.month,
+                          today_balloons = EXCLUDED.today_balloons,
+                          month_balloons = EXCLUDED.month_balloons,
+                          daily_fans = EXCLUDED.daily_fans,
+                          source = EXCLUDED.source,
+                          finalized = EXCLUDED.finalized,
+                          observed_at = EXCLUDED.observed_at,
+                          updated_at = NOW()
+                        """,
+                        (
+                            row["user_id"], str(row["broadcast_no"]),
+                            row.get("crew_name") or "", row.get("nickname") or row["user_id"],
+                            row["date"], row.get("display_date") or row["date"],
+                            int(row["year"]), int(row["month"]), int(row["today"]),
+                            int(row["total"]), _as_json(row.get("fans") or []),
+                            row.get("source") or "poonggo_sse", bool(row.get("finalized")),
+                            _as_datetime(row.get("observed_at")) or observed_at,
+                        ),
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO streamer_live_totals (
+                      streamer_id, crew_name, nickname, broadcast_no,
+                      reporting_date, display_date, year, month, today_balloons,
+                      month_balloons, daily_fans, source, counting_mode, session_offset,
+                      finalized, connected, observed_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (streamer_id) DO UPDATE SET
+                      crew_name = EXCLUDED.crew_name,
+                      nickname = EXCLUDED.nickname,
+                      broadcast_no = EXCLUDED.broadcast_no,
+                      reporting_date = EXCLUDED.reporting_date,
+                      display_date = EXCLUDED.display_date,
+                      year = EXCLUDED.year,
+                      month = EXCLUDED.month,
+                      today_balloons = EXCLUDED.today_balloons,
+                      month_balloons = EXCLUDED.month_balloons,
+                      daily_fans = EXCLUDED.daily_fans,
+                      source = EXCLUDED.source,
+                      counting_mode = EXCLUDED.counting_mode,
+                      session_offset = EXCLUDED.session_offset,
+                      finalized = EXCLUDED.finalized,
+                      connected = EXCLUDED.connected,
+                      observed_at = EXCLUDED.observed_at,
+                      updated_at = NOW()
+                    """,
+                    (
+                        row["user_id"], row.get("crew_name") or "",
+                        row.get("nickname") or row["user_id"],
+                        row.get("broadcast_no"), row["date"],
+                        row.get("display_date") or row["date"],
+                        int(row["year"]), int(row["month"]),
+                        int(row["today"]), int(row["total"]),
+                        _as_json(row.get("fans") or []),
+                        row.get("source") or "poonggo_sse",
+                        row.get("counting_mode") or "legacy",
+                        int(row.get("session_offset") or 0),
+                        bool(row.get("finalized")),
+                        bool(row.get("connected")),
+                        _as_datetime(row.get("observed_at")) or observed_at,
+                    ),
+                )
+                session_date = str(row["date"])
+                if (int(session_date[:4]), int(session_date[5:7])) == (
+                    int(row["year"]), int(row["month"])
+                ):
+                    day = int(session_date[-2:])
+                    conn.execute(
+                        """
+                    UPDATE streamer_month_current
+                    SET total_balloons = %s,
+                        daily_balloons = (
+                          SELECT COALESCE(jsonb_agg(value ORDER BY (value->>'day')::int), '[]'::jsonb)
+                          FROM (
+                            SELECT value FROM jsonb_array_elements(daily_balloons)
+                            WHERE (value->>'day')::int <> %s
+                            UNION ALL
+                            SELECT jsonb_build_object('day', %s, 'balloons', %s)
+                          ) days
+                        ),
+                        data_source = %s,
+                        source_observed_at = %s,
+                        last_collected_at = %s,
+                        last_changed_at = %s
+                    WHERE streamer_id = %s AND year = %s AND month = %s
+                    """,
+                        (
+                            int(row["total"]), day, day, int(row["today"]),
+                            row.get("source") or "poonggo_sse", observed_at,
+                            observed_at, observed_at, row["user_id"],
+                            int(row["year"]), int(row["month"]),
+                        ),
+                    )
+                else:
+                    # A broadcast crossing a month boundary belongs to its
+                    # start date, not an impossible day in the new month.
+                    conn.execute(
+                        """
+                        UPDATE streamer_month_current
+                        SET total_balloons = %s, data_source = %s,
+                            source_observed_at = %s, last_collected_at = %s,
+                            last_changed_at = %s
+                        WHERE streamer_id = %s AND year = %s AND month = %s
+                        """,
+                        (
+                            int(row["total"]), row.get("source") or "poonggo_sse",
+                            observed_at, observed_at, observed_at, row["user_id"],
+                            int(row["year"]), int(row["month"]),
+                        ),
+                    )
+
+
+
 def get_collector_members() -> list[dict[str, Any]]:
     """The collector's membership source of truth is PostgreSQL, not Sheets."""
 
@@ -361,16 +688,32 @@ def get_collector_members() -> list[dict[str, Any]]:
         rows = conn.execute(
             "SELECT crew_name, user_id, nickname, note FROM members ORDER BY crew_name, id"
         ).fetchall()
-    return [
-        {
-            "crew_name": str(row["crew_name"]),
-            "user_id": str(row["user_id"]),
-            "nickname": str(row["nickname"] or row["user_id"]),
-            "note": str(row["note"] or ""),
-            "is_on_leave": str(row["note"] or "").strip().lower() == "휴직",
-        }
-        for row in rows
-    ]
+        try:
+            crew_rows = conn.execute("SELECT crew_name FROM crews").fetchall()
+        except Exception:
+            crew_rows = []
+    canonical = {
+        str(row["crew_name"]).strip().lower(): str(row["crew_name"]).strip()
+        for row in crew_rows
+        if str(row.get("crew_name") or "").strip()
+    }
+    canonical["fa"] = "FA"
+    output = []
+    for row in rows:
+        raw_crew = str(row["crew_name"] or "").strip()
+        crew_name = canonical.get(raw_crew.lower(), raw_crew)
+        if raw_crew.upper() == "FA":
+            crew_name = "FA"
+        output.append(
+            {
+                "crew_name": crew_name,
+                "user_id": str(row["user_id"]),
+                "nickname": str(row["nickname"] or row["user_id"]),
+                "note": str(row["note"] or ""),
+                "is_on_leave": str(row["note"] or "").strip().lower() == "휴직",
+            }
+        )
+    return output
 
 
 def get_collector_state(year: int, month: int) -> dict[tuple[str, str], dict[str, Any]]:
@@ -535,5 +878,9 @@ def cleanup_expired_data(now: datetime) -> None:
         )
         conn.execute(
             "DELETE FROM streamer_month_history WHERE detected_at < %s",
+            (history_from,),
+        )
+        conn.execute(
+            "DELETE FROM live_donation_events WHERE occurred_at < %s",
             (history_from,),
         )

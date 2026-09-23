@@ -7,11 +7,11 @@ import {
 } from "@/lib/admin-session";
 import { jsonError } from "@/lib/api-utils";
 import { isFaCrew } from "@/lib/crews";
-import { requestCollectorRefresh } from "@/lib/ranking-cache";
 import {
   addMember,
   assignMembersFromFa,
   CrewVersionConflictError,
+  findMemberByUserId,
   getCrewMembersState,
   moveMemberToFa,
   removeMemberPermanently,
@@ -31,7 +31,10 @@ async function requireSession() {
 }
 
 async function queueRankingRefresh(loginId: string) {
-  try { await requestCollectorRefresh(loginId); } catch (error) { console.error("Failed to queue collector refresh", error); }
+  void loginId;
+  global.naksooRankingVersionMemoryCache?.clear();
+  global.naksooRankingMemoryCache?.clear();
+  global.naksooDashboardSnapshotMemoryCache?.clear();
 }
 
 export async function GET(request: Request) {
@@ -132,7 +135,11 @@ export async function POST(request: Request) {
 
     assertCrewAccess(session, crewName);
 
-    const validated = await validateSoopUser(userId);
+    const existing = await findMemberByUserId(userId);
+    const refreshed = await validateSoopUser(existing?.user_id ?? userId);
+    const validated = refreshed ?? (existing
+      ? { user_id: existing.user_id, nickname: existing.nickname }
+      : null);
 
     if (!validated) {
       return jsonError("유효하지 않은 SOOP ID입니다.");
