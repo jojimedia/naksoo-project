@@ -294,6 +294,44 @@ def _should_keep_live_snapshot(
     )
 
 
+def _merge_monthly_fans(
+    previous_fans: list[dict[str, Any]],
+    incoming_fans: list[dict[str, Any]],
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Keep cumulative monthly donor totals monotonic across partial reads."""
+
+    merged: dict[str, dict[str, Any]] = {}
+    for fan in previous_fans:
+        key = str(fan.get("user_id") or fan.get("nickname") or "").strip().lower()
+        if key:
+            merged[key] = dict(fan)
+    for fan in incoming_fans:
+        key = str(fan.get("user_id") or fan.get("nickname") or "").strip().lower()
+        if not key:
+            continue
+        previous = merged.get(key)
+        if previous is None:
+            merged[key] = dict(fan)
+            continue
+        previous_balloons = int(previous.get("balloons") or 0)
+        incoming_balloons = int(fan.get("balloons") or 0)
+        # Nickname/profile may legitimately change, but a cumulative monthly
+        # donor counter must not shrink because one detail response was partial.
+        merged[key] = {
+            **previous,
+            **fan,
+            "balloons": max(previous_balloons, incoming_balloons),
+            "count": max(
+                int(previous.get("count") or 0), int(fan.get("count") or 0)
+            ),
+        }
+    ordered = sorted(
+        merged.values(), key=lambda fan: int(fan.get("balloons") or 0), reverse=True
+    )[:limit]
+    return [{**fan, "rank": index + 1} for index, fan in enumerate(ordered)]
+
+
 def _merge_session_days(
     daily_balloons: list[dict[str, Any]],
     session_rows: list[dict[str, Any]],
@@ -424,8 +462,13 @@ def _upsert_month(
         month_data["total_balloons"] = effective_total
         if not month_data.get("daily_balloons"):
             month_data["daily_balloons"] = previous["daily_balloons"]
-        if not month_data.get("fans"):
-            month_data["fans"] = previous["fans"]
+
+    # Month totals were already monotonic, but the corresponding donor array
+    # used to be replaced wholesale.  A partial upstream response could then
+    # make a crew patron fall from 1M to 630K until the next complete read.
+    month_data["fans"] = _merge_monthly_fans(
+        (previous or {}).get("fans") or [], month_data.get("fans") or []
+    )
 
     # Broadcast sessions are the only authoritative source for a day.  Apply
     # the latest distinct broadcast for each start date after detail recovery,
@@ -506,8 +549,7 @@ def _upsert_month(
           is_password_broadcast = EXCLUDED.is_password_broadcast,
           total_balloons = GREATEST(streamer_month_current.total_balloons, EXCLUDED.total_balloons),
           daily_balloons = EXCLUDED.daily_balloons,
-          fans = CASE WHEN EXCLUDED.total_balloons >= streamer_month_current.total_balloons
-            THEN EXCLUDED.fans ELSE streamer_month_current.fans END,
+          fans = EXCLUDED.fans,
           data_source = EXCLUDED.data_source,
           source_observed_at = EXCLUDED.source_observed_at,
           last_collected_at = EXCLUDED.last_collected_at,

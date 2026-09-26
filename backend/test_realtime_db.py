@@ -5,6 +5,7 @@ from realtime_db import (
     _index_session_days,
     _is_authoritative_live_source,
     _merge_daily_fans,
+    _merge_monthly_fans,
     _merge_session_days,
     _realtime_session_rows,
     _should_keep_live_snapshot,
@@ -12,6 +13,25 @@ from realtime_db import (
 
 
 class RealtimeDatabaseSourcePriorityTests(unittest.TestCase):
+    def test_monthly_donor_never_regresses_on_partial_response(self):
+        previous = [
+            {"user_id": "pontus1125", "nickname": "잉여", "balloons": 1000000}
+        ]
+        incoming = [
+            {"user_id": "pontus1125", "nickname": "새닉네임", "balloons": 630000}
+        ]
+        merged = _merge_monthly_fans(previous, incoming)
+        self.assertEqual(merged[0]["balloons"], 1000000)
+        self.assertEqual(merged[0]["nickname"], "새닉네임")
+
+    def test_monthly_donor_missing_from_partial_response_is_retained(self):
+        previous = [
+            {"user_id": "pontus1125", "nickname": "잉여", "balloons": 1000000}
+        ]
+        self.assertEqual(
+            _merge_monthly_fans(previous, [])[0]["balloons"], 1000000
+        )
+
     def test_live_sources_are_authoritative(self):
         self.assertTrue(_is_authoritative_live_source("poonggo_sse"))
         self.assertTrue(_is_authoritative_live_source("poonggo_live_final"))
