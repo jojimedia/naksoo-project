@@ -310,6 +310,26 @@ PYTHONPATH=backend:/tmp/naksoo-live-test-deps python3 -m unittest backend.test_p
 
 ## 10. 배포 구조
 
+### 2026-09-27 LIVE 표시 지연 수정
+
+- LIVE 상태 확인은 `run_status_forever`에서 월간 상세 수집과 독립적으로 실행한다.
+  기본 시작 간격은 30초(`NAKSOO_STATUS_POLL_SECONDS`), 동시 요청은 최대 10개다.
+  기존 SOOP player 및 19금 방송 확인 경로를 유지한다. 공개 목록 일괄 조회로 전환한 것은 아니다.
+- `asyncio.as_completed`로 각 멤버 응답이 끝날 때 `live_status` SSE를 즉시 발행한다.
+  한 멤버 확인은 최대 15초이며, 실패하면 마지막 확인 상태를 유지한다.
+  한 회차가 30초를 넘으면 다음 회차는 완료 후 시작하므로 외부 API 장애 시 60초 보장은 없다.
+- 새 연결에는 `live_status_snapshot`을 보내며, SSE 연결 상태(`status`)와 방송 여부를 구분한다.
+- 풍고 SSE 대상 선정은 메모리의 최신 LIVE 상태를 참조한다. 전체 상세 수집 저장을 기다리지 않는다.
+- 상세 저장 직전에도 최신 LIVE 상태를 덮어써 오래된 요청이 방송 상태를 되돌리지 못하게 한다.
+  방송 시작 시각은 동일 방송번호의 상세 메타데이터를 보존하며, 다른 방송의 시작 시각은 재사용하지 않는다.
+- 프론트는 상태 이벤트로 배지·방송번호를 바로 갱신한다. 캐시 버전 변경 시에는
+  `router.refresh()` 대신 `/api/dashboard`를 읽어 `DashboardLoader`의 React state를 갱신한다.
+- 로그 `LIVE detected`의 `observed`는 감지 시각, `poll_elapsed`는 해당 회차 시작 후 경과 시간이다.
+  실제 방송 시작부터의 지연이나 브라우저 도착 시각을 측정한 값은 아니다.
+- 백엔드와 프론트 모두 배포해야 전체 변경이 적용된다. 실서비스 30~60초 목표는 배포 후 검증한다.
+- 검증: 백엔드 45개 테스트(지연 멤버 분리, 재접속, 실패 시 상태 보존, 오래된 저장 방어,
+  방송 시작 시각 보존 포함), 프론트 TypeScript 검사 및 프로덕션 빌드.
+
 Cloudtype 프로젝트에는 프론트와 수집기가 분리되어 있다.
 
 - 프론트 서비스 서브 디렉터리: `frontend`

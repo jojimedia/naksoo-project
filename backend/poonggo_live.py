@@ -288,6 +288,7 @@ async def fetch_poonggo_daily_fan_snapshot(
 
 class PoonggoLiveService:
     def __init__(self) -> None:
+        self.live_statuses: dict[str, dict[str, Any]] = {}
         self.states: dict[str, dict[str, Any]] = {}
         self.stream_tasks: dict[str, asyncio.Task] = {}
         self.stream_metadata: dict[str, dict[str, Any]] = {}
@@ -340,6 +341,7 @@ class PoonggoLiveService:
         self.subscribers.add(queue)
         try:
             yield f"event: snapshot\ndata: {json.dumps(self.snapshot(), ensure_ascii=False)}\n\n"
+            yield f"event: live_status_snapshot\ndata: {json.dumps(list(self.live_statuses.values()), ensure_ascii=False)}\n\n"
             while True:
                 try:
                     message = await asyncio.wait_for(queue.get(), timeout=15)
@@ -348,6 +350,20 @@ class PoonggoLiveService:
                     yield ": keep-alive\n\n"
         finally:
             self.subscribers.discard(queue)
+
+    def publish_live_status(self, payload: dict[str, Any]) -> None:
+        # Connection health is not broadcast status. Keep these events separate.
+        self.live_statuses[str(payload["user_id"]).lower()] = dict(payload)
+        self._broadcast("live_status", payload)
+
+    def overlay_live_status(self, item: dict[str, Any]) -> dict[str, Any]:
+        status = self.live_statuses.get(str(item.get("user_id") or "").lower())
+        if not status:
+            return item
+        # The lightweight player check does not supply a start time. Keep
+        # detail metadata only when it belongs to the same broadcast.
+        start = item.get("broadcast_start") if status.get("is_live") and str(item.get("broadcast_no") or "") == str(status.get("broadcast_no") or "") else None
+        return {**item, **status, "broadcast_start": start}
 
     def _broadcast(self, event: str, payload: Any) -> None:
         if isinstance(payload, dict):
@@ -678,6 +694,7 @@ class PoonggoLiveService:
                 continue
             desired: dict[str, dict[str, Any]] = {}
             for item in cached.get("items") or []:
+                item = self.overlay_live_status(item)
                 if not item.get("is_live") or not item.get("broadcast_no"):
                     continue
                 user_id = str(item.get("user_id") or "")

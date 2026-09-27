@@ -47,9 +47,9 @@ from realtime_db import (
 )
 
 
-STATUS_POLL_SECONDS = max(30, int(os.environ.get("NAKSOO_STATUS_POLL_SECONDS", "60")))
-# Keep a small spread so 123 status requests do not arrive at once, while
-# still detecting a newly LIVE streamer within roughly one minute.
+STATUS_POLL_SECONDS = max(30, int(os.environ.get("NAKSOO_STATUS_POLL_SECONDS", "30")))
+# Jitter applies to the legacy one-shot cycle. The independent status lane
+# bounds concurrency and schedules rounds separately from detail collection.
 STATUS_POLL_JITTER_SECONDS = max(0, int(os.environ.get("NAKSOO_STATUS_POLL_JITTER_SECONDS", "5")))
 STATUS_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_STATUS_CONCURRENCY", "10")))
 HOT_POLL_SECONDS = max(120, int(os.environ.get("NAKSOO_HOT_POLL_SECONDS", "300")))
@@ -153,6 +153,7 @@ class RealtimeCollector:
         self.next_full_reconciliation_at: datetime | None = None
         self.recovery_required: set[tuple[str, str]] = set()
         self.poonggo_live = PoonggoLiveService()
+        self.independent_status = False
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -373,6 +374,8 @@ class RealtimeCollector:
             async with httpx.AsyncClient(follow_redirects=True, timeout=15, headers=HEADERS) as client:
                 status_members: list[dict[str, Any]] = []
                 for member in active_members:
+                    if self.independent_status:
+                        continue
                     key = (member["crew_name"], member["user_id"])
                     if now < self.next_status_at.get(key, now):
                         continue
@@ -461,7 +464,8 @@ class RealtimeCollector:
                     key = (member["crew_name"], member["user_id"])
                     if key in quick_keys or key not in items_by_key:
                         continue
-                    if self.live_states.get(key, False) and now >= self.next_detail_at.get(key, now):
+                    needs_recovery = key in self.recovery_required or (items_by_key[key].get("current_month") or {}).get("data_source") == "unavailable"
+                    if (self.live_states.get(key, False) or needs_recovery) and now >= self.next_detail_at.get(key, now):
                         quick_collect.append(member)
                         quick_keys.add(key)
                 # Donor-detail backfill is independent of the 2-minute live
@@ -665,6 +669,9 @@ class RealtimeCollector:
         # Re-read the source of truth at the last possible moment so a slow
         # source request cannot undo a concurrent admin move/delete.
         output["items"] = align_members(output["items"], get_collector_members())
+        for item in output["items"]:
+            # A detail request may have started before a LIVE transition.
+            item.update(self.poonggo_live.overlay_live_status(item))
         output["count"] = len(output["items"])
         # Cached/chart values can recover the month total, but never own a
         # calendar-day slot.  Only a broadcast-number session may do that.
@@ -713,7 +720,82 @@ class RealtimeCollector:
                     record_source_collection_result(False, datetime.now(TIMEZONE))
                 await asyncio.sleep(delay)
 
+    async def run_status_forever(self) -> None:
+        """Poll independently; publish each result before slower members finish."""
+        semaphore = asyncio.Semaphore(STATUS_CONCURRENCY)
+        async with httpx.AsyncClient(timeout=8, follow_redirects=True, headers=HEADERS) as client:
+            async def check(member):
+                async with semaphore:
+                    try:
+                        async with asyncio.timeout(15):
+                            # Do not wait for a station/profile fetch to publish LIVE.
+                            status = await fetch_live_status(client, member["user_id"])
+                        return member, status
+                    except Exception as error:
+                        print(f"[{member['user_id']}] independent LIVE check failed: {error}")
+                        return member, None
+
+            while True:
+                started = asyncio.get_running_loop().time()
+                tasks = []
+                try:
+                    if acquire_collector_lease(self.holder, COLLECTOR_LEASE_SECONDS):
+                        self._restore_state(datetime.now(TIMEZONE))
+                        members = get_collector_members()
+                        active = [m for m in members if not m.get("is_on_leave")]
+                        valid_ids = {str(m["user_id"]).lower() for m in active}
+                        self.poonggo_live.live_statuses = {
+                            k: v for k, v in self.poonggo_live.live_statuses.items() if k in valid_ids
+                        }
+                        tasks = [asyncio.create_task(check(m)) for m in active]
+                        changed = False
+                        for task in asyncio.as_completed(tasks):
+                            member, status = await task
+                            if status is None:
+                                continue  # Unknown is not OFFLINE.
+                            now = datetime.now(TIMEZONE)
+                            uid = str(member["user_id"])
+                            key = (member["crew_name"], uid)
+                            was_live = self.live_states.get(key, False)
+                            is_live = bool(status.get("is_live"))
+                            viewers = str(status.get("viewer_count") or "")
+                            payload = {
+                                "user_id": uid, "is_live": is_live,
+                                "is_password_broadcast": bool(status.get("is_password")),
+                                "broadcast_no": str(status.get("broadcast_no") or "") if is_live else None,
+                                "broadcast_title": status.get("broadcast_title") if is_live else None,
+                                "viewer_count": int("".join(c for c in viewers if c.isdigit()) or "0") if is_live else None,
+                            }
+                            previous = self.poonggo_live.live_statuses.get(uid.lower())
+                            if previous and previous.get("last_live_end_at"):
+                                payload["last_live_end_at"] = previous["last_live_end_at"]
+                            if was_live and not is_live:
+                                payload["last_live_end_at"] = now.isoformat()
+                                self.next_detail_at[key] = now
+                            if previous is None or any(previous.get(k) != v for k, v in payload.items()):
+                                payload["status_observed_at"] = now.isoformat()
+                                self.poonggo_live.publish_live_status(payload)
+                                changed = True
+                                print(f"LIVE detected: user={uid} live={is_live} broadcast={payload['broadcast_no']} observed={now.isoformat()} poll_elapsed={asyncio.get_running_loop().time()-started:.2f}s")
+                            self.live_states[key] = is_live
+                            if was_live and not is_live:
+                                self.recovery_required.add(key)
+                        if changed:
+                            output = get_cached_result()
+                            if output:
+                                self._save_result(output, datetime.now(TIMEZONE))
+                except Exception as error:
+                    print(f"Independent LIVE poll failed: {error}")
+                finally:
+                    for task in tasks:
+                        if not task.done():
+                            task.cancel()
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+                await asyncio.sleep(max(1, STATUS_POLL_SECONDS - (asyncio.get_running_loop().time() - started)))
+
     async def run_forever(self) -> None:
+        self.independent_status = True
         port = int(os.environ.get("PORT", os.environ.get("NAKSOO_LIVE_API_PORT", "8000")))
         api = uvicorn.Server(
             uvicorn.Config(
@@ -726,6 +808,7 @@ class RealtimeCollector:
         )
         await asyncio.gather(
             self.run_detail_forever(),
+            self.run_status_forever(),
             self.run_live_totals(),
             self.run_members_forever(),
             self.poonggo_live.run(),

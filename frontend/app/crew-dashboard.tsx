@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import AdminLoginModal from "./admin-login-modal";
 import AdminPanelModal from "./admin-panel-modal";
 import MemberRequestModal from "./member-request-modal";
@@ -93,6 +92,22 @@ type LiveTotal = {
     balloons: number;
   }>;
 };
+
+type LiveStatus = Pick<CrewCardData["members"][number],
+  "user_id" | "is_live" | "broadcast_no" | "broadcast_title" | "viewer_count"
+> & { status_observed_at: string };
+
+function applyLiveStatuses(crew: CrewCardData, statuses: Map<string, LiveStatus>) {
+  return {
+    ...crew,
+    members: crew.members.map(member => {
+      const status = statuses.get(member.user_id.toLowerCase());
+      if (!status) return member;
+      const sameBroadcast = status.is_live && status.broadcast_no === member.broadcast_no;
+      return { ...member, ...status, broadcast_start: sameBroadcast ? member.broadcast_start : null };
+    }),
+  };
+}
 
 function getKstDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -856,8 +871,11 @@ function FaRankingCard({
   );
 }
 
-export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
-  const router = useRouter();
+export default function CrewDashboard({ data, onDataUpdate }: {
+  data: CrewDashboardData;
+  onDataUpdate: (data: CrewDashboardData) => void;
+}) {
+  const [liveStatuses, setLiveStatuses] = useState<Map<string, LiveStatus>>(() => new Map());
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("members");
   const [showOverall, setShowOverall] = useState(false);
@@ -877,16 +895,16 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
   const liveCrews = useMemo(
     () =>
       data.crews.map((crew) =>
-        applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey),
+        applyLiveStatuses(applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey), liveStatuses),
       ),
-    [data.crews, data.current_period, liveTotals, todayDateKey],
+    [data.crews, data.current_period, liveTotals, todayDateKey, liveStatuses],
   );
   const liveFaCrew = useMemo(
     () =>
       data.fa_crew
-        ? applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period, todayDateKey)
+        ? applyLiveStatuses(applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period, todayDateKey), liveStatuses)
         : null,
-    [data.current_period, data.fa_crew, liveTotals, todayDateKey],
+    [data.current_period, data.fa_crew, liveTotals, todayDateKey, liveStatuses],
   );
 
   useEffect(() => {
@@ -936,10 +954,26 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
     };
     source.addEventListener("snapshot", onSnapshot as EventListener);
     source.addEventListener("total", onTotal as EventListener);
+    const onStatus = (event: MessageEvent<string>) => {
+      try {
+        const item = JSON.parse(event.data) as LiveStatus;
+        if (!item?.user_id || typeof item.is_live !== "boolean") return;
+        setLiveStatuses(current => new Map(current).set(item.user_id.toLowerCase(), item));
+      } catch { /* Keep the last confirmed status. */ }
+    };
+    const onStatusSnapshot = (event: MessageEvent<string>) => {
+      try {
+        const items = JSON.parse(event.data) as LiveStatus[];
+        setLiveStatuses(new Map(items.filter(item => item?.user_id && typeof item.is_live === "boolean")
+          .map(item => [item.user_id.toLowerCase(), item])));
+      } catch { /* Reconnect will supply another snapshot. */ }
+    };
+    source.addEventListener("live_status", onStatus as EventListener);
+    source.addEventListener("live_status_snapshot", onStatusSnapshot as EventListener);
     return () => source.close();
   }, []);
 
-  // Poll only the tiny cache version. The full React server payload is fetched
+  // Poll only the tiny cache version. The dashboard JSON is fetched
   // only after the collector has published changed dashboard data.
   useEffect(() => {
     let cancelled = false;
@@ -959,7 +993,15 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
         const payload = (await response.json()) as { version?: string | null };
         if (!cancelled && payload.version && payload.version !== data.data_version) {
           refreshing = true;
-          router.refresh();
+          try {
+            const snapshot = await fetch(`/api/dashboard${query}`, { cache: "no-store" });
+            if (snapshot.ok) {
+              const next = await snapshot.json() as CrewDashboardData;
+              if (!cancelled) onDataUpdate(next);
+            }
+          } finally {
+            refreshing = false;
+          }
         }
       } catch {
         // Keep the current snapshot during a short network interruption.
@@ -974,7 +1016,7 @@ export default function CrewDashboard({ data }: { data: CrewDashboardData }) {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [data.data_version, router]);
+  }, [data.data_version, onDataUpdate]);
 
   const crews = useMemo(() => {
     // 홈/검색 카드에는 소속 크루만 표시한다. FA는 카드로 넣지 않는다.

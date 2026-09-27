@@ -52,5 +52,5 @@ export default function DashboardLoader({ fallback }: { fallback: ReactNode }) {
     );
   }
 
-  return data ? <CrewDashboard data={data} /> : fallback;
+  return data ? <CrewDashboard key={query} data={data} onDataUpdate={setData} /> : fallback;
 }
