@@ -23,7 +23,9 @@ def _profile(user_id: str, value: Any) -> str:
 
 
 def _daily(period: dict[str, Any], day: int) -> int:
-    for value in period.get("daily_balloons") or []:
+    # New caches expose start-day session sums. Legacy chart days are retained
+    # for history, not used to fill a missing session day in a rebuilt cache.
+    for value in period.get("daily_session_balloons", period.get("daily_balloons")) or []:
         if _number(value.get("day")) == day:
             return _number(value.get("balloons"))
     return 0

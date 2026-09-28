@@ -16,6 +16,7 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 from dashboard_cache import build_dashboard
+from broadcast_days import aggregate_days
 
 
 SCHEMA_SQL = """
@@ -327,10 +328,8 @@ def _merge_daily_fans(
     }
     for row in rows:
         fans = row.get("daily_fans")
-        if not fans:
-            continue
         day = int(row["reporting_date"].day)
-        by_day[day] = {"day": day, "fans": fans}
+        by_day[day] = {"day": day, "fans": fans or []}
     return [by_day[day] for day in sorted(by_day)]
 
 
@@ -355,7 +354,7 @@ def _realtime_session_rows(month_data: dict[str, Any]) -> list[dict[str, Any]]:
     """Turn the newest in-memory live overlay into day-authority rows."""
 
     realtime = month_data.get("realtime_totals") or {}
-    if not _is_authoritative_live_source(realtime.get("source")):
+    if not _is_authoritative_live_source(realtime.get("source")) or realtime.get("daily_basis") != "broadcast_start_day_v1":
         return []
     rows = []
     for date_key, value_key, fans_key in (
@@ -427,8 +426,8 @@ def _upsert_month(
         if not month_data.get("fans"):
             month_data["fans"] = previous["fans"]
 
-    # Broadcast sessions are the only authoritative source for a day.  Apply
-    # the latest distinct broadcast for each start date after detail recovery,
+    # Broadcast sessions are the only authoritative source for a day. Apply
+    # the sum of distinct broadcasts for each start date after detail recovery,
     # so request completion order cannot undo a live/final snapshot.
     session_rows = (session_days or {}).get((streamer_id, year, month), [])
     month_data["daily_balloons"] = _merge_session_days(
@@ -445,10 +444,16 @@ def _upsert_month(
     month_data["daily_balloons"] = _merge_session_days(
         month_data["daily_balloons"], hot_rows
     )
-    fallback_rows = (fallback_fan_days or {}).get((streamer_id, year, month), [])
-    month_data["daily_session_fans"] = _merge_daily_fans(
-        month_data.get("daily_session_fans") or [], fallback_rows
+    month_data["daily_session_balloons"] = _merge_session_days(
+        _merge_session_days([], session_rows), hot_rows
     )
+    # Old per-session hot overlays are not a daily sum and must not override
+    # the rebuilt day snapshot on startup before SSE restoration completes.
+    if (month_data.get("realtime_totals") or {}).get("daily_basis") != "broadcast_start_day_v1":
+        month_data.pop("realtime_totals", None)
+    # Calendar-day fan fallbacks cannot be paired with start-day totals.
+    # Rebuild together from session authority, including authoritative empties.
+    month_data["daily_session_fans"] = []
     month_data["daily_session_fans"] = _merge_daily_fans(
         month_data["daily_session_fans"], session_rows
     )
@@ -546,22 +551,14 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
             # of DB round trips and undo the cached-dashboard speedup.
             session_rows = conn.execute(
                 """
-                SELECT DISTINCT ON (streamer_id, reporting_date)
-                       streamer_id, reporting_date, today_balloons, daily_fans
+                SELECT streamer_id, broadcast_no, reporting_date, today_balloons, daily_fans
                 FROM streamer_live_sessions
                 WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 120
-                ORDER BY streamer_id, reporting_date, observed_at DESC, broadcast_no DESC
+                ORDER BY observed_at, broadcast_no
                 """
             ).fetchall()
-            session_days = _index_session_days(session_rows)
-            fallback_fan_rows = conn.execute(
-                """
-                SELECT streamer_id, reporting_date, daily_fans
-                FROM streamer_daily_fan_snapshots
-                WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
-                """
-            ).fetchall()
-            fallback_fan_days = _index_session_days(fallback_fan_rows)
+            session_days = _index_session_days(aggregate_days(session_rows))
+            fallback_fan_days = {}  # Calendar-day snapshots are not session truth.
             for item in payload.get("items") or []:
                 _upsert_month(
                     conn, item, item.get("current_month") or {}, observed_at,
@@ -645,6 +642,26 @@ def load_live_totals() -> list[dict[str, Any]]:
             WHERE COALESCE(current_row.display_date, current_row.reporting_date) >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 1
             """
         ).fetchall()
+        sessions = conn.execute(
+            """SELECT streamer_id, broadcast_no, crew_name, nickname, reporting_date, today_balloons,
+                      daily_fans, month_balloons, year, month, source, finalized, observed_at
+               FROM streamer_live_sessions
+               WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 120
+               ORDER BY observed_at"""
+        ).fetchall()
+    by_user = {}
+    for session in sessions:
+        uid = str(session["streamer_id"]).lower()
+        by_user.setdefault(uid, []).append({
+            "user_id": uid, "broadcast_no": str(session["broadcast_no"]),
+            "crew_name": session.get("crew_name") or "", "nickname": session.get("nickname") or uid,
+            "date": session["reporting_date"].isoformat(),
+            "today": int(session["today_balloons"]), "fans": session["daily_fans"] or [],
+            "total": int(session["month_balloons"]), "year": int(session["year"]),
+            "month": int(session["month"]), "source": session["source"],
+            "counting_mode": "broadcast_live_v4", "finalized": session["finalized"],
+            "observed_at": session["observed_at"].isoformat(),
+        })
     return [
         {
             "user_id": str(row["streamer_id"]),
@@ -668,6 +685,7 @@ def load_live_totals() -> list[dict[str, Any]]:
             "previous_date": row["previous_date"].isoformat() if row["previous_date"] else None,
             "previous_balloons": int(row["previous_balloons"] or 0),
             "previous_fans": row["previous_fans"] or [],
+            "_sessions": by_user.get(str(row["streamer_id"]).lower(), []),
         }
         for row in rows
     ]
@@ -819,6 +837,8 @@ def persist_live_updates(
                             _as_datetime(row.get("observed_at")) or observed_at,
                         ),
                     )
+                if row.get("_session_only"):
+                    continue
                 conn.execute(
                     """
                     INSERT INTO streamer_live_totals (
@@ -826,7 +846,7 @@ def persist_live_updates(
                       reporting_date, display_date, year, month, today_balloons,
                       month_balloons, daily_fans, source, counting_mode, session_offset,
                       finalized, connected, observed_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (streamer_id) DO UPDATE SET
                       crew_name = EXCLUDED.crew_name,
                       nickname = EXCLUDED.nickname,
@@ -877,7 +897,11 @@ def persist_live_updates(
                             SELECT value FROM jsonb_array_elements(daily_balloons)
                             WHERE (value->>'day')::int <> %s
                             UNION ALL
-                            SELECT jsonb_build_object('day', %s, 'balloons', %s)
+                            SELECT jsonb_build_object('day', %s, 'balloons', (
+                              SELECT COALESCE(SUM(today_balloons), 0)
+                              FROM streamer_live_sessions
+                              WHERE streamer_id = %s AND reporting_date = %s::date
+                            ))
                           ) days
                         ),
                         data_source = %s,
@@ -887,7 +911,7 @@ def persist_live_updates(
                     WHERE streamer_id = %s AND year = %s AND month = %s
                     """,
                         (
-                            int(row["total"]), day, day, int(row["today"]),
+                            int(row["total"]), day, day, row["user_id"], row["date"],
                             row.get("source") or "poonggo_sse", observed_at,
                             observed_at, observed_at, row["user_id"],
                             int(row["year"]), int(row["month"]),

@@ -65,6 +65,7 @@ class RealtimeDatabaseSourcePriorityTests(unittest.TestCase):
         month = {
             "realtime_totals": {
                 "source": "poonggo_sse",
+                "daily_basis": "broadcast_start_day_v1",
                 "date": "2026-09-23",
                 "today": 111116,
                 "previous_date": "2026-09-22",

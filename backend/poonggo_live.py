@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from live_totals import KST
+from broadcast_days import aggregate_days
 from realtime_db import (
     get_daily_fan_backfill_candidates,
     get_cached_result,
@@ -248,6 +249,8 @@ async def fetch_poonggo_snapshot(
     fans, donation_ids, fans_complete = parse_poonggo_live_donations(
         live.text, user_id, broadcast_no
     )
+    if sum(int(fan["balloons"]) for fan in fans) > today:
+        raise ValueError(f"Poonggo donor sum exceeds broadcast total: {user_id}/{broadcast_no}")
 
     return {
         "user_id": user_id,
@@ -290,6 +293,8 @@ class PoonggoLiveService:
     def __init__(self) -> None:
         self.live_statuses: dict[str, dict[str, Any]] = {}
         self.states: dict[str, dict[str, Any]] = {}
+        self.sessions: dict[tuple[str, str], dict[str, Any]] = {}
+        self.dirty_sessions: set[tuple[str, str]] = set()
         self.stream_tasks: dict[str, asyncio.Task] = {}
         self.stream_metadata: dict[str, dict[str, Any]] = {}
         self.finalize_tasks: set[asyncio.Task] = set()
@@ -318,6 +323,8 @@ class PoonggoLiveService:
                 rows = load_live_totals()
                 donation_ids = load_recent_donation_ids()
                 for row in rows:
+                    for session in row.pop("_sessions", []):
+                        self.sessions[(str(session["user_id"]).lower(), str(session["broadcast_no"]))] = session
                     self.states[str(row["user_id"]).lower()] = dict(row)
                 for donation_id in donation_ids:
                     self._remember_id(str(donation_id))
@@ -332,9 +339,35 @@ class PoonggoLiveService:
 
     def snapshot(self) -> list[dict[str, Any]]:
         return [
-            {key: value for key, value in state.items() if not key.startswith("_")}
+            self.day_view(state)
             for state in self.states.values()
         ]
+
+    def remember_session(self, state):
+        if state.get("broadcast_no") and state.get("date"):
+            key = (str(state["user_id"]).lower(), str(state["broadcast_no"]))
+            self.sessions[key] = dict(state)
+            self.dirty_sessions.add(key)
+
+    def day_view(self, state):
+        """SSE/client values are day aggregates; internal/DB rows stay sessions."""
+        uid = str(state["user_id"]).lower()
+        rows = [s for (user, _), s in self.sessions.items() if user == uid]
+        rows.append(state)  # current hot session replaces its persisted copy
+        days = aggregate_days([{
+            "user_id": uid, "broadcast_no": s.get("broadcast_no"),
+            "reporting_date": s["date"], "today_balloons": s.get("today", 0),
+            "daily_fans": s.get("fans") or [],
+        } for s in rows if s.get("date") and s.get("broadcast_no")])
+        view = {k: v for k, v in state.items() if not k.startswith("_") and not k.startswith("previous_")}
+        view["daily_basis"] = "broadcast_start_day_v1"
+        yesterday = (datetime.now(KST).date() - timedelta(days=1)).isoformat()
+        for day in days:
+            if day["reporting_date"] == state.get("date"):
+                view.update(today=day["today_balloons"], fans=day["daily_fans"])
+            elif day["reporting_date"] == yesterday:
+                view.update(previous_date=yesterday, previous_balloons=day["today_balloons"], previous_fans=day["daily_fans"])
+        return view
 
     async def subscribe(self):
         queue: asyncio.Queue[str] = asyncio.Queue(maxsize=100)
@@ -366,6 +399,8 @@ class PoonggoLiveService:
         return {**item, **status, "broadcast_start": start}
 
     def _broadcast(self, event: str, payload: Any) -> None:
+        if event == "total":
+            payload = self.day_view(payload)
         if isinstance(payload, dict):
             payload = {key: value for key, value in payload.items() if not key.startswith("_")}
         message = f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -397,6 +432,8 @@ class PoonggoLiveService:
                 incoming_broadcast
                 and str(previous.get("broadcast_no") or "") == incoming_broadcast
             )
+            if previous:
+                self.remember_session(previous)
             previous_session: dict[str, Any] = {}
             yesterday = (datetime.now(KST).date() - timedelta(days=1)).isoformat()
             if (
@@ -412,12 +449,24 @@ class PoonggoLiveService:
                     "previous_fans": previous.get("fans") or [],
                 }
             if only_if_current_broadcast and not same_broadcast:
+                archived = self.sessions.get((user_id, incoming_broadcast))
+                if archived:
+                    final = {**archived, **public_metadata, **snapshot, "user_id": metadata["user_id"], "finalized": True}
+                    final["date"] = archived["date"]
+                    # Do not let the previous broadcast's delayed final response
+                    # replace the current broadcast or its month observation.
+                    self.remember_session(final)
+                    self.dirty_ids.add(user_id)
+                    self.changed.set()
+                    self._broadcast("total", previous)
                 return
             same_live_session = (
                 same_broadcast
                 and previous.get("counting_mode") == "broadcast_live_v4"
                 and snapshot.get("counting_mode") == "broadcast_live_v4"
             )
+            if same_live_session:
+                snapshot["date"] = previous["date"]
             in_flight_event = (
                 same_live_session
                 and expected_revision is not None
@@ -444,7 +493,9 @@ class PoonggoLiveService:
                     ),
                 }
             elif same_live_session and not fans_complete:
-                snapshot["fans"] = merge_fans_max(snapshot.get("fans") or [], previous.get("fans") or [])
+                merged = merge_fans_max(snapshot.get("fans") or [], previous.get("fans") or [])
+                if sum(int(f.get("balloons") or 0) for f in merged) <= int(snapshot.get("today") or 0):
+                    snapshot["fans"] = merged
             for donation_id in donation_ids:
                 self._remember_id(str(donation_id))
             next_state = {
@@ -466,6 +517,7 @@ class PoonggoLiveService:
                 next_state.pop("previous_balloons", None)
                 next_state.pop("previous_fans", None)
             self.states[user_id] = next_state
+            self.remember_session(next_state)
             self.dirty_ids.add(user_id)
             self.changed.set()
         self._broadcast("total", next_state)
@@ -479,10 +531,15 @@ class PoonggoLiveService:
             return
         public_metadata = {key: value for key, value in metadata.items() if key != "semaphore"}
         async with self.lock:
-            if not self._remember_id(donation_id):
-                return
             user_id = str(metadata["user_id"]).lower()
             now = datetime.now(KST)
+            existing = self.states.get(user_id) or {}
+            # Never assign an unknown broadcast to the event's calendar date.
+            # The next exact-broadcast baseline will recover these gifts.
+            if not (existing.get("broadcast_no") == metadata.get("broadcast_no") and existing.get("date")) and not parse_broadcast_start_date(metadata.get("broadcast_start")):
+                return
+            if not self._remember_id(donation_id):
+                return
             state = self.states.get(user_id) or {
                 **public_metadata,
                 "user_id": metadata["user_id"],
@@ -509,6 +566,7 @@ class PoonggoLiveService:
                 or state.get("counting_mode") != "broadcast_live_v4"
                 or not same_broadcast
             ):
+                self.remember_session(state)
                 state = {
                     **state,
                     "date": reporting_date,
@@ -564,6 +622,7 @@ class PoonggoLiveService:
                 {**fan, "rank": index + 1} for index, fan in enumerate(fans)
             ]
             self.states[user_id] = state
+            self.remember_session(state)
             self.pending_events.append(
                 {
                     "donation_id": donation_id,
@@ -743,7 +802,10 @@ class PoonggoLiveService:
                 if not self.dirty_ids:
                     self.changed.clear()
                     continue
-                updates = [dict(self.states[key]) for key in self.dirty_ids if key in self.states]
+                session_keys = self.dirty_sessions
+                self.dirty_sessions = set()
+                updates = [{**self.sessions[key], "_session_only": True} for key in session_keys if key in self.sessions]
+                updates += [dict(self.states[key]) for key in self.dirty_ids if key in self.states]
                 events = self.pending_events
                 self.dirty_ids = set()
                 self.pending_events = []
@@ -754,6 +816,7 @@ class PoonggoLiveService:
                 print(f"Poonggo live flush failed: {error}")
                 async with self.lock:
                     self.dirty_ids.update(str(row["user_id"]).lower() for row in updates)
+                    self.dirty_sessions.update(session_keys)
                     self.pending_events = events + self.pending_events
                     self.changed.set()
 
@@ -796,8 +859,38 @@ class PoonggoLiveService:
         await asyncio.gather(
             self.sync_streams(),
             self.flush_forever(),
-            self.backfill_daily_fans_forever(),
+            self.repair_session_fans_forever(),
         )
+
+    async def repair_session_fans_forever(self):
+        """Repair known broadcasts only; never mix calendar-day donor lists."""
+        checked = {}
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            while True:
+                now = datetime.now(KST)
+                earliest = (now.date() - timedelta(days=1)).isoformat()
+                candidates = [
+                    (key, dict(row)) for key, row in self.sessions.items()
+                    if row.get("date", "") >= earliest
+                    and key[0] not in self.stream_tasks
+                    and int(row.get("today") or 0) > 0
+                    and (not row.get("fans") or sum(int(f.get("balloons") or 0) for f in row["fans"]) > int(row["today"]))
+                    and now.timestamp() - checked.get(key, 0) >= 900
+                ][:DAILY_FAN_BACKFILL_BATCH]
+                for key, row in candidates:
+                    checked[key] = now.timestamp()
+                    try:
+                        snapshot = await fetch_poonggo_snapshot(client, row["user_id"], broadcast_no=row["broadcast_no"])
+                        snapshot["source"] = "poonggo_live_final"
+                        snapshot["finalized"] = True
+                        await self.apply_snapshot(
+                            {"user_id": row["user_id"], "broadcast_no": row["broadcast_no"]},
+                            snapshot, only_if_current_broadcast=True,
+                        )
+                    except Exception as error:
+                        print(f"[{key[0]}/{key[1]}] session donor repair failed: {error}")
+                    await asyncio.sleep(1)
+                await asyncio.sleep(DAILY_FAN_BACKFILL_SECONDS)
 
 
 def create_live_app(service: PoonggoLiveService) -> FastAPI:

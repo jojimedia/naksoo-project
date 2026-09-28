@@ -153,9 +153,7 @@ function applyLiveTotalsToCrew(
         : [];
     const yesterdayLive =
       live?.counting_mode === "broadcast_live_v4" &&
-      live.date === yesterday &&
-      live.year === currentPeriod.year &&
-      live.month === currentPeriod.month;
+      live.date === yesterday;
     const storedYesterday = live?.previous_date === yesterday;
     const yesterdayValue = yesterdayLive
       ? Number(live.today)
@@ -168,7 +166,7 @@ function applyLiveTotalsToCrew(
       ? (live.fans ?? [])
       : storedYesterday
         ? (live.previous_fans ?? [])
-        : [];
+        : (member.yesterday_fans ?? []);
     const withYesterday = {
       ...member,
       display_day_balloons: yesterdayLive ? 0 : member.display_day_balloons,

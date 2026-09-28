@@ -686,6 +686,7 @@ class RealtimeCollector:
                 "total": row["total"],
                 "observed_at": row["observed_at"],
                 "source": row.get("source") or "poonggo_sse",
+                "daily_basis": row.get("daily_basis"),
                 "fans": row.get("fans") or [],
                 "previous_date": row.get("previous_date"),
                 "previous_balloons": row.get("previous_balloons"),
