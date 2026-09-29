@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any
 from live_totals import KST
+from live_status_freshness import display_status
 
 
 def _number(value: Any) -> int:
@@ -82,6 +83,7 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
         active.sort(key=lambda x: _number((x.get("current_month") or {}).get("total_balloons")), reverse=True)
         members = []
         for rank, item in enumerate(active, 1):
+            item = display_status(item, now)
             cur, prev = item.get("current_month") or {}, item.get("previous_month") or {}
             current_total, previous_total = _number(cur.get("total_balloons")), _number(prev.get("total_balloons"))
             today = _daily(cur, display_day) if is_current_calendar_month else 0
@@ -110,6 +112,8 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
                     yesterday_total = _number(realtime.get("previous_balloons"))
                     yesterday_fans = realtime.get("previous_fans") or []
             members.append({"rank": rank, "user_id": str(item["user_id"]), "nickname": str(item.get("nickname") or item["user_id"]), "profile_image_url": _profile(str(item["user_id"]), item.get("profile_image_url")), "broadcast_start": item.get("broadcast_start"), "is_live": bool(item.get("is_live")), "broadcast_no": item.get("broadcast_no"), "broadcast_title": item.get("broadcast_title"), "viewer_count": item.get("viewer_count"), "current_balloons": current_total, "previous_balloons": previous_total, "change_balloons": current_total - previous_total, "change_rate": round(((current_total - previous_total) / previous_total * 100) if previous_total else (100 if current_total else 0), 1), "display_day_balloons": today, "daily_fans": today_fans, "yesterday_balloons": yesterday_total, "yesterday_fans": yesterday_fans, "monthly_fans": [], "monthly_top_fans": _top_fans(cur), "is_on_leave": False})
+            members[-1]["status_observed_at"] = item.get("status_observed_at")
+            members[-1]["status_stale"] = item.get("status_stale", True)
         total = sum(member["current_balloons"] for member in members)
         average = round(total / len(members)) if members else 0
         kings = _patrons(active, 15)

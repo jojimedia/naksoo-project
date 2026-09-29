@@ -31,6 +31,8 @@ type CrewMember = {
   profile_image_url: string;
   broadcast_start: string | null;
   is_live: boolean;
+  status_observed_at?: string | null;
+  status_stale?: boolean;
   broadcast_no?: string | null;
   broadcast_title?: string | null;
   viewer_count?: number | null;

@@ -271,6 +271,28 @@ async def fetch_public_live_ids(client):
         return _public_live_ids
 
 
+async def fetch_poonggo_live_status(client, user_id):
+    """Fallback status only: malformed/missing markup is UNKNOWN, not offline."""
+    response = await client.get(
+        f"https://poonggo.com/station/{user_id}", timeout=4,
+        headers={"Accept": "text/html", "Origin": "https://poonggo.com", "Referer": "https://poonggo.com/"},
+    )
+    response.raise_for_status()
+    for match in re.finditer(
+        r'streamer:\{streamNo:"(?P<no>[^\"]*)",streamerId:"(?P<id>[^\"]+)"[^}]*?isLive:(?P<live>true|false)',
+        response.text,
+    ):
+        if match.group("id").lower() != user_id.lower():
+            continue
+        is_live = match.group("live") == "true"
+        if is_live and not match.group("no"):
+            raise ValueError("Poonggo LIVE response has no broadcast number")
+        return {"is_live": is_live, "is_password": False,
+                "broadcast_no": match.group("no") if is_live else None,
+                "status_source": "poonggo_station"}
+    raise ValueError(f"Poonggo status missing for {user_id}")
+
+
 async def fetch_live_status(client, user_id):
     """SOOPTV 생방송 정보 API에서 비번방 여부와 공개 방송 여부를 가져온다."""
 

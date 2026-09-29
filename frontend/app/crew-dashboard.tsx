@@ -97,14 +97,17 @@ type LiveStatus = Pick<CrewCardData["members"][number],
   "user_id" | "is_live" | "broadcast_no" | "broadcast_title" | "viewer_count"
 > & { status_observed_at: string };
 
-function applyLiveStatuses(crew: CrewCardData, statuses: Map<string, LiveStatus>) {
+function applyLiveStatuses(crew: CrewCardData, statuses: Map<string, LiveStatus>, now: number) {
   return {
     ...crew,
     members: crew.members.map(member => {
-      const status = statuses.get(member.user_id.toLowerCase());
-      if (!status) return member;
-      const sameBroadcast = status.is_live && status.broadcast_no === member.broadcast_no;
-      return { ...member, ...status, broadcast_start: sameBroadcast ? member.broadcast_start : null };
+      const streamed = statuses.get(member.user_id.toLowerCase());
+      const status = streamed && (Date.parse(streamed.status_observed_at) || 0) >= (Date.parse(member.status_observed_at ?? "") || 0) ? streamed : member;
+      const age = now - Date.parse(status.status_observed_at ?? "");
+      const fresh = Number.isFinite(age) && age >= -5_000 && age <= 120_000;
+      const isLive = status.is_live && fresh;
+      const sameBroadcast = isLive && status.broadcast_no === member.broadcast_no;
+      return { ...member, ...status, is_live: isLive, status_stale: !fresh, broadcast_start: sameBroadcast ? member.broadcast_start : null };
     }),
   };
 }
@@ -887,26 +890,27 @@ export default function CrewDashboard({ data, onDataUpdate }: {
     () => new Map(),
   );
   const [todayDateKey, setTodayDateKey] = useState(getKstDateKey);
+  const [statusNow, setStatusNow] = useState(Date.now);
   const yesterdayLabel = getDateLabel(getYesterdayDateKey(todayDateKey));
   const search = normalizeSearch(query);
   const isSearching = search.length > 0;
   const liveCrews = useMemo(
     () =>
       data.crews.map((crew) =>
-        applyLiveStatuses(applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey), liveStatuses),
+        applyLiveStatuses(applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey), liveStatuses, statusNow),
       ),
-    [data.crews, data.current_period, liveTotals, todayDateKey, liveStatuses],
+    [data.crews, data.current_period, liveTotals, todayDateKey, liveStatuses, statusNow],
   );
   const liveFaCrew = useMemo(
     () =>
       data.fa_crew
-        ? applyLiveStatuses(applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period, todayDateKey), liveStatuses)
+        ? applyLiveStatuses(applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period, todayDateKey), liveStatuses, statusNow)
         : null,
-    [data.current_period, data.fa_crew, liveTotals, todayDateKey, liveStatuses],
+    [data.current_period, data.fa_crew, liveTotals, todayDateKey, liveStatuses, statusNow],
   );
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => setTodayDateKey(getKstDateKey()), 30_000);
+    const intervalId = window.setInterval(() => { setTodayDateKey(getKstDateKey()); setStatusNow(Date.now()); }, 10_000);
     return () => window.clearInterval(intervalId);
   }, []);
   const rankingCrews = useMemo(

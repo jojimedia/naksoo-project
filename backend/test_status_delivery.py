@@ -10,7 +10,7 @@ from live_totals import KST
 class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
     def test_status_overlay_preserves_start_only_for_same_broadcast(self):
         service = RealtimeCollector().poonggo_live
-        service.publish_live_status({"user_id": "iluvbin", "is_live": True, "broadcast_no": "new"})
+        service.publish_live_status({"user_id": "iluvbin", "is_live": True, "broadcast_no": "new", "status_observed_at": datetime.now(KST).isoformat()})
         item = {"user_id": "iluvbin", "broadcast_no": "new", "broadcast_start": "2026-09-26T23:00:00+09:00"}
         self.assertEqual(service.overlay_live_status(item)["broadcast_start"], item["broadcast_start"])
         self.assertIsNone(service.overlay_live_status({**item, "broadcast_no": "old"})["broadcast_start"])
@@ -34,6 +34,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
             with (patch("realtime_worker.acquire_collector_lease", return_value=True),
                   patch("realtime_worker.get_collector_members", return_value=[{"user_id": "iluvbin", "crew_name": "crew"}]),
                   patch("realtime_worker.fetch_live_status", side_effect=status),
+                  patch("realtime_worker.fetch_poonggo_live_status", side_effect=TimeoutError("fallback slow")),
                   patch("realtime_worker.get_cached_result", return_value={}),
                   patch("realtime_worker.asyncio.sleep", side_effect=sleep)):
                 task = asyncio.create_task(collector.run_status_forever())
@@ -88,7 +89,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     def test_slow_detail_save_cannot_undo_new_live_status(self):
         collector = RealtimeCollector()
-        collector.poonggo_live.publish_live_status({"user_id": "iluvbin", "is_live": True, "broadcast_no": "new"})
+        collector.poonggo_live.publish_live_status({"user_id": "iluvbin", "is_live": True, "broadcast_no": "new", "status_observed_at": datetime.now(KST).isoformat()})
         result = {"items": [{"user_id": "iluvbin", "crew_name": "crew", "is_live": False}]}
         with (patch("realtime_worker.get_cached_result", return_value={}),
               patch("realtime_worker.get_collector_members", return_value=[{"user_id": "iluvbin", "crew_name": "crew"}]),

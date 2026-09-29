@@ -23,6 +23,7 @@ from main import (
     build_month_data,
     fetch_balloon,
     fetch_live_status,
+    fetch_poonggo_live_status,
     fetch_one_member,
     fetch_station,
     get_calendar_period,
@@ -154,6 +155,7 @@ class RealtimeCollector:
         self.recovery_required: set[tuple[str, str]] = set()
         self.poonggo_live = PoonggoLiveService()
         self.independent_status = False
+        self.status_fallback_after: dict[str, float] = {}
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -728,12 +730,22 @@ class RealtimeCollector:
             async def check(member):
                 async with semaphore:
                     try:
-                        async with asyncio.timeout(15):
+                        async with asyncio.timeout(4):
                             # Do not wait for a station/profile fetch to publish LIVE.
                             status = await fetch_live_status(client, member["user_id"])
                         return member, status
                     except Exception as error:
-                        print(f"[{member['user_id']}] independent LIVE check failed: {error}")
+                        uid = member["user_id"]
+                        print(f"[{uid}] independent LIVE check failed: {type(error).__name__}: {error}")
+                        # Limit fallback fan-out during a prolonged SOOP outage.
+                        now_tick = asyncio.get_running_loop().time()
+                        if now_tick >= self.status_fallback_after.get(uid, 0):
+                            self.status_fallback_after[uid] = now_tick + 60
+                            try:
+                                async with asyncio.timeout(4):
+                                    return member, await fetch_poonggo_live_status(client, uid)
+                            except Exception as fallback_error:
+                                print(f"[{uid}] fallback LIVE check failed: {type(fallback_error).__name__}: {fallback_error}")
                         return member, None
 
             while True:
@@ -766,6 +778,7 @@ class RealtimeCollector:
                                 "broadcast_no": str(status.get("broadcast_no") or "") if is_live else None,
                                 "broadcast_title": status.get("broadcast_title") if is_live else None,
                                 "viewer_count": int("".join(c for c in viewers if c.isdigit()) or "0") if is_live else None,
+                                "status_source": status.get("status_source") or "soop_player",
                             }
                             previous = self.poonggo_live.live_statuses.get(uid.lower())
                             if previous and previous.get("last_live_end_at"):
@@ -773,10 +786,12 @@ class RealtimeCollector:
                             if was_live and not is_live:
                                 payload["last_live_end_at"] = now.isoformat()
                                 self.next_detail_at[key] = now
-                            if previous is None or any(previous.get(k) != v for k, v in payload.items()):
-                                payload["status_observed_at"] = now.isoformat()
-                                self.poonggo_live.publish_live_status(payload)
-                                changed = True
+                            transitioned = previous is None or any(previous.get(k) != v for k, v in payload.items())
+                            # Renew confidence even when the broadcast is unchanged.
+                            payload["status_observed_at"] = now.isoformat()
+                            self.poonggo_live.publish_live_status(payload)
+                            changed = True
+                            if transitioned:
                                 print(f"LIVE detected: user={uid} live={is_live} broadcast={payload['broadcast_no']} observed={now.isoformat()} poll_elapsed={asyncio.get_running_loop().time()-started:.2f}s")
                             self.live_states[key] = is_live
                             if was_live and not is_live:

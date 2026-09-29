@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from live_totals import KST
+from live_status_freshness import display_status
 from broadcast_days import aggregate_days
 from realtime_db import (
     get_daily_fan_backfill_candidates,
@@ -374,7 +375,7 @@ class PoonggoLiveService:
         self.subscribers.add(queue)
         try:
             yield f"event: snapshot\ndata: {json.dumps(self.snapshot(), ensure_ascii=False)}\n\n"
-            yield f"event: live_status_snapshot\ndata: {json.dumps(list(self.live_statuses.values()), ensure_ascii=False)}\n\n"
+            yield f"event: live_status_snapshot\ndata: {json.dumps([display_status(s) for s in self.live_statuses.values()], ensure_ascii=False)}\n\n"
             while True:
                 try:
                     message = await asyncio.wait_for(queue.get(), timeout=15)
@@ -389,10 +390,12 @@ class PoonggoLiveService:
         self.live_statuses[str(payload["user_id"]).lower()] = dict(payload)
         self._broadcast("live_status", payload)
 
-    def overlay_live_status(self, item: dict[str, Any]) -> dict[str, Any]:
+    def overlay_live_status(self, item: dict[str, Any], *, for_collection=False) -> dict[str, Any]:
         status = self.live_statuses.get(str(item.get("user_id") or "").lower())
         if not status:
-            return item
+            return item if for_collection else display_status(item)
+        if not for_collection:
+            status = display_status(status)
         # The lightweight player check does not supply a start time. Keep
         # detail metadata only when it belongs to the same broadcast.
         start = item.get("broadcast_start") if status.get("is_live") and str(item.get("broadcast_no") or "") == str(status.get("broadcast_no") or "") else None
@@ -753,7 +756,7 @@ class PoonggoLiveService:
                 continue
             desired: dict[str, dict[str, Any]] = {}
             for item in cached.get("items") or []:
-                item = self.overlay_live_status(item)
+                item = self.overlay_live_status(item, for_collection=True)
                 if not item.get("is_live") or not item.get("broadcast_no"):
                     continue
                 user_id = str(item.get("user_id") or "")
