@@ -101,6 +101,7 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
     async def test_live_task_publishes_while_detail_is_blocked(self):
         collector = RealtimeCollector()
         published = asyncio.Event()
+        loop = asyncio.get_running_loop()
         detail_started = asyncio.Event()
         async def slow_detail():
             detail_started.set()
@@ -110,10 +111,10 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
             return snapshot()
         def save(result, now):
             self.assertEqual(result["items"][0]["current_month"]["total_balloons"], 140)
-            published.set()
+            loop.call_soon_threadsafe(published.set)
         collector.run_detail_forever = slow_detail
         with patch("realtime_worker.acquire_collector_lease", return_value=True), patch("realtime_worker.fetch_totals", side_effect=chart), patch("realtime_worker.get_cached_result", side_effect=lambda: sample()), patch("realtime_worker.save_result", side_effect=save), patch("realtime_worker.record_source_collection_result"):
-            task = asyncio.create_task(collector.run_forever())
+            task = asyncio.gather(slow_detail(), collector.run_live_totals())
             try:
                 await asyncio.wait_for(published.wait(), timeout=1)
             finally:

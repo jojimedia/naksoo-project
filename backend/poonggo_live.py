@@ -14,6 +14,7 @@ import os
 import re
 from collections import deque
 from contextlib import suppress
+from copy import deepcopy
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -814,7 +815,9 @@ class PoonggoLiveService:
                 self.pending_events = []
                 self.changed.clear()
             try:
-                persist_live_updates(updates, events, datetime.now(KST))
+                await asyncio.to_thread(
+                    persist_live_updates, deepcopy(updates), deepcopy(events), datetime.now(KST)
+                )
             except Exception as error:
                 print(f"Poonggo live flush failed: {error}")
                 async with self.lock:

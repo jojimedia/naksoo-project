@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+import threading
 from unittest.mock import patch
 from datetime import datetime
 
@@ -8,6 +9,37 @@ from live_totals import KST
 
 
 class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_database_save_does_not_block_loop_and_writes_are_serial(self):
+        collector = RealtimeCollector()
+        entered = threading.Event()
+        release = threading.Event()
+        writes = []
+
+        def save(output, now):
+            writes.append(output)
+            entered.set()
+            if not release.wait(2):
+                raise AssertionError("Event loop could not release DB writer")
+
+        with (patch("realtime_worker.get_cached_result", return_value={}),
+              patch("realtime_worker.get_collector_members", return_value=[]),
+              patch("realtime_worker.save_result", side_effect=save)):
+            first = asyncio.create_task(collector._save_result_async({"items": []}, datetime.now(KST)))
+            second = None
+            try:
+                self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+                second = asyncio.create_task(collector._save_result_async({"items": []}, datetime.now(KST)))
+                await asyncio.sleep(0.02)
+                self.assertEqual(len(writes), 1)
+                collector.poonggo_live.publish_live_status({"user_id": "test", "is_live": False})
+                self.assertIn("test", collector.poonggo_live.live_statuses)
+            finally:
+                release.set()
+                await first
+                if second is not None:
+                    await second
+            self.assertEqual(len(writes), 2)
+
     def test_status_overlay_preserves_start_only_for_same_broadcast(self):
         service = RealtimeCollector().poonggo_live
         service.publish_live_status({"user_id": "iluvbin", "is_live": True, "broadcast_no": "new", "status_observed_at": datetime.now(KST).isoformat()})

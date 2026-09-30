@@ -7,6 +7,7 @@ import asyncio
 import os
 import random
 import socket
+from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -156,6 +157,7 @@ class RealtimeCollector:
         self.poonggo_live = PoonggoLiveService()
         self.independent_status = False
         self.status_fallback_after: dict[str, float] = {}
+        self.save_lock = asyncio.Lock()
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -328,7 +330,7 @@ class RealtimeCollector:
             if not cached or not get_cached_result(older_cache_key):
                 print("Ranking cache is not ready; building initial member snapshot.")
                 output = await self._bootstrap(members, now)
-                self._save_result(output, datetime.now(TIMEZONE))
+                await self._save_result_async(output, datetime.now(TIMEZONE))
                 self.next_full_reconciliation_at = now + timedelta(
                     seconds=FULL_RECONCILIATION_SECONDS
                 )
@@ -638,7 +640,7 @@ class RealtimeCollector:
                         items_by_key[key] = item
 
             output = make_output(now, members, list(items_by_key.values()))
-            self._save_result(output, datetime.now(TIMEZONE))
+            await self._save_result_async(output, datetime.now(TIMEZONE))
             if recovery_due:
                 mark_recovery_sweep(now)
             complete_refresh_requests(requested_refreshes)
@@ -657,10 +659,28 @@ class RealtimeCollector:
             raise
 
     def _save_result(self, output, now):
-        # No await between reading and saving: the two tasks in this process
-        # cannot interleave writes. Restore the latest published overlay even
-        # when a slow detail task started with an older cache snapshot.
         latest = get_cached_result() or {}
+        self._prepare_result(output, latest, get_collector_members())
+        save_result(output, now)
+
+    async def _save_result_async(self, output, now):
+        # Serialize dashboard writers while keeping HTTP/SSE on the event loop.
+        async with self.save_lock:
+            latest = await asyncio.to_thread(get_cached_result) or {}
+            members = await asyncio.to_thread(get_collector_members)
+            detached = deepcopy(output)
+            # Live state must only be read on its owning event loop, never from
+            # the DB thread while SSE mutates session dictionaries.
+            self._prepare_result(detached, latest, members)
+            write = asyncio.create_task(asyncio.to_thread(save_result, deepcopy(detached), now))
+            try:
+                await asyncio.shield(write)
+            except asyncio.CancelledError:
+                # A thread cannot be cancelled: retain ordering until it ends.
+                await write
+                raise
+
+    def _prepare_result(self, output, latest, members):
         output_items = list(output.get("items") or [])
         ids = {str(item.get("user_id") or "").lower() for item in output_items}
         output["items"] = output_items + [
@@ -670,7 +690,7 @@ class RealtimeCollector:
         ]
         # Re-read the source of truth at the last possible moment so a slow
         # source request cannot undo a concurrent admin move/delete.
-        output["items"] = align_members(output["items"], get_collector_members())
+        output["items"] = align_members(output["items"], members)
         for item in output["items"]:
             # A detail request may have started before a LIVE transition.
             item.update(self.poonggo_live.overlay_live_status(item))
@@ -697,7 +717,6 @@ class RealtimeCollector:
             for row in self.poonggo_live.snapshot()
         }
         apply_totals(output, poonggo_totals, authoritative=True)
-        save_result(output, now)
 
     async def run_live_totals(self) -> None:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
@@ -713,7 +732,7 @@ class RealtimeCollector:
                             changed = apply_totals(
                                 output, self.chart_totals, include_daily=False
                             )
-                            self._save_result(output, now)
+                            await self._save_result_async(output, now)
                             print(f"Live chart saved: requests=2 changed={changed} observed={now.isoformat()} elapsed={(now-started).total_seconds():.2f}s")
                         record_source_collection_result(True, now)
                 except Exception as error:
@@ -799,7 +818,7 @@ class RealtimeCollector:
                         if changed:
                             output = get_cached_result()
                             if output:
-                                self._save_result(output, datetime.now(TIMEZONE))
+                                await self._save_result_async(output, datetime.now(TIMEZONE))
                 except Exception as error:
                     print(f"Independent LIVE poll failed: {error}")
                 finally:
@@ -886,7 +905,7 @@ class RealtimeCollector:
                     for existing in latest.get("items") or []
                     if str(existing.get("user_id") or "").lower() != key
                 ] + [item]
-                self._save_result(latest, collected_at)
+                await self._save_result_async(latest, collected_at)
                 self.new_member_retry.pop(key, None)
                 print(f"New member saved: {user_id}; monthly requests=3")
         except Exception as error:
@@ -911,7 +930,7 @@ class RealtimeCollector:
                             aligned = align_members(latest.get("items") or [], members)
                             if aligned != latest.get("items"):
                                 latest["items"] = aligned
-                                self._save_result(latest, datetime.now(TIMEZONE))
+                                await self._save_result_async(latest, datetime.now(TIMEZONE))
 
                             known = {
                                 str(item.get("user_id") or "").lower()

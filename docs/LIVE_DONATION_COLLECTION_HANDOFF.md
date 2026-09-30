@@ -408,6 +408,14 @@ Cloudtype 프로젝트에는 프론트와 수집기가 분리되어 있다.
 
 ## 12. 다른 AI가 작업을 시작할 때 확인할 순서
 
+### 2026-09-30 LIVE 상태 지연 후속 수정
+
+- 운영 수집기에서는 SOOP/풍고 상태 조회가 모두 timeout이었으나 같은 컨테이너의 별도 프로세스에서 소진 조회는 각각 약 0.7초/0.4초에 OFFLINE을 반환했다. 외부 차단으로 단정하지 않는다.
+- asyncio 이벤트 루프에서 동기 DB 저장(전체 월별 upsert 및 대시보드 요약 작성, SSE 배치 저장)을 직접 실행하던 경로를 분리했다. `_save_result_async`는 저장 잠금으로 순서를 보장하고 DB 작업은 `asyncio.to_thread`에서 실행한다.
+- 실시간 상태 병합은 이벤트 루프에서 수행하고 깊은 복사한 데이터만 DB 스레드로 전달한다. 취소 중에도 진행 중인 쓰기가 끝나기 전 잠금을 풀지 않는다. SSE 배치 저장도 별도 스레드로 실행한다.
+- 방송 시작일 기준 집계, 같은 날 여러 방송 합산, 방종 후 후원 내역 보존 규칙은 변경하지 않았다.
+- 회귀 테스트 61개 통과. 운영 정상화는 배포 후 `status_observed_at`의 지속 갱신과 LIVE/OFFLINE 원본 대조로 별도 확인해야 한다. 상태 TTL만으로 전체 LIVE가 숨겨진 것을 해결 완료로 판정하지 않는다.
+
 1. 이 문서의 불변조건을 먼저 확인한다.
 2. `backend/poonggo_live.py`의 `fetch_poonggo_snapshot`, `apply_snapshot`, `apply_donation`을 읽는다.
 3. `backend/realtime_db.py`에서 `streamer_live_totals` 스키마와 upsert 필드를 확인한다.
