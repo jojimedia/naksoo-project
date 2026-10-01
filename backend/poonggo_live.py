@@ -248,6 +248,15 @@ async def fetch_poonggo_snapshot(
     live.raise_for_status()
     monthly.raise_for_status()
     today, reporting_date = parse_poonggo_live_total(live.text, user_id, broadcast_no)
+    if (reporting_date.year, reporting_date.month) != (now.year, now.month):
+        # A broadcast owns the month in which it started. On a month boundary
+        # refetch that month's total instead of combining an old session day
+        # with the new calendar month's cumulative value.
+        monthly = await client.get(
+            monthly_url,
+            params={"date": f"{reporting_date.year}-{reporting_date.month:02d}-01"},
+        )
+        monthly.raise_for_status()
     fans, donation_ids, fans_complete = parse_poonggo_live_donations(
         live.text, user_id, broadcast_no
     )
@@ -258,8 +267,8 @@ async def fetch_poonggo_snapshot(
         "user_id": user_id,
         "date": reporting_date.isoformat(),
         "display_date": now.date().isoformat(),
-        "year": now.year,
-        "month": now.month,
+        "year": reporting_date.year,
+        "month": reporting_date.month,
         "today": today,
         "total": parse_poonggo_total(monthly.text, user_id),
         "fans": fans,
@@ -578,7 +587,7 @@ class PoonggoLiveService:
                     "fans": [],
                     "counting_mode": "broadcast_live_v4",
                 }
-            if stored_month != current_month:
+            if stored_month != current_month and not same_broadcast:
                 state = {**state, "year": now.year, "month": now.month, "total": 0}
             state = {
                 **state,

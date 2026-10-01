@@ -94,6 +94,8 @@ def apply_totals(result, snapshots, *, authoritative=False, include_daily=True):
             if total != month.get("total_balloons") or previous.get("today") != today:
                 changed += 1
             month["total_balloons"] = total
+            if authoritative:
+                month["data_source"] = snapshot.get("source") or "poonggo_sse"
             if include_daily:
                 month["realtime_totals"] = dict(snapshot, total=total, today=today)
             else:

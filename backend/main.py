@@ -745,11 +745,24 @@ async def enrich_fans_with_profiles(
 def build_month_data(balloon_data, year, month):
     """특정 월의 별풍선 데이터를 하나의 객체로 정리한다."""
 
+    daily_balloons = extract_daily_balloons(balloon_data)
+    source_total = extract_total_balloons(balloon_data)
+    # detail/get occasionally carries the previous month's `b` into the new
+    # month while `d` has already rolled over. The requested month's total is
+    # the sum of its daily rows; accepting the stale `b` polluted a fresh
+    # leaderboard on day one.
+    daily_total = sum(int(row.get("balloons") or 0) for row in daily_balloons)
+    total_balloons = daily_total if daily_balloons else source_total
+
     return {
         "year": year,
         "month": month,
-        "total_balloons": extract_total_balloons(balloon_data),
-        "daily_balloons": extract_daily_balloons(balloon_data),
+        "total_balloons": total_balloons,
+        "source_total_balloons": source_total,
+        "total_reconciled_from_daily": bool(
+            daily_balloons and source_total != daily_total
+        ),
+        "daily_balloons": daily_balloons,
         "fans": extract_fans(balloon_data),
     }
 

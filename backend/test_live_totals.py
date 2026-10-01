@@ -24,6 +24,13 @@ def snapshot(total=140, today=45):
 
 
 class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
+    def test_authoritative_live_total_marks_month_source(self):
+        result = sample()
+        live = snapshot(total=140, today=45)
+        live["test"]["source"] = "poonggo_sse"
+        apply_totals(result, live, authoritative=True)
+        self.assertEqual(result["items"][0]["current_month"]["data_source"], "poonggo_sse")
+
     def setUp(self):
         self.members_patch = patch(
             "realtime_worker.get_collector_members",

@@ -333,6 +333,24 @@ def _merge_daily_fans(
     return [by_day[day] for day in sorted(by_day)]
 
 
+def _reconcile_detail_total(month_data: dict[str, Any]) -> bool:
+    """Replace a stale detail `b` with the sum of the requested month's days."""
+
+    if month_data.get("data_source") != "detail":
+        return False
+    daily = month_data.get("daily_balloons") or []
+    if not daily:
+        return False
+    daily_total = sum(int(row.get("balloons") or 0) for row in daily)
+    stated_total = int(month_data.get("total_balloons") or 0)
+    if stated_total == daily_total:
+        return False
+    month_data["source_total_balloons"] = stated_total
+    month_data["total_balloons"] = daily_total
+    month_data["total_reconciled_from_daily"] = True
+    return True
+
+
 def _index_session_days(
     session_rows: list[dict[str, Any]],
 ) -> dict[tuple[str, int, int], list[dict[str, Any]]]:
@@ -392,6 +410,7 @@ def _upsert_month(
     if not streamer_id or not year or not month:
         return
 
+    incoming_reconciled = _reconcile_detail_total(month_data)
     total = int(month_data.get("total_balloons") or 0)
     previous = conn.execute(
         """
@@ -405,7 +424,25 @@ def _upsert_month(
 
     # A lower value is recorded for diagnosis, but does not replace a known
     # higher total.  The source sometimes publishes delayed/regressed totals.
-    should_keep_previous_total = previous_total is not None and total < previous_total
+    previous_daily = (previous or {}).get("daily_balloons") or []
+    previous_daily_total = sum(
+        int(row.get("balloons") or 0) for row in previous_daily
+    )
+    previous_inconsistent = bool(
+        previous
+        and previous.get("data_source") == "detail"
+        and previous_daily
+        and previous_total != previous_daily_total
+    )
+    corrects_polluted_detail = bool(
+        previous_inconsistent
+        and (incoming_reconciled or total == previous_daily_total)
+    )
+    should_keep_previous_total = bool(
+        previous_total is not None
+        and total < previous_total
+        and not corrects_polluted_detail
+    )
     effective_total = previous_total if should_keep_previous_total else total
     changed = previous_total is None or effective_total != previous_total
 

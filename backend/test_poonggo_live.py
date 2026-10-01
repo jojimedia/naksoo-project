@@ -108,6 +108,32 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["total"], 186716)
         self.assertEqual(result["counting_mode"], "broadcast_live_v4")
 
+    async def test_month_boundary_uses_broadcast_start_month(self):
+        calls = []
+        started = datetime(2026, 9, 30, 23, 30, tzinfo=KST)
+
+        def handle(request: httpx.Request):
+            calls.append(str(request.url))
+            if request.url.path.endswith("/monthly"):
+                amount = 9000 if request.url.params["date"] == "2026-09-01" else 100
+                return httpx.Response(200, text=page("cross", amount))
+            return httpx.Response(
+                200,
+                text=live_page("cross", "999", 500, int(started.timestamp() * 1000)),
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            result = await fetch_poonggo_snapshot(
+                client,
+                "cross",
+                datetime(2026, 10, 1, 0, 30, tzinfo=KST),
+                broadcast_no="999",
+            )
+        self.assertEqual((result["year"], result["month"]), (2026, 9))
+        self.assertEqual(result["date"], "2026-09-30")
+        self.assertEqual(result["total"], 9000)
+        self.assertTrue(any("date=2026-09-01" in url for url in calls))
+
     def test_live_parser_rejects_wrong_broadcast(self):
         html = live_page("dign1461", "real-soop-1", 97045, 1789567200000)
         self.assertEqual(parse_poonggo_live_total(html, "dign1461", "real-soop-1")[0], 97045)
@@ -212,8 +238,8 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
             metadata,
             {
                 "date": "2026-09-16",
-                "year": now.year,
-                "month": now.month,
+                "year": 2026,
+                "month": 9,
                 "today": 77930,
                 "total": 77930,
                 "fans": [],
@@ -237,6 +263,10 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.states["dign1461"]["date"], "2026-09-16")
         self.assertEqual(service.states["dign1461"]["today"], 77940)
         self.assertEqual(service.states["dign1461"]["display_date"], now.date().isoformat())
+        self.assertEqual(
+            (service.states["dign1461"]["year"], service.states["dign1461"]["month"]),
+            (2026, 9),
+        )
 
     async def test_new_broadcast_same_day_uses_its_own_live_counter(self):
         service = PoonggoLiveService()

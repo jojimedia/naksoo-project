@@ -6,12 +6,23 @@ from realtime_db import (
     _is_authoritative_live_source,
     _merge_daily_fans,
     _merge_session_days,
+    _reconcile_detail_total,
     _realtime_session_rows,
     _should_keep_live_snapshot,
 )
 
 
 class RealtimeDatabaseSourcePriorityTests(unittest.TestCase):
+    def test_stale_detail_month_total_is_reconciled_from_daily_rows(self):
+        month = {
+            "data_source": "detail",
+            "total_balloons": 13015,
+            "daily_balloons": [{"day": 1, "balloons": 0}],
+        }
+        self.assertTrue(_reconcile_detail_total(month))
+        self.assertEqual(month["total_balloons"], 0)
+        self.assertEqual(month["source_total_balloons"], 13015)
+
     def test_live_sources_are_authoritative(self):
         self.assertTrue(_is_authoritative_live_source("poonggo_sse"))
         self.assertTrue(_is_authoritative_live_source("poonggo_live_final"))
