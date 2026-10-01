@@ -41,6 +41,16 @@ def live_page(user_id: str, stream_no: str, amount: int, started_ms: int) -> str
 
 
 class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
+    def test_restored_cross_month_session_uses_broadcast_start_month(self):
+        state = {
+            "counting_mode": "broadcast_live_v4",
+            "date": "2026-09-30",
+            "year": 2026,
+            "month": 10,
+        }
+        self.assertTrue(PoonggoLiveService._align_session_period(state))
+        self.assertEqual((state["year"], state["month"]), (2026, 9))
+
     async def test_daily_fallback_reads_donors_without_owning_total(self):
         def handle(request: httpx.Request):
             self.assertEqual(request.url.params["date"], "2026-09-23")

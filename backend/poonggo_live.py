@@ -335,7 +335,11 @@ class PoonggoLiveService:
                 donation_ids = load_recent_donation_ids()
                 for row in rows:
                     for session in row.pop("_sessions", []):
+                        self._align_session_period(session)
                         self.sessions[(str(session["user_id"]).lower(), str(session["broadcast_no"]))] = session
+                    if self._align_session_period(row):
+                        self.dirty_ids.add(str(row["user_id"]).lower())
+                        self.changed.set()
                     self.states[str(row["user_id"]).lower()] = dict(row)
                 for donation_id in donation_ids:
                     self._remember_id(str(donation_id))
@@ -347,6 +351,23 @@ class PoonggoLiveService:
                 # frontend snapshot until the next broadcast starts.
                 print(f"Poonggo live restore delayed: {error}")
                 await asyncio.sleep(2)
+
+    @staticmethod
+    def _align_session_period(state: dict[str, Any]) -> bool:
+        """A live session belongs to its broadcast-start date and month."""
+
+        if state.get("counting_mode") != "broadcast_live_v4" or not state.get("date"):
+            return False
+        try:
+            reporting_date = datetime.fromisoformat(str(state["date"])).date()
+        except ValueError:
+            return False
+        expected = (reporting_date.year, reporting_date.month)
+        current = (int(state.get("year") or 0), int(state.get("month") or 0))
+        if current == expected:
+            return False
+        state["year"], state["month"] = expected
+        return True
 
     def snapshot(self) -> list[dict[str, Any]]:
         return [

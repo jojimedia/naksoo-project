@@ -546,10 +546,12 @@ def _upsert_month(
           broadcast_start = EXCLUDED.broadcast_start,
           is_live = EXCLUDED.is_live,
           is_password_broadcast = EXCLUDED.is_password_broadcast,
-          total_balloons = GREATEST(streamer_month_current.total_balloons, EXCLUDED.total_balloons),
+          -- Python already resolves source priority and legitimate regressions
+          -- into effective_total. GREATEST here made a known polluted value
+          -- impossible to repair at a month rollover.
+          total_balloons = EXCLUDED.total_balloons,
           daily_balloons = EXCLUDED.daily_balloons,
-          fans = CASE WHEN EXCLUDED.total_balloons >= streamer_month_current.total_balloons
-            THEN EXCLUDED.fans ELSE streamer_month_current.fans END,
+          fans = EXCLUDED.fans,
           data_source = EXCLUDED.data_source,
           source_observed_at = EXCLUDED.source_observed_at,
           last_collected_at = EXCLUDED.last_collected_at,
