@@ -44,6 +44,21 @@ def _top_fans(period: dict[str, Any]) -> list[dict[str, Any]]:
     return [{"rank": index + 1, "user_id": str(fan.get("user_id") or ""), "nickname": str(fan.get("nickname") or ""), "balloons": _number(fan.get("balloons"))} for index, fan in enumerate(fans)]
 
 
+def _period_slot(item: dict[str, Any], key: str, period: dict[str, Any]) -> dict[str, Any]:
+    """Reject a stale month slot instead of displaying it under a new month."""
+
+    value = item.get(key) or {}
+    if (
+        _number(value.get("year")),
+        _number(value.get("month")),
+    ) != (
+        _number(period.get("year")),
+        _number(period.get("month")),
+    ):
+        return {}
+    return value
+
+
 def _patrons(items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
     fans: dict[str, dict[str, Any]] = {}
     for item in items:
@@ -75,7 +90,14 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
     for item in result.get("items") or []:
         if not item.get("success") or not item.get("crew_name") or not item.get("user_id"):
             continue
-        grouped[str(item["crew_name"])].append(item)
+        # Dashboard generation is the final safety boundary. Even if an old
+        # worker wrote a mixed-period payload, September must never render as
+        # October merely because the slot is named ``current_month``.
+        grouped[str(item["crew_name"])].append({
+            **item,
+            "current_month": _period_slot(item, "current_month", current),
+            "previous_month": _period_slot(item, "previous_month", previous),
+        })
 
     crews = []
     for crew_name, items in grouped.items():

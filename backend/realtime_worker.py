@@ -106,6 +106,56 @@ def _needs_detail_backfill(item: dict[str, Any]) -> bool:
     )
 
 
+def _empty_month(period: dict[str, int]) -> dict[str, Any]:
+    """Return a safe, explicitly dated placeholder for an uncollected month."""
+
+    return {
+        "year": int(period["year"]),
+        "month": int(period["month"]),
+        "total_balloons": 0,
+        "daily_balloons": [],
+        "daily_session_balloons": [],
+        "daily_session_fans": [],
+        "fans": [],
+        "data_source": "unavailable",
+    }
+
+
+def align_item_periods(
+    items: list[dict[str, Any]], calendar: dict[str, dict[str, int]]
+) -> list[dict[str, Any]]:
+    """Rotate cached month slots by their embedded year/month.
+
+    The top-level cache period advances at midnight, but a cached item can
+    still have September in ``current_month`` until its first successful
+    October source response.  Slot names are therefore never trusted across
+    a calendar boundary; the embedded period is authoritative.
+    """
+
+    aligned = []
+    slot_names = ("current_month", "previous_month", "older_month")
+    targets = (
+        ("current_month", calendar["current"]),
+        ("previous_month", calendar["previous"]),
+        ("older_month", calendar["older"]),
+    )
+    for original in items:
+        item = dict(original)
+        by_period: dict[tuple[int, int], dict[str, Any]] = {}
+        for slot_name in slot_names:
+            month = item.get(slot_name) or {}
+            try:
+                key = (int(month.get("year")), int(month.get("month")))
+            except (TypeError, ValueError):
+                continue
+            by_period.setdefault(key, month)
+        for slot_name, period in targets:
+            key = (int(period["year"]), int(period["month"]))
+            item[slot_name] = by_period.get(key) or _empty_month(period)
+        aligned.append(item)
+    return aligned
+
+
 def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
     calendar = get_calendar_period(now)
     active_ids = {
@@ -117,6 +167,7 @@ def make_output(now: datetime, members: list[dict[str, Any]], items: list[dict[s
         item for item in items
         if (item.get("crew_name"), item.get("user_id")) in active_ids
     ]
+    items = align_item_periods(items, calendar)
     items = apply_member_sheet_metadata(items, members, {**calendar, "calendar_current": calendar["current"]})
     items.sort(key=lambda item: (item["crew_name"], -int((item.get("current_month") or {}).get("total_balloons") or 0)))
     return {
@@ -691,6 +742,30 @@ class RealtimeCollector:
         # Re-read the source of truth at the last possible moment so a slow
         # source request cannot undo a concurrent admin move/delete.
         output["items"] = align_members(output["items"], members)
+        current = output.get("current_period") or {}
+        previous = output.get("previous_period") or {}
+        older = output.get("older_period") or {}
+        if current.get("year") and current.get("month"):
+            if not previous.get("year") or not previous.get("month"):
+                previous_year, previous_month = (
+                    (int(current["year"]) - 1, 12)
+                    if int(current["month"]) == 1
+                    else (int(current["year"]), int(current["month"]) - 1)
+                )
+                previous = {"year": previous_year, "month": previous_month}
+                output["previous_period"] = previous
+            if not older.get("year") or not older.get("month"):
+                older_year, older_month = (
+                    (int(previous["year"]) - 1, 12)
+                    if int(previous["month"]) == 1
+                    else (int(previous["year"]), int(previous["month"]) - 1)
+                )
+                older = {"year": older_year, "month": older_month}
+                output["older_period"] = older
+            output["items"] = align_item_periods(
+                output["items"],
+                {"current": current, "previous": previous, "older": older},
+            )
         for item in output["items"]:
             # A detail request may have started before a LIVE transition.
             item.update(self.poonggo_live.overlay_live_status(item))

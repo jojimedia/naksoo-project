@@ -8,7 +8,7 @@ import httpx
 
 from live_totals import KST, apply_totals, chart_date, fetch_totals, saved_totals
 from dashboard_cache import build_dashboard
-from realtime_worker import RealtimeCollector
+from realtime_worker import RealtimeCollector, align_item_periods, make_output
 
 
 def sample():
@@ -24,6 +24,36 @@ def snapshot(total=140, today=45):
 
 
 class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
+    def test_month_boundary_rotates_cached_item_slots(self):
+        items = sample()["items"]
+        items[0]["previous_month"] = {
+            "year": 2026, "month": 8, "total_balloons": 80, "fans": []
+        }
+        output = make_output(
+            datetime(2026, 10, 1, 1, tzinfo=KST),
+            [{"user_id": "test", "nickname": "Test", "crew_name": "Crew", "is_on_leave": False}],
+            items,
+        )
+        item = output["items"][0]
+        self.assertEqual((item["current_month"]["year"], item["current_month"]["month"]), (2026, 10))
+        self.assertEqual(item["current_month"]["total_balloons"], 0)
+        self.assertEqual(item["current_month"]["data_source"], "unavailable")
+        self.assertEqual(item["previous_month"]["total_balloons"], 100)
+        self.assertEqual(item["older_month"]["total_balloons"], 80)
+
+    def test_align_item_periods_keeps_matching_new_month_data(self):
+        item = sample()["items"][0]
+        item["older_month"] = {
+            "year": 2026, "month": 10, "total_balloons": 25, "fans": []
+        }
+        aligned = align_item_periods([item], {
+            "current": {"year": 2026, "month": 10},
+            "previous": {"year": 2026, "month": 9},
+            "older": {"year": 2026, "month": 8},
+        })[0]
+        self.assertEqual(aligned["current_month"]["total_balloons"], 25)
+        self.assertEqual(aligned["previous_month"]["total_balloons"], 100)
+
     def test_authoritative_live_total_marks_month_source(self):
         result = sample()
         live = snapshot(total=140, today=45)
@@ -152,6 +182,17 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
             clock.now.return_value = datetime(2026, 9, 20, 2, tzinfo=KST)
             dashboard = build_dashboard(result)
         self.assertEqual(dashboard["crews"][0]["members"][0]["display_day_balloons"], 0)
+
+    def test_dashboard_rejects_stale_current_month_slot(self):
+        result = sample()
+        result["current_period"] = {"year": 2026, "month": 10}
+        result["previous_period"] = {"year": 2026, "month": 9}
+        result["items"][0]["previous_month"] = copy.deepcopy(result["items"][0]["current_month"])
+        with patch("dashboard_cache.datetime") as clock:
+            clock.now.return_value = datetime(2026, 10, 1, 2, tzinfo=KST)
+            member = build_dashboard(result)["crews"][0]["members"][0]
+        self.assertEqual(member["current_balloons"], 0)
+        self.assertEqual(member["previous_balloons"], 100)
 
     def test_dashboard_snapshot_keeps_only_yesterday_scalar(self):
         result = sample()
