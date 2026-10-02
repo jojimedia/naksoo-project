@@ -89,6 +89,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
         })
         collector.poonggo_live.states["iluvbin"] = {
             "user_id": "iluvbin", "broadcast_no": "new", "connected": True,
+            "_last_sse_at": datetime.now(KST).timestamp(),
         }
         collector.poonggo_live.stream_metadata["iluvbin"] = {
             "user_id": "iluvbin", "broadcast_no": "new",
@@ -102,7 +103,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
         with (patch("realtime_worker.acquire_collector_lease", return_value=True),
               patch("realtime_worker.get_collector_members", return_value=[{"user_id": "iluvbin", "crew_name": "crew"}]),
               patch("realtime_worker.fetch_live_status", side_effect=TimeoutError("blocked")),
-              patch("realtime_worker.fetch_poonggo_live_status") as fallback,
+              patch("realtime_worker.fetch_poonggo_live_status", side_effect=TimeoutError("fallback blocked")) as fallback,
               patch("realtime_worker.get_cached_result", return_value={}),
               patch("realtime_worker.asyncio.sleep", side_effect=sleep)):
             task = asyncio.create_task(collector.run_status_forever())
@@ -113,17 +114,18 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(status["broadcast_no"], "new")
                 self.assertEqual(status["status_source"], "poonggo_sse_connection")
                 self.assertGreater(status["status_observed_at"], old)
-                fallback.assert_not_called()
+                fallback.assert_awaited_once()
             finally:
                 task.cancel()
                 with self.assertRaises(asyncio.CancelledError):
                     await task
 
-    async def test_connected_donation_stream_overrides_false_status_response(self):
+    async def test_connected_donation_stream_does_not_override_offline_status(self):
         collector = RealtimeCollector()
         collector.state_restored = True
         collector.poonggo_live.states["iluvbin"] = {
             "user_id": "iluvbin", "broadcast_no": "new", "connected": True,
+            "_last_sse_at": datetime.now(KST).timestamp(),
         }
         collector.poonggo_live.stream_metadata["iluvbin"] = {
             "user_id": "iluvbin", "broadcast_no": "new",
@@ -142,7 +144,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
             task = asyncio.create_task(collector.run_status_forever())
             try:
                 await asyncio.wait_for(finished.wait(), 2)
-                self.assertTrue(collector.poonggo_live.live_statuses["iluvbin"]["is_live"])
+                self.assertFalse(collector.poonggo_live.live_statuses["iluvbin"]["is_live"])
             finally:
                 task.cancel()
                 with self.assertRaises(asyncio.CancelledError):

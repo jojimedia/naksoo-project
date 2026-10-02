@@ -49,6 +49,7 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         }
         service.states["test"] = {
             "user_id": "test", "broadcast_no": "123", "connected": True,
+            "_last_sse_at": datetime.now(KST).timestamp(),
         }
         service.stream_metadata["test"] = {
             "user_id": "test", "broadcast_no": "123",
@@ -58,6 +59,16 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(evidence["broadcast_no"], "123")
         self.assertEqual(evidence["status_source"], "poonggo_sse_connection")
         service.states["test"]["connected"] = False
+        self.assertIsNone(service.connected_live_status("test"))
+
+    def test_open_stream_without_recent_donation_is_not_live_evidence(self):
+        service = PoonggoLiveService()
+        service.states["test"] = {
+            "user_id": "test", "broadcast_no": "123", "connected": True,
+        }
+        service.stream_metadata["test"] = {
+            "user_id": "test", "broadcast_no": "123",
+        }
         self.assertIsNone(service.connected_live_status("test"))
 
     def test_confirmed_offline_clears_resume_hint(self):

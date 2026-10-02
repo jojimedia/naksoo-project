@@ -44,6 +44,12 @@ FLUSH_EVENT_COUNT = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_EVENT_COUNT", "
 MAX_SEEN_IDS = max(1_000, int(os.environ.get("NAKSOO_LIVE_SEEN_IDS", "10000")))
 DAILY_FAN_BACKFILL_BATCH = max(1, int(os.environ.get("NAKSOO_DAILY_FAN_BACKFILL_BATCH", "5")))
 DAILY_FAN_BACKFILL_SECONDS = max(30, int(os.environ.get("NAKSOO_DAILY_FAN_BACKFILL_SECONDS", "30")))
+# An open SSE response is only transport state: Poonggo can leave the HTTP
+# connection open after the broadcast has ended.  Only a recent donation event
+# on that exact stream is positive LIVE evidence when both status lookups fail.
+SSE_LIVE_EVIDENCE_SECONDS = max(
+    30, int(os.environ.get("NAKSOO_SSE_LIVE_EVIDENCE_SECONDS", "120"))
+)
 
 _BROADCAST_INFO = re.compile(
     r'broadcastInfo:\{streamerId:"(?P<user>[^"]+)".*?donationAmount:"(?P<amount>\d+)"',
@@ -426,20 +432,25 @@ class PoonggoLiveService:
         self._broadcast("live_status", payload)
 
     def connected_live_status(self, user_id: str) -> dict[str, Any] | None:
-        """Return positive LIVE evidence from an open donation SSE stream.
+        """Return positive LIVE evidence from a recent donation SSE event.
 
         SOOP's player endpoint and Poonggo's station HTML can both time out
-        from the collector host.  An actively connected donation stream for
-        the exact broadcast number is stronger positive evidence than those
-        failed lookups.  It is deliberately positive-only: a disconnected
-        stream is UNKNOWN and must never be used to declare a broadcast over.
+        from the collector host.  The open socket itself is not proof because
+        Poonggo can keep an ended broadcast's endpoint connected.  A recent
+        donation received on the exact broadcast is positive-only evidence;
+        otherwise the result is UNKNOWN, never OFFLINE.
         """
 
         key = str(user_id or "").lower()
         state = self.states.get(key) or {}
         metadata = self.stream_metadata.get(key) or {}
         broadcast_no = str(metadata.get("broadcast_no") or state.get("broadcast_no") or "")
-        if not state.get("connected") or not broadcast_no:
+        last_event_at = float(state.get("_last_sse_at") or 0)
+        if (
+            not state.get("connected")
+            or not broadcast_no
+            or last_event_at <= datetime.now(KST).timestamp() - SSE_LIVE_EVIDENCE_SECONDS
+        ):
             return None
         if state.get("broadcast_no") and str(state["broadcast_no"]) != broadcast_no:
             return None

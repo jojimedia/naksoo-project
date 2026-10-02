@@ -831,17 +831,14 @@ class RealtimeCollector:
                         async with asyncio.timeout(4):
                             # Do not wait for a station/profile fetch to publish LIVE.
                             status = await fetch_live_status(client, member["user_id"])
-                        # A live donation SSE for the same broadcast is
-                        # positive proof.  This prevents a temporarily blocked
-                        # player API from expiring every LIVE badge at once.
-                        if connected and not status.get("is_live"):
-                            status = connected
+                        # A completed status response is authoritative.  In
+                        # particular, an open donation SSE must never override
+                        # an explicit OFFLINE result: Poonggo can keep ended
+                        # broadcast sockets open.
                         return member, status
                     except Exception as error:
                         uid = member["user_id"]
                         print(f"[{uid}] independent LIVE check failed: {type(error).__name__}: {error}")
-                        if connected:
-                            return member, connected
                         # Limit fallback fan-out during a prolonged SOOP outage.
                         now_tick = asyncio.get_running_loop().time()
                         if now_tick >= self.status_fallback_after.get(uid, 0):
@@ -851,6 +848,11 @@ class RealtimeCollector:
                                     return member, await fetch_poonggo_live_status(client, uid)
                             except Exception as fallback_error:
                                 print(f"[{uid}] fallback LIVE check failed: {type(fallback_error).__name__}: {fallback_error}")
+                        # Only a recent donation event, not a merely open SSE
+                        # socket, can bridge a round where both status sources
+                        # are unavailable.
+                        if connected:
+                            return member, connected
                         return member, None
 
             while True:
