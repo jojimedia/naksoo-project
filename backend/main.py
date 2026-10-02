@@ -260,6 +260,7 @@ async def fetch_public_live_ids(client):
         response = await client.get(
             "https://static.poong.today/broad/live",
             headers=POONG_HEADERS,
+            timeout=20,
         )
         response.raise_for_status()
         values = [value.strip().lower() for value in response.text.strip().split(",") if value.strip()]

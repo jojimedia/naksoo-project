@@ -46,6 +46,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
         queue = asyncio.Queue()
         collector.poonggo_live.subscribers.add(queue)
         with (patch("realtime_worker.acquire_collector_lease", return_value=True),
+              patch("realtime_worker.fetch_public_live_ids", side_effect=TimeoutError("roster unavailable")),
               patch("realtime_worker.get_collector_members", return_value=[{"user_id": "test", "crew_name": "crew"}]),
               patch("realtime_worker.fetch_live_status", side_effect=TimeoutError()),
               patch("realtime_worker.fetch_poonggo_live_status", return_value={"is_live": False, "status_source": "poonggo_station"}),
@@ -68,6 +69,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
         queue = asyncio.Queue()
         collector.poonggo_live.subscribers.add(queue)
         with (patch("realtime_worker.acquire_collector_lease", return_value=True),
+              patch("realtime_worker.fetch_public_live_ids", side_effect=TimeoutError("roster unavailable")),
               patch("realtime_worker.get_collector_members", return_value=[{"user_id": "test", "crew_name": "crew"}]),
               patch("realtime_worker.fetch_live_status", return_value={"is_live": True, "broadcast_no": "b"}),
               patch("realtime_worker.get_cached_result", return_value={})):

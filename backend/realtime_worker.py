@@ -919,7 +919,11 @@ class RealtimeCollector:
                         members = get_collector_members()
                         active = [m for m in members if not m.get("is_on_leave")]
                         try:
-                            async with asyncio.timeout(8):
+                            # The platform-wide response contains thousands of
+                            # IDs and regularly takes more than eight seconds
+                            # even though it succeeds.  It replaces up to 270
+                            # per-member calls, so allow this one request time.
+                            async with asyncio.timeout(22):
                                 self.public_live_ids = set(await fetch_public_live_ids(client))
                             self.public_live_observed_at = asyncio.get_running_loop().time()
                         except Exception as roster_error:

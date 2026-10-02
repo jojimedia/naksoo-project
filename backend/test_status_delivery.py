@@ -128,6 +128,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 finished.set()
                 await asyncio.Event().wait()
             with (patch("realtime_worker.acquire_collector_lease", return_value=True),
+                  patch("realtime_worker.fetch_public_live_ids", side_effect=TimeoutError("roster unavailable")),
                   patch("realtime_worker.get_collector_members", return_value=[{"user_id": "iluvbin", "crew_name": "crew"}]),
                   patch("realtime_worker.fetch_live_status", side_effect=status),
                   patch("realtime_worker.fetch_poonggo_live_status", side_effect=TimeoutError("fallback slow")),
@@ -165,6 +166,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.Event().wait()
 
         with (patch("realtime_worker.acquire_collector_lease", return_value=True),
+              patch("realtime_worker.fetch_public_live_ids", side_effect=TimeoutError("roster unavailable")),
               patch("realtime_worker.get_collector_members", return_value=[{"user_id": "iluvbin", "crew_name": "crew"}]),
               patch("realtime_worker.fetch_live_status", side_effect=TimeoutError("blocked")),
               patch("realtime_worker.fetch_poonggo_live_status", side_effect=TimeoutError("fallback blocked")) as fallback,
@@ -201,6 +203,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.Event().wait()
 
         with (patch("realtime_worker.acquire_collector_lease", return_value=True),
+              patch("realtime_worker.fetch_public_live_ids", side_effect=TimeoutError("roster unavailable")),
               patch("realtime_worker.get_collector_members", return_value=[{"user_id": "iluvbin", "crew_name": "crew"}]),
               patch("realtime_worker.fetch_live_status", return_value={"is_live": False}),
               patch("realtime_worker.get_cached_result", return_value={}),
@@ -227,6 +230,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
             return {"is_live": True, "broadcast_no": "new", "viewer_count": "1,234"}
 
         with (patch("realtime_worker.acquire_collector_lease", return_value=True),
+              patch("realtime_worker.fetch_public_live_ids", side_effect=TimeoutError("roster unavailable")),
               patch("realtime_worker.get_collector_members", return_value=members),
               patch("realtime_worker.fetch_live_status", side_effect=status),
               patch.object(collector, "_save_result") as save):
