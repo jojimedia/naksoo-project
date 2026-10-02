@@ -433,6 +433,13 @@ Cloudtype 프로젝트에는 프론트와 수집기가 분리되어 있다.
 - `dashboard_cache.build_dashboard`에도 기간 검사를 추가했다. 수집기 구버전이나 혼합 배포가 잘못된 슬롯을 남겨도, 최상위 선택월과 내부 연/월이 다르면 합계·후원자를 표시하지 않는다.
 - 회귀 테스트는 월 전환 슬롯 회전, 다른 슬롯에 이미 들어온 새 달 값 보존, 화면의 불일치 슬롯 거부를 포함한다.
 
+### 2026-10-02 전체 LIVE 배지 만료 수정
+
+- 운영 컨테이너와 `/health`는 정상이었고 풍고 후원 SSE도 26개가 연결돼 있었지만, SOOP player와 풍고 station 상태 조회가 전원 timeout이었다. 120초 TTL이 지난 뒤 화면 캐시는 LIVE 0명으로 내려갔다. 별풍선 연결과 화면 LIVE 판정이 분리돼 있어 발생한 공통 장애다.
+- 정확한 방송번호의 후원 SSE가 실제로 연결된 경우에는 이를 **LIVE 양성 증거**로 사용해 `status_observed_at`을 갱신한다. 연결 해제는 OFFLINE 증거로 사용하지 않으며, 직접 상태 조회가 명시적으로 OFFLINE을 확인해야 종료 처리한다.
+- 롤링 배포 시 이전 프로세스에서 `connected=true`, `finalized=false`로 저장한 방송은 새 프로세스가 재연결을 시도한다. 복원 힌트만으로 LIVE를 표시하지 않고 새 SSE 소켓이 연결된 뒤에만 표시한다.
+- 수집기 단일 실행 lease 기본값은 600초에서 90초로 줄였다. 이전 프로세스가 종료된 롤링 배포에서 새 프로세스가 최대 10분간 상태 저장을 못 하던 공백을 제한한다.
+
 1. 이 문서의 불변조건을 먼저 확인한다.
 2. `backend/poonggo_live.py`의 `fetch_poonggo_snapshot`, `apply_snapshot`, `apply_donation`을 읽는다.
 3. `backend/realtime_db.py`에서 `streamer_live_totals` 스키마와 upsert 필드를 확인한다.

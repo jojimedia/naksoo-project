@@ -41,6 +41,31 @@ def live_page(user_id: str, stream_no: str, amount: int, started_ms: int) -> str
 
 
 class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
+    def test_connected_stream_is_positive_live_evidence_only(self):
+        service = PoonggoLiveService()
+        service.live_statuses["test"] = {
+            "user_id": "test", "is_live": True, "broadcast_no": "123",
+            "broadcast_title": "방송", "viewer_count": 10,
+        }
+        service.states["test"] = {
+            "user_id": "test", "broadcast_no": "123", "connected": True,
+        }
+        service.stream_metadata["test"] = {
+            "user_id": "test", "broadcast_no": "123",
+        }
+        evidence = service.connected_live_status("test")
+        self.assertTrue(evidence["is_live"])
+        self.assertEqual(evidence["broadcast_no"], "123")
+        self.assertEqual(evidence["status_source"], "poonggo_sse_connection")
+        service.states["test"]["connected"] = False
+        self.assertIsNone(service.connected_live_status("test"))
+
+    def test_confirmed_offline_clears_resume_hint(self):
+        service = PoonggoLiveService()
+        service.states["test"] = {"_resume_stream": True}
+        service.publish_live_status({"user_id": "test", "is_live": False})
+        self.assertNotIn("_resume_stream", service.states["test"])
+
     def test_restored_cross_month_session_uses_broadcast_start_month(self):
         state = {
             "counting_mode": "broadcast_live_v4",

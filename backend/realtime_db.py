@@ -720,6 +720,10 @@ def load_live_totals() -> list[dict[str, Any]]:
             "finalized": bool(row["finalized"]),
             # A restored row is not connected until its upstream task opens.
             "connected": False,
+            # Rolling deploys must still attempt to reopen a stream that the
+            # previous process had positively connected.  This is only a
+            # resume hint; it never renders a LIVE badge until SSE connects.
+            "_resume_stream": bool(row["connected"] and not row["finalized"]),
             "observed_at": row["observed_at"].isoformat(),
             "previous_date": row["previous_date"].isoformat() if row["previous_date"] else None,
             "previous_balloons": int(row["previous_balloons"] or 0),

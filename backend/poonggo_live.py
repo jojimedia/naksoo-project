@@ -418,8 +418,40 @@ class PoonggoLiveService:
 
     def publish_live_status(self, payload: dict[str, Any]) -> None:
         # Connection health is not broadcast status. Keep these events separate.
-        self.live_statuses[str(payload["user_id"]).lower()] = dict(payload)
+        key = str(payload["user_id"]).lower()
+        self.live_statuses[key] = dict(payload)
+        if not payload.get("is_live") and key in self.states:
+            # A confirmed OFFLINE result ends any rolling-deploy resume hint.
+            self.states[key].pop("_resume_stream", None)
         self._broadcast("live_status", payload)
+
+    def connected_live_status(self, user_id: str) -> dict[str, Any] | None:
+        """Return positive LIVE evidence from an open donation SSE stream.
+
+        SOOP's player endpoint and Poonggo's station HTML can both time out
+        from the collector host.  An actively connected donation stream for
+        the exact broadcast number is stronger positive evidence than those
+        failed lookups.  It is deliberately positive-only: a disconnected
+        stream is UNKNOWN and must never be used to declare a broadcast over.
+        """
+
+        key = str(user_id or "").lower()
+        state = self.states.get(key) or {}
+        metadata = self.stream_metadata.get(key) or {}
+        broadcast_no = str(metadata.get("broadcast_no") or state.get("broadcast_no") or "")
+        if not state.get("connected") or not broadcast_no:
+            return None
+        if state.get("broadcast_no") and str(state["broadcast_no"]) != broadcast_no:
+            return None
+        previous = self.live_statuses.get(key) or {}
+        return {
+            "is_live": True,
+            "is_password": bool(previous.get("is_password_broadcast")),
+            "broadcast_no": broadcast_no,
+            "broadcast_title": previous.get("broadcast_title"),
+            "viewer_count": previous.get("viewer_count"),
+            "status_source": "poonggo_sse_connection",
+        }
 
     def overlay_live_status(self, item: dict[str, Any], *, for_collection=False) -> dict[str, Any]:
         status = self.live_statuses.get(str(item.get("user_id") or "").lower())
@@ -799,6 +831,26 @@ class PoonggoLiveService:
                     "nickname": str(item.get("nickname") or user_id),
                     "broadcast_no": str(item["broadcast_no"]),
                     "broadcast_start": item.get("broadcast_start"),
+                    "semaphore": semaphore,
+                }
+
+            # The rendered cache can contain zero LIVE members after status
+            # endpoints time out long enough to exceed their display TTL.
+            # Reopen only streams that the previous process had actually
+            # connected and had not finalized.  They become LIVE again only
+            # after `_mark_connection(..., True)` confirms the new socket.
+            for key, state in self.states.items():
+                if key in desired or not state.get("_resume_stream"):
+                    continue
+                broadcast_no = str(state.get("broadcast_no") or "")
+                if not broadcast_no:
+                    continue
+                desired[key] = {
+                    "user_id": str(state.get("user_id") or key),
+                    "crew_name": str(state.get("crew_name") or ""),
+                    "nickname": str(state.get("nickname") or key),
+                    "broadcast_no": broadcast_no,
+                    "broadcast_start": None,
                     "semaphore": semaphore,
                 }
 

@@ -84,7 +84,10 @@ BOOTSTRAP_RETRY_DELAY_SECONDS = max(0, int(os.environ.get("NAKSOO_BOOTSTRAP_RETR
 RECOVERY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_RECOVERY_CONCURRENCY", "2")))
 RECOVERY_RETRY_CONCURRENCY = max(1, int(os.environ.get("NAKSOO_RECOVERY_RETRY_CONCURRENCY", "1")))
 RECOVERY_RETRY_DELAY_SECONDS = max(0, int(os.environ.get("NAKSOO_RECOVERY_RETRY_DELAY_SECONDS", "30")))
-COLLECTOR_LEASE_SECONDS = max(60, int(os.environ.get("NAKSOO_COLLECTOR_LEASE_SECONDS", "600")))
+# Ten minutes made a rolling deployment appear healthy while the replacement
+# worker was unable to publish status or cache updates until the dead pod's
+# lease expired.  All owner loops renew far more frequently than this.
+COLLECTOR_LEASE_SECONDS = max(60, int(os.environ.get("NAKSOO_COLLECTOR_LEASE_SECONDS", "90")))
 
 
 def _interval(base_seconds: int, jitter_seconds: int = 0) -> int:
@@ -823,14 +826,22 @@ class RealtimeCollector:
         async with httpx.AsyncClient(timeout=8, follow_redirects=True, headers=HEADERS) as client:
             async def check(member):
                 async with semaphore:
+                    connected = self.poonggo_live.connected_live_status(member["user_id"])
                     try:
                         async with asyncio.timeout(4):
                             # Do not wait for a station/profile fetch to publish LIVE.
                             status = await fetch_live_status(client, member["user_id"])
+                        # A live donation SSE for the same broadcast is
+                        # positive proof.  This prevents a temporarily blocked
+                        # player API from expiring every LIVE badge at once.
+                        if connected and not status.get("is_live"):
+                            status = connected
                         return member, status
                     except Exception as error:
                         uid = member["user_id"]
                         print(f"[{uid}] independent LIVE check failed: {type(error).__name__}: {error}")
+                        if connected:
+                            return member, connected
                         # Limit fallback fan-out during a prolonged SOOP outage.
                         now_tick = asyncio.get_running_loop().time()
                         if now_tick >= self.status_fallback_after.get(uid, 0):
