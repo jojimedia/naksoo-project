@@ -446,6 +446,13 @@ Cloudtype 프로젝트에는 프론트와 수집기가 분리되어 있다.
 - SOOP player 또는 풍고 station이 정상 응답한 결과는 SSE보다 항상 우선한다. 명시적인 OFFLINE이면 즉시 LIVE를 내리고, 새 LIVE 방송번호이면 이전 SSE를 종료하고 새 방송으로 교체한다.
 - SOOP 조회 실패 시에는 연결 여부와 관계없이 풍고 station fallback을 먼저 실행한다. 둘 다 실패했을 때만 최근 실제 후원 이벤트를 제한적으로 사용한다. keep-alive, 연결 성공, 재배포 복구 연결은 LIVE 근거가 아니다.
 
+### 2026-10-03 전체 LIVE 재만료 수정
+
+- 운영 수집기는 정상 실행되고 후원 SSE 34개도 연결돼 있었지만, 135명 중 131명의 상태가 120초 TTL을 넘겼다. 로그에서는 매 회차 SOOP 개별 조회와 풍고 fallback이 모두 `TimeoutError`였으며 한 회차 최대 270개의 외부 상태 요청 구조가 장애를 반복시켰다.
+- `static.poong.today/broad/live`의 플랫폼 공용 LIVE 명단을 회차당 한 번 읽어 전체 멤버 상태를 갱신한다. 기존 LIVE이며 방송번호가 같은 멤버는 개별 요청 없이 관측 시각을 갱신한다.
+- 공용 명단에 새로 등장했거나 5분 주기 방송번호 검증이 필요한 LIVE만 SOOP player/풍고 station을 개별 조회한다. 상세 조회가 실패해도 공용 명단의 양성 LIVE 상태는 유지한다.
+- 공용 명단에서 사라진 멤버는 OFFLINE 처리하므로 종료 방송 SSE 연결이 다시 LIVE를 강제하지 않는다. 명단 응답이 100명 미만이면 잘린 응답으로 간주해 전체 OFFLINE 오염을 막고, 최근 성공 명단은 최대 120초만 재사용한다.
+
 1. 이 문서의 불변조건을 먼저 확인한다.
 2. `backend/poonggo_live.py`의 `fetch_poonggo_snapshot`, `apply_snapshot`, `apply_donation`을 읽는다.
 3. `backend/realtime_db.py`에서 `streamer_live_totals` 스키마와 upsert 필드를 확인한다.

@@ -265,6 +265,11 @@ async def fetch_public_live_ids(client):
         values = [value.strip().lower() for value in response.text.strip().split(",") if value.strip()]
         if any(not re.fullmatch(r"[a-z0-9_]+", value) for value in values):
             raise ValueError("Invalid public LIVE list")
+        # The platform-wide roster normally contains thousands of channels.
+        # Reject an empty/truncated success response instead of declaring every
+        # managed streamer OFFLINE in one round.
+        if len(set(values)) < 100:
+            raise ValueError("Public LIVE list is unexpectedly small")
 
         _public_live_ids = set(values)
         _public_live_checked_at = time.monotonic()

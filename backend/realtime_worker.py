@@ -25,6 +25,7 @@ from main import (
     fetch_balloon,
     fetch_live_status,
     fetch_poonggo_live_status,
+    fetch_public_live_ids,
     fetch_one_member,
     fetch_station,
     get_calendar_period,
@@ -211,6 +212,9 @@ class RealtimeCollector:
         self.poonggo_live = PoonggoLiveService()
         self.independent_status = False
         self.status_fallback_after: dict[str, float] = {}
+        self.status_verify_after: dict[str, float] = {}
+        self.public_live_ids: set[str] | None = None
+        self.public_live_observed_at = 0.0
         self.save_lock = asyncio.Lock()
 
     def _restore_state(self, now: datetime) -> None:
@@ -826,18 +830,57 @@ class RealtimeCollector:
         async with httpx.AsyncClient(timeout=8, follow_redirects=True, headers=HEADERS) as client:
             async def check(member):
                 async with semaphore:
-                    connected = self.poonggo_live.connected_live_status(member["user_id"])
+                    uid = str(member["user_id"])
+                    uid_key = uid.lower()
+                    previous = self.poonggo_live.live_statuses.get(uid_key) or {}
+                    roster_live = self.public_live_ids is not None and uid_key in self.public_live_ids
+                    now_tick = asyncio.get_running_loop().time()
+
+                    # One shared roster replaces hundreds of per-member calls
+                    # for unchanged status.  Resolve a broadcast number for a
+                    # newly LIVE member, and periodically verify an existing
+                    # live session so a stop/start transition can change BNO.
+                    if self.public_live_ids is not None:
+                        if not roster_live:
+                            return member, {
+                                "is_live": False,
+                                "is_password": False,
+                                "status_source": "soop_public_roster",
+                            }
+                        if previous.get("is_live") and previous.get("broadcast_no"):
+                            verify_after = self.status_verify_after.get(uid_key)
+                            if verify_after is None:
+                                self.status_verify_after[uid_key] = now_tick + 60
+                                return member, {
+                                    "is_live": True,
+                                    "is_password": bool(previous.get("is_password_broadcast")),
+                                    "broadcast_no": previous.get("broadcast_no"),
+                                    "broadcast_title": previous.get("broadcast_title"),
+                                    "viewer_count": previous.get("viewer_count"),
+                                    "status_source": "soop_public_roster",
+                                }
+                            if now_tick < verify_after:
+                                return member, {
+                                    "is_live": True,
+                                    "is_password": bool(previous.get("is_password_broadcast")),
+                                    "broadcast_no": previous.get("broadcast_no"),
+                                    "broadcast_title": previous.get("broadcast_title"),
+                                    "viewer_count": previous.get("viewer_count"),
+                                    "status_source": "soop_public_roster",
+                                }
+                            self.status_verify_after[uid_key] = now_tick + 300
+
+                    connected = self.poonggo_live.connected_live_status(uid)
                     try:
                         async with asyncio.timeout(4):
                             # Do not wait for a station/profile fetch to publish LIVE.
-                            status = await fetch_live_status(client, member["user_id"])
+                            status = await fetch_live_status(client, uid)
                         # A completed status response is authoritative.  In
                         # particular, an open donation SSE must never override
                         # an explicit OFFLINE result: Poonggo can keep ended
                         # broadcast sockets open.
                         return member, status
                     except Exception as error:
-                        uid = member["user_id"]
                         print(f"[{uid}] independent LIVE check failed: {type(error).__name__}: {error}")
                         # Limit fallback fan-out during a prolonged SOOP outage.
                         now_tick = asyncio.get_running_loop().time()
@@ -848,6 +891,18 @@ class RealtimeCollector:
                                     return member, await fetch_poonggo_live_status(client, uid)
                             except Exception as fallback_error:
                                 print(f"[{uid}] fallback LIVE check failed: {type(fallback_error).__name__}: {fallback_error}")
+                        if roster_live:
+                            # The roster is current positive evidence even if
+                            # the detail endpoints cannot resolve a BNO yet.
+                            self.status_verify_after[uid_key] = now_tick + 60
+                            return member, {
+                                "is_live": True,
+                                "is_password": False,
+                                "broadcast_no": previous.get("broadcast_no"),
+                                "broadcast_title": previous.get("broadcast_title"),
+                                "viewer_count": previous.get("viewer_count"),
+                                "status_source": "soop_public_roster",
+                            }
                         # Only a recent donation event, not a merely open SSE
                         # socket, can bridge a round where both status sources
                         # are unavailable.
@@ -863,6 +918,15 @@ class RealtimeCollector:
                         self._restore_state(datetime.now(TIMEZONE))
                         members = get_collector_members()
                         active = [m for m in members if not m.get("is_on_leave")]
+                        try:
+                            async with asyncio.timeout(8):
+                                self.public_live_ids = set(await fetch_public_live_ids(client))
+                            self.public_live_observed_at = asyncio.get_running_loop().time()
+                        except Exception as roster_error:
+                            age = asyncio.get_running_loop().time() - self.public_live_observed_at
+                            if self.public_live_ids is None or age > 120:
+                                self.public_live_ids = None
+                            print(f"Public LIVE roster failed: {type(roster_error).__name__}: {roster_error}")
                         valid_ids = {str(m["user_id"]).lower() for m in active}
                         self.poonggo_live.live_statuses = {
                             k: v for k, v in self.poonggo_live.live_statuses.items() if k in valid_ids
