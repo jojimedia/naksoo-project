@@ -66,6 +66,7 @@ type AdminSession = {
 
 type LiveTotal = {
   user_id: string;
+  broadcast_no?: string | null;
   date: string;
   display_date?: string;
   counting_mode?: string;
@@ -149,6 +150,10 @@ function applyLiveTotalsToCrew(
     yesterdayMonth === (currentPeriod.month === 1 ? 12 : currentPeriod.month - 1);
   const members = crew.members.map((member) => {
     const live = totals.get(member.user_id.toLowerCase());
+    const sameLiveSession =
+      live?.counting_mode === "broadcast_live_v4" &&
+      Boolean(live.broadcast_no) &&
+      String(live.broadcast_no) === String(member.broadcast_no ?? "");
     const yesterdayDays = yesterdayIsCurrentMonth
       ? (member.current_daily_balloons ?? [])
       : yesterdayIsPreviousMonth
@@ -172,6 +177,7 @@ function applyLiveTotalsToCrew(
         : (member.yesterday_fans ?? []);
     const withYesterday = {
       ...member,
+      live_session_balloons: sameLiveSession ? Number(live?.today ?? 0) : undefined,
       display_day_balloons: yesterdayLive ? 0 : member.display_day_balloons,
       daily_fans: yesterdayLive ? [] : member.daily_fans,
       yesterday_balloons: yesterdayValue,
@@ -898,7 +904,7 @@ export default function CrewDashboard({ data, onDataUpdate }: {
     () =>
       data.crews
         .map((crew) =>
-          applyLiveStatuses(applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey), liveStatuses, statusNow),
+          applyLiveTotalsToCrew(applyLiveStatuses(crew, liveStatuses, statusNow), liveTotals, data.current_period, todayDateKey),
         )
         .sort(
           (a, b) =>
@@ -912,7 +918,7 @@ export default function CrewDashboard({ data, onDataUpdate }: {
   const liveFaCrew = useMemo(
     () =>
       data.fa_crew
-        ? applyLiveStatuses(applyLiveTotalsToCrew(data.fa_crew, liveTotals, data.current_period, todayDateKey), liveStatuses, statusNow)
+        ? applyLiveTotalsToCrew(applyLiveStatuses(data.fa_crew, liveStatuses, statusNow), liveTotals, data.current_period, todayDateKey)
         : null,
     [data.current_period, data.fa_crew, liveTotals, todayDateKey, liveStatuses, statusNow],
   );

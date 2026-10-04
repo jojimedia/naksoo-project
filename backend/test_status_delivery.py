@@ -59,7 +59,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
         with (patch("realtime_worker.acquire_collector_lease", return_value=True),
               patch("realtime_worker.get_collector_members", return_value=[{"user_id": "iluvbin", "crew_name": "crew"}]),
               patch("realtime_worker.fetch_public_live_ids", return_value=set()),
-              patch("realtime_worker.fetch_live_status") as direct,
+              patch("realtime_worker.fetch_live_status", return_value={"is_live": False}) as direct,
               patch("realtime_worker.get_cached_result", return_value={}),
               patch("realtime_worker.asyncio.sleep", side_effect=sleep)):
             task = asyncio.create_task(collector.run_status_forever())
@@ -67,7 +67,42 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.wait_for(finished.wait(), 2)
                 self.assertFalse(collector.poonggo_live.live_statuses["iluvbin"]["is_live"])
                 self.assertIn(("crew", "iluvbin"), collector.recovery_required)
-                direct.assert_not_called()
+                direct.assert_awaited_once()
+            finally:
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+
+    async def test_positive_roster_wins_over_transient_player_offline(self):
+        collector = RealtimeCollector()
+        collector.state_restored = True
+        collector.live_states[("crew", "iluvbin")] = True
+        collector.poonggo_live.publish_live_status({
+            "user_id": "iluvbin", "is_live": True, "broadcast_no": "same",
+            "broadcast_title": "방송", "viewer_count": 321,
+        })
+        collector.status_verify_after["iluvbin"] = 0
+        finished = asyncio.Event()
+
+        async def sleep(_):
+            finished.set()
+            await asyncio.Event().wait()
+
+        with (patch("realtime_worker.acquire_collector_lease", return_value=True),
+              patch("realtime_worker.get_collector_members", return_value=[{"user_id": "iluvbin", "crew_name": "crew"}]),
+              patch("realtime_worker.fetch_public_live_ids", return_value={"iluvbin"}),
+              patch("realtime_worker.fetch_live_status", return_value={"is_live": False}) as direct,
+              patch("realtime_worker.get_cached_result", return_value={}),
+              patch("realtime_worker.asyncio.sleep", side_effect=sleep)):
+            task = asyncio.create_task(collector.run_status_forever())
+            try:
+                await asyncio.wait_for(finished.wait(), 2)
+                status = collector.poonggo_live.live_statuses["iluvbin"]
+                self.assertTrue(status["is_live"])
+                self.assertEqual(status["broadcast_no"], "same")
+                self.assertEqual(status["viewer_count"], 321)
+                self.assertEqual(status["status_source"], "soop_public_roster")
+                direct.assert_awaited_once()
             finally:
                 task.cancel()
                 with self.assertRaises(asyncio.CancelledError):

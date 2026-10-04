@@ -21,6 +21,7 @@ type CrewMember = {
   broadcast_no?: string | null;
   broadcast_title?: string | null;
   viewer_count?: number | null;
+  live_session_balloons?: number;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;
@@ -53,6 +54,7 @@ function LiveBadge({ member }: { member: CrewMember }) {
   const thumbnailUrl = member.broadcast_no
     ? `https://liveimg.sooplive.co.kr/m/${encodeURIComponent(member.broadcast_no)}`
     : null;
+  const liveBalloons = member.live_session_balloons ?? member.display_day_balloons;
 
   function clearCloseTimer() {
     if (closeTimerRef.current !== null) {
@@ -120,11 +122,21 @@ function LiveBadge({ member }: { member: CrewMember }) {
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`${thumbnailUrl}?t=${Math.floor(Date.now() / 60_000)}`} alt={`${member.nickname} 라이브 썸네일`} className="aspect-video w-full bg-[#111018] object-cover" />
+              <div className="relative">
+                <img src={`${thumbnailUrl}?t=${Math.floor(Date.now() / 60_000)}`} alt={`${member.nickname} 라이브 썸네일`} className="aspect-video w-full bg-[#111018] object-cover" />
+                {member.viewer_count != null ? (
+                  <span
+                    className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums"
+                    aria-label={`시청자 ${formatNumber(member.viewer_count)}명`}
+                  >
+                    시청자 {formatNumber(member.viewer_count)}명
+                  </span>
+                ) : null}
+              </div>
               <div className="px-2 py-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <p className="line-clamp-2 min-w-0 flex-1 text-[11px] font-semibold leading-snug text-[#e5e7eb]">{member.broadcast_title || "방송 중"}</p>
-                  <p className="shrink-0 text-[10px] font-bold text-[#fbbf24]">오늘 {formatNumber(member.display_day_balloons)}개</p>
+                  <p className="shrink-0 text-[10px] font-bold text-[#fbbf24]">방송 {formatNumber(liveBalloons)}개</p>
                 </div>
               </div>
             </a>,

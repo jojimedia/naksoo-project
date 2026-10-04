@@ -841,13 +841,13 @@ class RealtimeCollector:
                     # newly LIVE member, and periodically verify an existing
                     # live session so a stop/start transition can change BNO.
                     if self.public_live_ids is not None:
-                        if not roster_live:
+                        if not roster_live and not previous.get("is_live"):
                             return member, {
                                 "is_live": False,
                                 "is_password": False,
                                 "status_source": "soop_public_roster",
                             }
-                        if previous.get("is_live") and previous.get("broadcast_no"):
+                        if roster_live and previous.get("is_live") and previous.get("broadcast_no"):
                             verify_after = self.status_verify_after.get(uid_key)
                             if verify_after is None:
                                 self.status_verify_after[uid_key] = now_tick + 60
@@ -875,6 +875,24 @@ class RealtimeCollector:
                         async with asyncio.timeout(4):
                             # Do not wait for a station/profile fetch to publish LIVE.
                             status = await fetch_live_status(client, uid)
+                        if (
+                            roster_live
+                            and not status.get("is_live")
+                            and not status.get("is_password")
+                        ):
+                            # The platform-wide roster is the stronger current
+                            # LIVE signal.  A periodic player/BNO verification
+                            # can briefly return OFFLINE (notably for restricted
+                            # streams); accepting that single negative made the
+                            # badge disappear until the next roster round.
+                            return member, {
+                                "is_live": True,
+                                "is_password": bool(previous.get("is_password_broadcast")),
+                                "broadcast_no": previous.get("broadcast_no"),
+                                "broadcast_title": previous.get("broadcast_title"),
+                                "viewer_count": previous.get("viewer_count"),
+                                "status_source": "soop_public_roster",
+                            }
                         # A completed status response is authoritative.  In
                         # particular, an open donation SSE must never override
                         # an explicit OFFLINE result: Poonggo can keep ended

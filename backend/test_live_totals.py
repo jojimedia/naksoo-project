@@ -214,6 +214,26 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
             dashboard = build_dashboard(result)
         self.assertEqual(dashboard["crews"][0]["members"][0]["display_day_balloons"], 0)
 
+    def test_cross_midnight_live_keeps_session_total_for_thumbnail(self):
+        result = sample()
+        item = result["items"][0]
+        item.update({
+            "is_live": True,
+            "broadcast_no": "overnight",
+            "status_observed_at": "2026-09-20T01:59:30+09:00",
+        })
+        item["current_month"]["realtime_totals"] = {
+            "date": "2026-09-19",
+            "today": 34767,
+            "broadcast_no": "overnight",
+            "counting_mode": "broadcast_live_v4",
+        }
+        with patch("dashboard_cache.datetime") as clock:
+            clock.now.return_value = datetime(2026, 9, 20, 2, tzinfo=KST)
+            member = build_dashboard(result)["crews"][0]["members"][0]
+        self.assertEqual(member["display_day_balloons"], 0)
+        self.assertEqual(member["live_session_balloons"], 34767)
+
     def test_dashboard_rejects_stale_current_month_slot(self):
         result = sample()
         result["current_period"] = {"year": 2026, "month": 10}

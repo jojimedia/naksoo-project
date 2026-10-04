@@ -36,6 +36,7 @@ type CrewMember = {
   broadcast_no?: string | null;
   broadcast_title?: string | null;
   viewer_count?: number | null;
+  live_session_balloons?: number;
   current_balloons: number;
   previous_balloons: number;
   change_balloons: number;
