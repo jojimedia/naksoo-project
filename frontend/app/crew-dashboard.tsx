@@ -896,9 +896,17 @@ export default function CrewDashboard({ data, onDataUpdate }: {
   const isSearching = search.length > 0;
   const liveCrews = useMemo(
     () =>
-      data.crews.map((crew) =>
-        applyLiveStatuses(applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey), liveStatuses, statusNow),
-      ),
+      data.crews
+        .map((crew) =>
+          applyLiveStatuses(applyLiveTotalsToCrew(crew, liveTotals, data.current_period, todayDateKey), liveStatuses, statusNow),
+        )
+        .sort(
+          (a, b) =>
+            b.average_current_balloons - a.average_current_balloons ||
+            b.current_total_balloons - a.current_total_balloons ||
+            a.crew_name.localeCompare(b.crew_name, "ko"),
+        )
+        .map((crew, index) => ({ ...crew, rank: index + 1 })),
     [data.crews, data.current_period, liveTotals, todayDateKey, liveStatuses, statusNow],
   );
   const liveFaCrew = useMemo(

@@ -170,6 +170,37 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(member["display_day_balloons"], today)
             self.assertEqual(member["current_balloons"], 140)
 
+    def test_dashboard_ranks_crews_by_trimmed_average(self):
+        result = sample()
+        result["items"] = []
+        crew_values = {
+            # Ordinary average 400, trimmed average 100.
+            "Outlier Crew": [0, 100, 100, 1400],
+            # Ordinary and trimmed average 200, so this crew must rank first.
+            "Balanced Crew": [200, 200, 200, 200],
+        }
+        for crew_name, values in crew_values.items():
+            for index, value in enumerate(values):
+                result["items"].append({
+                    "user_id": f"{crew_name}-{index}",
+                    "nickname": f"Member {index}",
+                    "crew_name": crew_name,
+                    "success": True,
+                    "current_month": {
+                        "year": 2026,
+                        "month": 9,
+                        "total_balloons": value,
+                    },
+                })
+
+        with patch("dashboard_cache.datetime") as clock:
+            clock.now.return_value = datetime(2026, 9, 10, 11, tzinfo=KST)
+            crews = build_dashboard(result)["crews"]
+
+        self.assertEqual([crew["crew_name"] for crew in crews], ["Balanced Crew", "Outlier Crew"])
+        self.assertEqual([crew["average_current_balloons"] for crew in crews], [200, 100])
+        self.assertEqual([crew["rank"] for crew in crews], [1, 2])
+
     def test_dashboard_does_not_show_yesterday_as_today(self):
         result = sample()
         result["items"][0]["current_month"]["daily_balloons"] = [

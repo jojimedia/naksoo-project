@@ -16,6 +16,17 @@ def _number(value: Any) -> int:
         return 0
 
 
+def _trimmed_average(values: list[int]) -> int:
+    """Drop one highest and one lowest value before averaging 3+ members."""
+
+    if not values:
+        return 0
+    if len(values) < 3:
+        return (2 * sum(values) + len(values)) // (2 * len(values))
+    trimmed = sorted(values)[1:-1]
+    return (2 * sum(trimmed) + len(trimmed)) // (2 * len(trimmed))
+
+
 def _profile(user_id: str, value: Any) -> str:
     value = str(value or "")
     if value:
@@ -137,12 +148,19 @@ def build_dashboard(result: dict[str, Any]) -> dict[str, Any]:
             members[-1]["status_observed_at"] = item.get("status_observed_at")
             members[-1]["status_stale"] = item.get("status_stale", True)
         total = sum(member["current_balloons"] for member in members)
-        average = round(total / len(members)) if members else 0
+        average = _trimmed_average([member["current_balloons"] for member in members])
         kings = _patrons(active, 15)
         gods = [fan for fan in kings if fan["target_count"] >= 3 and fan["max_target_rate"] < 80][:10]
         gods = [{**fan, "rank": index + 1} for index, fan in enumerate(gods)]
         crews.append({"rank": 0, "crew_name": crew_name, "member_count": len(members), "current_total_balloons": total, "average_current_balloons": average, "members": members, "naksoo_gods": gods, "crew_kings": kings})
-    normal = sorted([crew for crew in crews if crew["crew_name"].strip().upper() != "FA"], key=lambda x: x["average_current_balloons"], reverse=True)
+    normal = sorted(
+        [crew for crew in crews if crew["crew_name"].strip().upper() != "FA"],
+        key=lambda crew: (
+            -crew["average_current_balloons"],
+            -crew["current_total_balloons"],
+            crew["crew_name"],
+        ),
+    )
     for rank, crew in enumerate(normal, 1): crew["rank"] = rank
     fa = next((crew for crew in crews if crew["crew_name"].strip().upper() == "FA"), None)
     return {"created_date": result.get("created_date", now.strftime("%Y-%m-%d")), "created_time": result.get("created_time", now.strftime("%H:%M:%S")), "current_period": current, "previous_period": previous, "crews": normal, "fa_crew": fa}
