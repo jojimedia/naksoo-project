@@ -137,11 +137,15 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
 
     def test_peak_viewers_uses_requested_streamer(self):
         html = (
-            'stream:{streamerId:"sidebar",peakViewers:"50000"},'
-            'stream:{streamerId:"no3miggi",currentViewers:1024,'
-            'peakViewers:"1195",isLive:true}'
+            'streamer:{streamNo:"297611893",streamerId:"no3miggi",isLive:true},'
+            'liveInfo:{currentViewers:1024,peakViewers:"1195",isLive:true}'
         )
-        self.assertEqual(parse_poonggo_peak_viewers(html, "no3miggi"), 1195)
+        self.assertEqual(
+            parse_poonggo_peak_viewers(html, "no3miggi", "297611893"), 1195
+        )
+        self.assertIsNone(
+            parse_poonggo_peak_viewers(html, "no3miggi", "wrong-broadcast")
+        )
 
     async def test_snapshot_fetches_broadcast_live_and_monthly_concurrently(self):
         calls = []
@@ -150,7 +154,12 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
             calls.append(request)
             if request.url.path.endswith("/monthly"):
                 return httpx.Response(200, text=page("03apple", 186716))
-            return httpx.Response(200, text=live_page("03apple", "123", 61222, 1789567200000) + 'stream:{streamerId:"03apple",peakViewers:"1054"}')
+            live = live_page("03apple", "123", 61222, 1789567200000)
+            live = live.replace(
+                "endedAt:null,donationAmount",
+                'endedAt:null,currentViewers:1024,peakViewers:"1054",donationAmount',
+            )
+            return httpx.Response(200, text=live)
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
             result = await fetch_poonggo_snapshot(
