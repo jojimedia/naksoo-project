@@ -28,6 +28,21 @@ class LiveStatusTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["broadcast_no"], "297247895")
         self.assertEqual(sum(method == "GET" for method, _ in requests), 2)
 
+    async def test_ctuser_capacity_is_never_used_as_viewer_count(self):
+        async def handler(request):
+            self.assertEqual(request.method, "POST")
+            return httpx.Response(200, json={"CHANNEL": {
+                "RESULT": 1,
+                "BNO": "297611893",
+                "CTUSER": 50000,
+            }})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            status = await main.fetch_live_status(client, "no3miggi")
+
+        self.assertTrue(status["is_live"])
+        self.assertIsNone(status["viewer_count"])
+
     async def test_restricted_id_missing_from_roster_is_offline(self):
         async def handler(request):
             if request.method == "POST":

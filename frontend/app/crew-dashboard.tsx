@@ -77,6 +77,7 @@ type LiveTotal = {
   total: number;
   observed_at: string;
   source: string;
+  viewer_count?: number | null;
   connected?: boolean;
   previous_date?: string | null;
   previous_balloons?: number;
@@ -178,6 +179,9 @@ function applyLiveTotalsToCrew(
     const withYesterday = {
       ...member,
       live_session_balloons: sameLiveSession ? Number(live?.today ?? 0) : undefined,
+      viewer_count: sameLiveSession
+        ? (live?.viewer_count ?? member.viewer_count)
+        : member.viewer_count,
       display_day_balloons: yesterdayLive ? 0 : member.display_day_balloons,
       daily_fans: yesterdayLive ? [] : member.daily_fans,
       yesterday_balloons: yesterdayValue,

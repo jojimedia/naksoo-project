@@ -277,6 +277,22 @@ async def fetch_public_live_ids(client):
         return _public_live_ids
 
 
+def parse_poonggo_peak_viewers(markup, user_id):
+    """Extract the broadcast's peak viewers, never SOOP's room capacity."""
+
+    expected = str(user_id).lower()
+    for match in re.finditer(
+        r'streamerId:"(?P<id>[^"]+)"(?P<body>[^}]{0,2000})',
+        str(markup or ""),
+    ):
+        if match.group("id").lower() != expected:
+            continue
+        peak = re.search(r'peakViewers:"?(?P<count>\d+)"?', match.group("body"))
+        if peak:
+            return int(peak.group("count"))
+    return None
+
+
 async def fetch_poonggo_live_status(client, user_id):
     """Fallback status only: malformed/missing markup is UNKNOWN, not offline."""
     response = await client.get(
@@ -295,6 +311,7 @@ async def fetch_poonggo_live_status(client, user_id):
             raise ValueError("Poonggo LIVE response has no broadcast number")
         return {"is_live": is_live, "is_password": False,
                 "broadcast_no": match.group("no") if is_live else None,
+                "viewer_count": parse_poonggo_peak_viewers(response.text, user_id) if is_live else None,
                 "status_source": "poonggo_station"}
     raise ValueError(f"Poonggo status missing for {user_id}")
 
@@ -328,6 +345,7 @@ async def fetch_live_status(client, user_id):
     is_password = channel.get("BPWD") == "Y"
     is_live = result == "1"
     broadcast_no = channel.get("BNO") or None
+    viewer_count = None
 
     if not is_password and result in {"-6", "-8"}:
         # The SOOP player hides BNO for adult streams, and the shared public
@@ -349,6 +367,7 @@ async def fetch_live_status(client, user_id):
             if station is not None:
                 is_live = station.group("live") == "true" and bool(station.group("no"))
                 broadcast_no = station.group("no") if is_live else None
+                viewer_count = parse_poonggo_peak_viewers(station_response.text, user_id)
             else:
                 is_live = False
         except (httpx.HTTPError, ValueError) as error:
@@ -363,7 +382,9 @@ async def fetch_live_status(client, user_id):
         # loop for every member.
         "broadcast_no": broadcast_no,
         "broadcast_title": channel.get("TITLE") or None,
-        "viewer_count": channel.get("CTUSER") or None,
+        # CTUSER is the room's capacity (commonly 50,000), not viewers. The
+        # live Poonggo reconciliation supplies the actual peak separately.
+        "viewer_count": viewer_count,
     }
 
 

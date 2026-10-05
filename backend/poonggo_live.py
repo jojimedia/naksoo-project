@@ -76,6 +76,21 @@ _LIVE_DONATION = re.compile(
 )
 
 
+def parse_poonggo_peak_viewers(html: str, user_id: str) -> int | None:
+    """Extract peak viewers for the requested streamer from live markup."""
+
+    expected = user_id.lower()
+    for match in re.finditer(
+        r'streamerId:"(?P<id>[^"]+)"(?P<body>[^}]{0,2000})', html
+    ):
+        if match.group("id").lower() != expected:
+            continue
+        peak = re.search(r'peakViewers:"?(?P<count>\d+)"?', match.group("body"))
+        if peak:
+            return int(peak.group("count"))
+    return None
+
+
 def parse_poonggo_total(html: str, user_id: str) -> int:
     """Extract only the requested station's summary, not sidebar rankings."""
 
@@ -278,6 +293,7 @@ async def fetch_poonggo_snapshot(
         "today": today,
         "total": parse_poonggo_total(monthly.text, user_id),
         "fans": fans,
+        "viewer_count": parse_poonggo_peak_viewers(live.text, user_id),
         "_donation_ids": donation_ids,
         "_fans_complete": fans_complete,
         "broadcast_no": str(broadcast_no or ""),

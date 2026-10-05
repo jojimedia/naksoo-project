@@ -12,6 +12,7 @@ from poonggo_live import (
     parse_poonggo_daily_fans,
     parse_poonggo_live_donations,
     parse_poonggo_live_total,
+    parse_poonggo_peak_viewers,
     parse_poonggo_total,
 )
 
@@ -134,6 +135,14 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parse_poonggo_total(page("03apple", 61222), "03apple"), 61222)
         self.assertEqual(parse_poonggo_daily_fans(page("03apple", 61222), "03apple")[0]["nickname"], "큰손")
 
+    def test_peak_viewers_uses_requested_streamer(self):
+        html = (
+            'stream:{streamerId:"sidebar",peakViewers:"50000"},'
+            'stream:{streamerId:"no3miggi",currentViewers:1024,'
+            'peakViewers:"1195",isLive:true}'
+        )
+        self.assertEqual(parse_poonggo_peak_viewers(html, "no3miggi"), 1195)
+
     async def test_snapshot_fetches_broadcast_live_and_monthly_concurrently(self):
         calls = []
 
@@ -141,7 +150,7 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
             calls.append(request)
             if request.url.path.endswith("/monthly"):
                 return httpx.Response(200, text=page("03apple", 186716))
-            return httpx.Response(200, text=live_page("03apple", "123", 61222, 1789567200000))
+            return httpx.Response(200, text=live_page("03apple", "123", 61222, 1789567200000) + 'stream:{streamerId:"03apple",peakViewers:"1054"}')
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
             result = await fetch_poonggo_snapshot(
@@ -153,6 +162,7 @@ class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["today"], 61222)
         self.assertEqual(result["total"], 186716)
         self.assertEqual(result["counting_mode"], "broadcast_live_v4")
+        self.assertEqual(result["viewer_count"], 1054)
 
     async def test_month_boundary_uses_broadcast_start_month(self):
         calls = []

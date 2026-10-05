@@ -127,9 +127,9 @@ function LiveBadge({ member }: { member: CrewMember }) {
                 {member.viewer_count != null ? (
                   <span
                     className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums"
-                    aria-label={`시청자 ${formatNumber(member.viewer_count)}명`}
+                    aria-label={`최고 시청자 ${formatNumber(member.viewer_count)}명`}
                   >
-                    시청자 {formatNumber(member.viewer_count)}명
+                    최고 {formatNumber(member.viewer_count)}명
                   </span>
                 ) : null}
               </div>
