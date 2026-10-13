@@ -30,7 +30,10 @@ def align_members(items, members):
                 **item,
                 "user_id": user_id,
                 "crew_name": member["crew_name"],
-                "nickname": member.get("nickname") or item.get("nickname") or user_id,
+                # SOOP ID is the stable identity. Nicknames are mutable
+                # profile data, so a successful crawl must win over the
+                # registration-time value kept in the members table.
+                "nickname": item.get("nickname") or member.get("nickname") or user_id,
                 "note": member.get("note", ""),
                 "is_on_leave": member.get("is_on_leave", False),
             }
