@@ -23,6 +23,38 @@ export async function POST(request: Request) {
   } catch (error) { return jsonError(error instanceof Error ? error.message : "크루 추가에 실패했습니다.", 500); }
 }
 export async function DELETE(request: Request) {
-  try { const session=await getSessionFromCookies(); if(!session) return jsonError("로그인이 필요합니다.",401); const admin=await getAdmin(session.loginId); if(!admin?.is_superadmin) return jsonError("최고 관리자만 크루를 삭제할 수 있습니다.",403); const {crew_name}=await request.json() as {crew_name?:string}; if(!crew_name?.trim()) return jsonError("삭제할 크루를 선택해주세요."); await deleteCrew(crew_name.trim()); await requestCollectorRefresh(session.loginId); return NextResponse.json({ok:true}); }
-  catch(error) { return jsonError(error instanceof Error?error.message:"크루 삭제에 실패했습니다.",500); }
+  try {
+    const session = await getSessionFromCookies();
+    if (!session) return jsonError("로그인이 필요합니다.", 401);
+
+    const admin = await getAdmin(session.loginId);
+    if (!admin?.is_superadmin) {
+      return jsonError("최고 관리자만 크루를 삭제할 수 있습니다.", 403);
+    }
+
+    const body = (await request.json()) as { crew_name?: string };
+    const crewName = body.crew_name?.trim() ?? "";
+    if (!crewName) return jsonError("삭제할 크루를 선택해주세요.");
+
+    const result = await deleteCrew(crewName);
+    global.naksooRankingVersionMemoryCache?.clear();
+    global.naksooRankingMemoryCache?.clear();
+    global.naksooDashboardSnapshotMemoryCache?.clear();
+    try {
+      await requestCollectorRefresh(session.loginId);
+    } catch {
+      // Membership is already saved; collector refresh is best-effort.
+    }
+
+    return NextResponse.json({
+      ok: true,
+      crew_name: crewName,
+      moved_to_fa: result.moved,
+    });
+  } catch (error) {
+    return jsonError(
+      error instanceof Error ? error.message : "크루 삭제에 실패했습니다.",
+      500,
+    );
+  }
 }

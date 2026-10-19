@@ -132,6 +132,7 @@ export default function AdminPanelModal({
   const [newAdminId, setNewAdminId] = useState("");
   const [newAdminCrews, setNewAdminCrews] = useState<string[]>([]);
   const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+  const [isDeletingCrew, setIsDeletingCrew] = useState(false);
   const selectingFaCrew = isFaCrew(selectedCrew);
   const pendingCount = Object.keys(pendingAssignments).length;
   const displayMembers = useMemo(() => {
@@ -819,11 +820,63 @@ export default function AdminPanelModal({
   }
 
   async function handleDeleteCrew() {
-    if (session.login_id !== "admin" || isFaCrew(selectedCrew)) return;
-    if (!window.confirm(`${selectedCrew} 크루를 삭제할까요?\n소속 멤버는 모두 FA(무소속)로 이동합니다.`)) return;
-    const response=await fetch("/api/admin/crews",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({crew_name:selectedCrew})}); const data=await response.json() as {error?:string};
-    if(!response.ok){setError(data.error??"크루 삭제에 실패했습니다.");return;}
-    setManagedCrews((current)=>current.filter((crew)=>crew!==selectedCrew)); setSelectedCrew(FA_CREW_NAME); setMessage(`${selectedCrew} 크루를 삭제하고 멤버를 FA로 이동했습니다.`);
+    if (session.login_id !== "admin" || isFaCrew(selectedCrew) || isDeletingCrew) {
+      return;
+    }
+
+    const memberCount = displayMembers.length;
+    if (
+      !window.confirm(
+        `${selectedCrew} 크루를 삭제할까요?\n소속 멤버 ${memberCount}명은 모두 FA(무소속)으로 이동합니다.`,
+      )
+    ) {
+      return;
+    }
+
+    const deletedCrew = selectedCrew;
+    setIsDeletingCrew(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/admin/crews", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ crew_name: deletedCrew }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        moved_to_fa?: number;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "크루 삭제에 실패했습니다.");
+      }
+
+      const moved = data.moved_to_fa ?? memberCount;
+      setManagedCrews((current) =>
+        current.filter((crew) => crew !== deletedCrew),
+      );
+      setSelectedCrew(FA_CREW_NAME);
+      setPendingAssignments({});
+      setTransferredMembers([]);
+      setSearchQuery("");
+      setSearchCandidates([]);
+      setValidatedStreamer(null);
+      setMessage(
+        `${deletedCrew} 크루를 삭제하고 멤버 ${moved}명을 FA(무소속)으로 이동했습니다.`,
+      );
+      await loadMembers(FA_CREW_NAME);
+      router.refresh();
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "크루 삭제에 실패했습니다.",
+      );
+    } finally {
+      setIsDeletingCrew(false);
+    }
   }
 
   async function handleCreateAdmin() {
@@ -1061,7 +1114,18 @@ export default function AdminPanelModal({
                 </option>
               ))}
             </select>
-            {session.login_id === "admin" && !isFaCrew(selectedCrew) ? <button type="button" onClick={() => void handleDeleteCrew()} className="mt-2 rounded border border-[#dc2626]/50 px-2 py-1 text-xs font-semibold text-[#fca5a5] hover:border-[#dc2626]">현재 크루 삭제 · 멤버는 FA로 이동</button> : null}
+            {session.login_id === "admin" && !isFaCrew(selectedCrew) ? (
+              <button
+                type="button"
+                onClick={() => void handleDeleteCrew()}
+                disabled={isDeletingCrew}
+                className="mt-2 rounded border border-[#dc2626]/50 px-2 py-1 text-xs font-semibold text-[#fca5a5] hover:border-[#dc2626] disabled:opacity-60"
+              >
+                {isDeletingCrew
+                  ? "삭제 중..."
+                  : "현재 크루 삭제 · 멤버는 FA로 이동"}
+              </button>
+            ) : null}
           </label>
 
           <section className="rounded-lg border border-[#3a3548] bg-[#111018] p-4">

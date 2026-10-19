@@ -30,7 +30,55 @@ export async function getAdmin(login:string){ return (await listAdmins()).find(x
 export async function listAdminProfiles(){ const pool=await db(); const r=await pool.query("SELECT login_id,crews,is_superadmin,must_change_password FROM admins ORDER BY login_id"); return r.rows.map(x=>({login_id:String(x.login_id),crews:(x.crews??[]).map(String),is_superadmin:Boolean(x.is_superadmin),must_change_password:Boolean(x.must_change_password)})); }
 export async function createAdmin(login:string,crews:string[]){ const id=login.trim(); if(!/^[a-zA-Z0-9_-]{3,30}$/.test(id)) throw new Error("아이디는 영문·숫자·밑줄·하이픈 3~30자로 입력해주세요."); const valid=new Set(await listRegisteredCrewNames()); const allowed=crews.filter(crew=>isFaCrew(crew)||valid.has(crew)); const pool=await db(); const {hashPassword}=await import("./operations-db"); await pool.query("INSERT INTO admins(login_id,password_hash,crews,is_superadmin,must_change_password) VALUES($1,$2,$3,FALSE,TRUE)",[id,hashPassword("1234"),allowed]); return {login_id:id,crews:allowed}; }
 export async function addCrew(crew:string, representative:string){ const pool=await db(); await pool.query("INSERT INTO crews (crew_name,representative_name) VALUES ($1,$2) ON CONFLICT (crew_name) DO UPDATE SET representative_name=EXCLUDED.representative_name",[crew.trim(),representative.trim()]); }
-export async function deleteCrew(crew:string){ if(isFaCrew(crew)) throw new Error("FA는 삭제할 수 없습니다."); const pool=await db(); const client=await pool.connect(); try { await client.query("BEGIN"); await client.query("UPDATE members SET crew_name=$1,updated_at=NOW() WHERE lower(crew_name)=lower($2)",[FA_CREW_NAME,crew]); await client.query("UPDATE admins SET crews=array_remove(crews,$1),updated_at=NOW()",[crew]); const result=await client.query("DELETE FROM crews WHERE lower(crew_name)=lower($1) RETURNING crew_name",[crew]); if(!result.rows[0]) throw new Error("크루를 찾을 수 없습니다."); await client.query("COMMIT"); } catch(error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); } }
+export async function deleteCrew(crew: string) {
+  const name = crew.trim();
+  if (!name || isFaCrew(name)) {
+    throw new Error("FA는 삭제할 수 없습니다.");
+  }
+
+  const pool = await db();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const moved = await client.query(
+      "UPDATE members SET crew_name=$1, updated_at=NOW() WHERE lower(crew_name)=lower($2)",
+      [FA_CREW_NAME, name],
+    );
+    await client.query(
+      `UPDATE admins
+       SET crews = ARRAY(
+         SELECT x FROM unnest(COALESCE(crews, '{}'::text[])) AS x
+         WHERE lower(x) <> lower($1)
+       ),
+       updated_at = NOW()
+       WHERE EXISTS (
+         SELECT 1 FROM unnest(COALESCE(crews, '{}'::text[])) AS x
+         WHERE lower(x) = lower($1)
+       )`,
+      [name],
+    );
+    await client.query(
+      `UPDATE member_requests
+       SET status='rejected', processed_by='system', processed_at=NOW()
+       WHERE status='pending' AND lower(crew_name)=lower($1)`,
+      [name],
+    );
+    const deleted = await client.query(
+      "DELETE FROM crews WHERE lower(crew_name)=lower($1) RETURNING crew_name",
+      [name],
+    );
+    if (!deleted.rows[0]) {
+      throw new Error("크루를 찾을 수 없습니다.");
+    }
+    await client.query("COMMIT");
+    return { moved: moved.rowCount ?? 0 };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 export async function addMember(crew:string,id:string,nick:string,version?:string){ await assertCrewVersion(crew,version); const pool=await db(); const old=await findMemberByUserId(id); const target=isFaCrew(crew)?FA_CREW_NAME:crew; if(old){ if(!isFaCrew(old.crew_name)) throw new Error(`이미 ${old.crew_name} 크루에 등록된 스트리머입니다.`); const moved=await pool.query("UPDATE members SET crew_name=$1,nickname=$2,updated_at=NOW() WHERE lower(user_id)=lower($3) AND lower(crew_name)=lower($4)",[target,nick,old.user_id,old.crew_name]); if(!moved.rowCount) throw new CrewVersionConflictError(); return; } await pool.query("INSERT INTO members (crew_name,user_id,nickname,note) VALUES ($1,$2,$3,'')",[target,id,nick]); }
 export async function moveMemberToFa(crew:string,id:string,version?:string){ await assertCrewVersion(crew,version); const pool=await db(); await pool.query("UPDATE members SET crew_name=$1 WHERE lower(user_id)=lower($2) AND lower(crew_name)=lower($3)",[FA_CREW_NAME,id,crew]); }
 export async function assignMembersFromFa(items:Array<{userId:string;targetCrew:string}>,version?:string){ await assertCrewVersion(FA_CREW_NAME,version); const pool=await db(); for(const x of items) await pool.query("UPDATE members SET crew_name=$1 WHERE lower(user_id)=lower($2) AND lower(crew_name)=lower($3)",[x.targetCrew,x.userId,FA_CREW_NAME]); return (await Promise.all(items.map(x=>findMemberByUserId(x.userId)))).filter((x):x is SheetMember=>Boolean(x)); }
