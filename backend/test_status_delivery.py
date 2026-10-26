@@ -187,6 +187,15 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(item["broadcast_no"], "123")
         self.assertNotIn("current_month", item)
 
+    def test_viewer_count_does_not_force_large_cache_write(self):
+        before = {
+            "items": [{"user_id": "test", "is_live": True, "viewer_count": 100}]
+        }
+        after = {
+            "items": [{"user_id": "test", "is_live": True, "viewer_count": 200}]
+        }
+        self.assertEqual(result_data_hash(before), result_data_hash(after))
+
     def test_status_overlay_preserves_start_only_for_same_broadcast(self):
         service = RealtimeCollector().poonggo_live
         service.publish_live_status({"user_id": "iluvbin", "is_live": True, "broadcast_no": "new", "status_observed_at": datetime.now(KST).isoformat()})

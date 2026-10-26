@@ -109,6 +109,9 @@ _VOLATILE_RESULT_KEYS = {
     "last_collected_at",
     "last_detail_collected_at",
     "status_observed_at",
+    "status_source",
+    "status_stale",
+    "viewer_count",
 }
 
 
@@ -1083,7 +1086,9 @@ class RealtimeCollector:
                             transitioned = previous is None or any(previous.get(k) != v for k, v in payload.items())
                             # Renew confidence even when the broadcast is unchanged.
                             payload["status_observed_at"] = now.isoformat()
-                            self.poonggo_live.publish_live_status(payload)
+                            self.poonggo_live.publish_live_status(
+                                payload, broadcast=transitioned
+                            )
                             changed = True
                             if transitioned:
                                 print(f"LIVE detected: user={uid} live={is_live} broadcast={payload['broadcast_no']} observed={now.isoformat()} poll_elapsed={asyncio.get_running_loop().time()-started:.2f}s")
@@ -1091,6 +1096,7 @@ class RealtimeCollector:
                             if was_live and not is_live:
                                 self.recovery_required.add(key)
                         if changed:
+                            self.poonggo_live.publish_live_status_snapshot()
                             output = await self._get_latest_result_async()
                             if output:
                                 await self._save_result_async(output, datetime.now(TIMEZONE))

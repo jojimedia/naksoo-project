@@ -126,6 +126,9 @@ CREATE TABLE IF NOT EXISTS live_donation_events (
 CREATE INDEX IF NOT EXISTS live_donation_events_streamer_idx
     ON live_donation_events (streamer_id, occurred_at DESC);
 
+CREATE INDEX IF NOT EXISTS live_donation_events_occurred_idx
+    ON live_donation_events (occurred_at);
+
 CREATE TABLE IF NOT EXISTS streamer_live_totals (
     streamer_id TEXT PRIMARY KEY,
     crew_name TEXT NOT NULL DEFAULT '',
@@ -174,6 +177,9 @@ CREATE TABLE IF NOT EXISTS streamer_live_sessions (
 
 CREATE INDEX IF NOT EXISTS streamer_live_sessions_date_idx
     ON streamer_live_sessions (reporting_date DESC, streamer_id);
+
+CREATE INDEX IF NOT EXISTS streamer_live_sessions_streamer_date_idx
+    ON streamer_live_sessions (streamer_id, reporting_date DESC);
 
 CREATE TABLE IF NOT EXISTS streamer_daily_fan_snapshots (
     streamer_id TEXT NOT NULL,
@@ -242,6 +248,9 @@ def _content_hash(value: Any) -> str:
         "last_collected_at",
         "last_detail_collected_at",
         "status_observed_at",
+        "status_source",
+        "status_stale",
+        "viewer_count",
     }
 
     def stable(child: Any) -> Any:
@@ -748,6 +757,15 @@ def save_result(
                 month = int(period.get("month") or 0)
                 if not year or not month:
                     continue
+                is_current_period = (year, month) == (
+                    int(current.get("year") or 0),
+                    int(current.get("month") or 0),
+                )
+                # `current` and `dashboard:current` already contain this exact
+                # period. Keeping period-prefixed copies doubled every hot
+                # live update and provided no additional frontend capability.
+                if is_current_period:
+                    continue
                 if (
                     previous_result is not None
                     and not period_layout_changed
@@ -859,14 +877,15 @@ def load_live_totals() -> list[dict[str, Any]]:
     ]
 
 
-def load_recent_donation_ids() -> list[str]:
+def load_recent_donation_ids(limit: int = 10_000) -> list[str]:
     with connect() as conn:
         rows = conn.execute(
             """
             SELECT donation_id FROM live_donation_events
             WHERE occurred_at >= NOW() - INTERVAL '2 days'
-            ORDER BY occurred_at DESC LIMIT 20000
-            """
+            ORDER BY occurred_at DESC LIMIT %s
+            """,
+            (max(1, int(limit)),),
         ).fetchall()
     return [str(row["donation_id"]) for row in rows]
 
@@ -954,21 +973,38 @@ def persist_live_updates(
         return
     with connect() as conn:
         with conn.transaction():
-            for event in events:
+            if events:
+                event_rows = [
+                    {
+                        "donation_id": event["donation_id"],
+                        "streamer_id": event["user_id"],
+                        "broadcast_no": event.get("broadcast_no"),
+                        "amount": int(event["amount"]),
+                        "occurred_at": (
+                            _as_datetime(event.get("occurred_at")) or observed_at
+                        ).isoformat(),
+                        # Deduplication and recovery use the normalized columns;
+                        # retaining the full upstream event forever only
+                        # multiplies database and backup traffic.
+                        "payload_json": {},
+                    }
+                    for event in events
+                ]
                 conn.execute(
                     """
                     INSERT INTO live_donation_events (
                       donation_id, streamer_id, broadcast_no, amount,
                       occurred_at, payload_json
-                    ) VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                    )
+                    SELECT donation_id, streamer_id, broadcast_no, amount,
+                           occurred_at::timestamptz, payload_json
+                    FROM jsonb_to_recordset(%s::jsonb) AS event(
+                      donation_id text, streamer_id text, broadcast_no text,
+                      amount bigint, occurred_at text, payload_json jsonb
+                    )
                     ON CONFLICT (donation_id) DO NOTHING
                     """,
-                    (
-                        event["donation_id"], event["user_id"],
-                        event.get("broadcast_no"), int(event["amount"]),
-                        _as_datetime(event.get("occurred_at")) or observed_at,
-                        _as_json(event.get("payload") or {}),
-                    ),
+                    (_as_json(event_rows),),
                 )
 
             for row in updates:
@@ -1290,11 +1326,28 @@ def mark_recovery_sweep(now: datetime) -> None:
 
 
 def cleanup_expired_data(now: datetime) -> None:
-    """Keep the two prior calendar months and 90 days of observations."""
+    """Bound all append-only and large JSON tables to their useful window."""
 
     current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     keep_from = (current_month_start - timedelta(days=62)).date()
     history_from = now - timedelta(days=90)
+    session_from = now.date() - timedelta(days=120)
+    command_from = now - timedelta(days=30)
+    period_starts = [current_month_start]
+    for _ in range(2):
+        period_starts.append(
+            (period_starts[-1] - timedelta(days=1)).replace(day=1)
+        )
+    # Current month uses the canonical current caches. Only historical month
+    # selections need period-prefixed copies.
+    active_cache_keys = [
+        key
+        for period in period_starts[1:]
+        for key in (
+            f"period:{period.year}-{period.month:02d}",
+            f"dashboard:period:{period.year}-{period.month:02d}",
+        )
+    ]
     with connect() as conn:
         conn.execute(
             "DELETE FROM streamer_month_current WHERE make_date(year, month, 1) < %s",
@@ -1311,4 +1364,20 @@ def cleanup_expired_data(now: datetime) -> None:
         conn.execute(
             "DELETE FROM streamer_daily_fan_snapshots WHERE reporting_date < %s",
             (history_from.date(),),
+        )
+        conn.execute(
+            "DELETE FROM streamer_live_sessions WHERE reporting_date < %s",
+            (session_from,),
+        )
+        conn.execute(
+            """DELETE FROM collector_commands
+               WHERE status IN ('completed', 'failed') AND requested_at < %s""",
+            (command_from,),
+        )
+        conn.execute(
+            """DELETE FROM ranking_cache
+               WHERE (cache_key LIKE 'period:%%'
+                      OR cache_key LIKE 'dashboard:period:%%')
+                 AND NOT (cache_key = ANY(%s))""",
+            (active_cache_keys,),
         )

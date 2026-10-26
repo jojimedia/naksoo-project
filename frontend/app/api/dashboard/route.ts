@@ -31,9 +31,10 @@ export async function GET(request: NextRequest) {
   const selected = periods.find(
     (period) => period.year === year && period.month === month,
   );
-  const cacheKey = selected
-    ? `dashboard:period:${selected.year}-${String(selected.month).padStart(2, "0")}`
-    : "dashboard:current";
+  const cacheKey = selected &&
+    (selected.year !== current.year || selected.month !== current.month)
+      ? `dashboard:period:${selected.year}-${String(selected.month).padStart(2, "0")}`
+      : "dashboard:current";
 
   try {
     const snapshot = await getCachedDashboardSnapshot(cacheKey);

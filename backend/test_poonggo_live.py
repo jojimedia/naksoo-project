@@ -43,6 +43,21 @@ def live_page(user_id: str, stream_no: str, amount: int, started_ms: int) -> str
 
 
 class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_donation_broadcasts_are_coalesced(self):
+        service = PoonggoLiveService()
+        queue = asyncio.Queue()
+        service.subscribers.add(queue)
+        with patch("poonggo_live.LIVE_BROADCAST_SECONDS", 0.01):
+            service._schedule_total_broadcast(
+                {"user_id": "test", "date": "2026-10-27", "today": 1}
+            )
+            service._schedule_total_broadcast(
+                {"user_id": "test", "date": "2026-10-27", "today": 2}
+            )
+            await asyncio.sleep(0.03)
+        self.assertEqual(queue.qsize(), 1)
+        self.assertIn('"today": 2', queue.get_nowait())
+
     async def test_stream_sync_reuses_collector_memory(self):
         service = PoonggoLiveService()
         provider = AsyncMock(return_value={"items": []})

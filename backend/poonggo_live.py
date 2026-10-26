@@ -41,6 +41,9 @@ POONGGO_SSE_URL = "https://sse2.poonggo.com"
 RECONCILE_SECONDS = max(60, int(os.environ.get("NAKSOO_POONGGO_RECONCILE_SECONDS", "60")))
 FLUSH_SECONDS = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_SECONDS", "2")))
 FLUSH_EVENT_COUNT = max(1, int(os.environ.get("NAKSOO_LIVE_FLUSH_EVENT_COUNT", "20")))
+LIVE_BROADCAST_SECONDS = max(
+    0.25, float(os.environ.get("NAKSOO_LIVE_BROADCAST_SECONDS", "1"))
+)
 MAX_SEEN_IDS = max(1_000, int(os.environ.get("NAKSOO_LIVE_SEEN_IDS", "10000")))
 DAILY_FAN_BACKFILL_BATCH = max(1, int(os.environ.get("NAKSOO_DAILY_FAN_BACKFILL_BATCH", "5")))
 DAILY_FAN_BACKFILL_SECONDS = max(30, int(os.environ.get("NAKSOO_DAILY_FAN_BACKFILL_SECONDS", "30")))
@@ -335,6 +338,8 @@ class PoonggoLiveService:
         self.finalize_tasks: set[asyncio.Task] = set()
         self.subscribers: set[asyncio.Queue[str]] = set()
         self.pending_events: list[dict[str, Any]] = []
+        self.pending_total_broadcasts: dict[str, dict[str, Any]] = {}
+        self.total_broadcast_tasks: dict[str, asyncio.Task] = {}
         self.dirty_ids: set[str] = set()
         self.seen_ids: set[str] = set()
         self.seen_order: deque[str] = deque()
@@ -362,7 +367,7 @@ class PoonggoLiveService:
         while True:
             try:
                 rows = load_live_totals()
-                donation_ids = load_recent_donation_ids()
+                donation_ids = load_recent_donation_ids(MAX_SEEN_IDS)
                 for row in rows:
                     for session in row.pop("_sessions", []):
                         self._align_session_period(session)
@@ -446,14 +451,25 @@ class PoonggoLiveService:
         finally:
             self.subscribers.discard(queue)
 
-    def publish_live_status(self, payload: dict[str, Any]) -> None:
+    def publish_live_status(
+        self, payload: dict[str, Any], *, broadcast: bool = True
+    ) -> None:
         # Connection health is not broadcast status. Keep these events separate.
         key = str(payload["user_id"]).lower()
         self.live_statuses[key] = dict(payload)
         if not payload.get("is_live") and key in self.states:
             # A confirmed OFFLINE result ends any rolling-deploy resume hint.
             self.states[key].pop("_resume_stream", None)
-        self._broadcast("live_status", payload)
+        if broadcast:
+            self._broadcast("live_status", payload)
+
+    def publish_live_status_snapshot(self) -> None:
+        """Send one compact round result instead of one SSE frame per member."""
+
+        self._broadcast(
+            "live_status_snapshot",
+            [display_status(status) for status in self.live_statuses.values()],
+        )
 
     def connected_live_status(self, user_id: str) -> dict[str, Any] | None:
         """Return positive LIVE evidence from a recent donation SSE event.
@@ -511,6 +527,28 @@ class PoonggoLiveService:
                     queue.get_nowait()
             with suppress(asyncio.QueueFull):
                 queue.put_nowait(message)
+
+    def _schedule_total_broadcast(self, payload: dict[str, Any]) -> None:
+        """Coalesce donation bursts into at most one full payload per second."""
+
+        key = str(payload.get("user_id") or "").lower()
+        if not key:
+            return
+        self.pending_total_broadcasts[key] = dict(payload)
+        task = self.total_broadcast_tasks.get(key)
+        if task is not None and not task.done():
+            return
+
+        async def publish_latest() -> None:
+            try:
+                await asyncio.sleep(LIVE_BROADCAST_SECONDS)
+                latest = self.pending_total_broadcasts.pop(key, None)
+                if latest is not None:
+                    self._broadcast("total", latest)
+            finally:
+                self.total_broadcast_tasks.pop(key, None)
+
+        self.total_broadcast_tasks[key] = asyncio.create_task(publish_latest())
 
     async def apply_snapshot(
         self,
@@ -737,7 +775,7 @@ class PoonggoLiveService:
             self.dirty_ids.add(user_id)
             if len(self.pending_events) >= FLUSH_EVENT_COUNT:
                 self.changed.set()
-        self._broadcast("total", state)
+        self._schedule_total_broadcast(state)
 
     async def _mark_connection(self, user_id: str, connected: bool) -> None:
         key = user_id.lower()
@@ -929,8 +967,22 @@ class PoonggoLiveService:
                     continue
                 session_keys = self.dirty_sessions
                 self.dirty_sessions = set()
-                updates = [{**self.sessions[key], "_session_only": True} for key in session_keys if key in self.sessions]
-                updates += [dict(self.states[key]) for key in self.dirty_ids if key in self.states]
+                current_updates = [
+                    dict(self.states[key])
+                    for key in self.dirty_ids
+                    if key in self.states
+                ]
+                current_session_keys = {
+                    (str(row["user_id"]).lower(), str(row.get("broadcast_no") or ""))
+                    for row in current_updates
+                    if row.get("broadcast_no")
+                }
+                updates = [
+                    {**self.sessions[key], "_session_only": True}
+                    for key in session_keys - current_session_keys
+                    if key in self.sessions
+                ]
+                updates += current_updates
                 events = self.pending_events
                 self.dirty_ids = set()
                 self.pending_events = []

@@ -102,3 +102,27 @@ class BroadcastDayTests(unittest.IsolatedAsyncioTestCase):
         for sql, params in statements:
             self.assertEqual(sql.count("%s"), len(params))
         self.assertTrue(any("SUM(today_balloons)" in sql for sql, _ in statements))
+
+    def test_donation_events_use_one_batch_statement(self):
+        conn = MagicMock()
+        events = [
+            {
+                "donation_id": str(index),
+                "user_id": "qor0919",
+                "broadcast_no": "a",
+                "amount": 10,
+                "occurred_at": datetime.now(KST).isoformat(),
+                "payload": {"unused": "large upstream body"},
+            }
+            for index in range(20)
+        ]
+        with patch("realtime_db.connect") as connect:
+            connect.return_value.__enter__.return_value = conn
+            persist_live_updates([], events, datetime.now(KST))
+        inserts = [
+            call for call in conn.execute.call_args_list
+            if "INSERT INTO live_donation_events" in call.args[0]
+        ]
+        self.assertEqual(len(inserts), 1)
+        self.assertIn("jsonb_to_recordset", inserts[0].args[0])
+        self.assertNotIn("large upstream body", inserts[0].args[1][0])
