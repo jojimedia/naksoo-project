@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
+import json
 import os
 import random
 import socket
@@ -95,6 +97,42 @@ def _interval(base_seconds: int, jitter_seconds: int = 0) -> int:
     """Return a positive collection interval with a one-sided random jitter."""
 
     return base_seconds + random.randint(0, jitter_seconds)
+
+
+_VOLATILE_RESULT_KEYS = {
+    "created_at",
+    "created_date",
+    "created_time",
+    "source_max_observed_at",
+    "observed_at",
+    "source_observed_at",
+    "last_collected_at",
+    "last_detail_collected_at",
+    "status_observed_at",
+}
+
+
+def _stable_result_value(value: Any) -> Any:
+    """Remove collection clocks that must not turn an unchanged poll into a write."""
+
+    if isinstance(value, dict):
+        return {
+            key: _stable_result_value(child)
+            for key, child in value.items()
+            if key not in _VOLATILE_RESULT_KEYS
+        }
+    if isinstance(value, list):
+        return [_stable_result_value(child) for child in value]
+    return value
+
+
+def result_data_hash(value: dict[str, Any] | None) -> str:
+    """Hash user-visible/source data while ignoring poll timestamps."""
+
+    body = _stable_result_value(value or {})
+    return hashlib.sha256(
+        json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def _needs_detail_backfill(item: dict[str, Any]) -> bool:
@@ -216,6 +254,12 @@ class RealtimeCollector:
         self.public_live_ids: set[str] | None = None
         self.public_live_observed_at = 0.0
         self.save_lock = asyncio.Lock()
+        # The collector is the sole ranking writer. Keep its last committed
+        # result in memory so 5/10/30-second lanes do not download the same
+        # multi-megabyte JSONB document before every no-op poll.
+        self.latest_result: dict[str, Any] | None = None
+        self.latest_result_hash: str | None = None
+        self.ready_period_keys: set[str] = set()
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -372,7 +416,7 @@ class RealtimeCollector:
                 raise RuntimeError("PostgreSQL members 테이블이 비어 있습니다.")
             self._restore_state(now)
 
-            cached = get_cached_result()
+            cached = await self._get_latest_result_async()
             calendar = get_calendar_period(now)
             older = calendar["older"]
             older_cache_key = f"period:{older['year']}-{older['month']:02d}"
@@ -385,7 +429,10 @@ class RealtimeCollector:
                 for member in members
             }
             membership_changed = cached_member_keys != database_member_keys
-            if not cached or not get_cached_result(older_cache_key):
+            if older_cache_key not in self.ready_period_keys:
+                if await asyncio.to_thread(get_cached_result, older_cache_key):
+                    self.ready_period_keys.add(older_cache_key)
+            if not cached or older_cache_key not in self.ready_period_keys:
                 print("Ranking cache is not ready; building initial member snapshot.")
                 output = await self._bootstrap(members, now)
                 await self._save_result_async(output, datetime.now(TIMEZONE))
@@ -698,7 +745,9 @@ class RealtimeCollector:
                         items_by_key[key] = item
 
             output = make_output(now, members, list(items_by_key.values()))
-            await self._save_result_async(output, datetime.now(TIMEZONE))
+            database_written = await self._save_result_async(
+                output, datetime.now(TIMEZONE)
+            )
             if recovery_due:
                 mark_recovery_sweep(now)
             complete_refresh_requests(requested_refreshes)
@@ -707,7 +756,8 @@ class RealtimeCollector:
                 cleanup_expired_data(now)
                 self.last_cleanup_date = now.date()
             print(
-                f"Cycle saved: bootstrap={len(to_collect)}, "
+                f"Cycle checked: db-write={int(database_written)}, "
+                f"bootstrap={len(to_collect)}, "
                 f"current-detail={len(quick_collect) + len(selected_backfills)}, "
                 f"total items={output['count']}"
             )
@@ -721,22 +771,49 @@ class RealtimeCollector:
         self._prepare_result(output, latest, get_collector_members())
         save_result(output, now)
 
+    async def _get_latest_result_async(self) -> dict[str, Any] | None:
+        """Load the large raw cache once per process, then serve memory copies."""
+
+        if self.latest_result is None:
+            loaded = await asyncio.to_thread(get_cached_result)
+            if loaded:
+                self.latest_result = deepcopy(loaded)
+                self.latest_result_hash = result_data_hash(loaded)
+        return deepcopy(self.latest_result) if self.latest_result is not None else None
+
     async def _save_result_async(self, output, now):
         # Serialize dashboard writers while keeping HTTP/SSE on the event loop.
         async with self.save_lock:
-            latest = await asyncio.to_thread(get_cached_result) or {}
+            latest = await self._get_latest_result_async() or {}
             members = await asyncio.to_thread(get_collector_members)
             detached = deepcopy(output)
             # Live state must only be read on its owning event loop, never from
             # the DB thread while SSE mutates session dictionaries.
             self._prepare_result(detached, latest, members)
-            write = asyncio.create_task(asyncio.to_thread(save_result, deepcopy(detached), now))
+            detached_hash = result_data_hash(detached)
+            previous_hash = self.latest_result_hash or result_data_hash(latest)
+            if latest and detached_hash == previous_hash:
+                return False
+            write = asyncio.create_task(
+                asyncio.to_thread(save_result, deepcopy(detached), now, deepcopy(latest))
+            )
             try:
                 await asyncio.shield(write)
             except asyncio.CancelledError:
                 # A thread cannot be cancelled: retain ordering until it ends.
                 await write
                 raise
+            self.latest_result = deepcopy(detached)
+            self.latest_result_hash = detached_hash
+            current = detached.get("current_period") or {}
+            previous = detached.get("previous_period") or {}
+            older = detached.get("older_period") or {}
+            for period in (current, previous, older):
+                if period.get("year") and period.get("month"):
+                    self.ready_period_keys.add(
+                        f"period:{int(period['year'])}-{int(period['month']):02d}"
+                    )
+            return True
 
     def _prepare_result(self, output, latest, members):
         output_items = list(output.get("items") or [])
@@ -809,12 +886,12 @@ class RealtimeCollector:
                         started = datetime.now(TIMEZONE)
                         self.chart_totals = await fetch_totals(client, started)
                         now = datetime.now(TIMEZONE)
-                        output = get_cached_result()
+                        output = await self._get_latest_result_async()
                         if output:
                             changed = apply_totals(
                                 output, self.chart_totals, include_daily=False
                             )
-                            await self._save_result_async(output, now)
+                            saved = await self._save_result_async(output, now) if changed else False
                             print(f"Live chart saved: requests=2 changed={changed} observed={now.isoformat()} elapsed={(now-started).total_seconds():.2f}s")
                         record_source_collection_result(True, now)
                 except Exception as error:
@@ -990,7 +1067,7 @@ class RealtimeCollector:
                             if was_live and not is_live:
                                 self.recovery_required.add(key)
                         if changed:
-                            output = get_cached_result()
+                            output = await self._get_latest_result_async()
                             if output:
                                 await self._save_result_async(output, datetime.now(TIMEZONE))
                 except Exception as error:
@@ -1073,7 +1150,7 @@ class RealtimeCollector:
 
                 collected_at = datetime.now(TIMEZONE)
                 item["last_detail_collected_at"] = collected_at.isoformat()
-                latest = get_cached_result() or {}
+                latest = await self._get_latest_result_async() or {}
                 latest["items"] = [
                     existing
                     for existing in latest.get("items") or []
@@ -1098,7 +1175,7 @@ class RealtimeCollector:
                         if not task.done()
                     }
                     if acquire_collector_lease(self.holder, COLLECTOR_LEASE_SECONDS):
-                        latest = get_cached_result()
+                        latest = await self._get_latest_result_async()
                         if latest:
                             members = get_collector_members()
                             aligned = align_members(latest.get("items") or [], members)

@@ -2,6 +2,7 @@ import unittest
 from datetime import date
 
 from realtime_db import (
+    _content_hash,
     _index_session_days,
     _is_authoritative_live_source,
     _merge_daily_fans,
@@ -13,6 +14,22 @@ from realtime_db import (
 
 
 class RealtimeDatabaseSourcePriorityTests(unittest.TestCase):
+    def test_cache_hash_ignores_poll_timestamps(self):
+        before = {
+            "created_at": "2026-10-27T10:00:00+09:00",
+            "items": [{"user_id": "test", "observed_at": "first", "total": 10}],
+        }
+        after = {
+            "created_at": "2026-10-27T10:00:10+09:00",
+            "items": [{"user_id": "test", "observed_at": "second", "total": 10}],
+        }
+        self.assertEqual(_content_hash(before), _content_hash(after))
+
+    def test_cache_hash_detects_source_data_change(self):
+        before = {"items": [{"user_id": "test", "total": 10}]}
+        after = {"items": [{"user_id": "test", "total": 11}]}
+        self.assertNotEqual(_content_hash(before), _content_hash(after))
+
     def test_stale_detail_month_total_is_reconciled_from_daily_rows(self):
         month = {
             "data_source": "detail",

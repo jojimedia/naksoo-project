@@ -146,7 +146,7 @@ class LiveTotalsTests(unittest.IsolatedAsyncioTestCase):
         async def chart(client, now):
             await detail_started.wait()
             return snapshot()
-        def save(result, now):
+        def save(result, now, previous=None):
             self.assertEqual(result["items"][0]["current_month"]["total_balloons"], 140)
             loop.call_soon_threadsafe(published.set)
         collector.run_detail_forever = slow_detail

@@ -230,10 +230,33 @@ def _as_json(value: Any) -> str:
 
 
 def _content_hash(value: Any) -> str:
-    """Hash the meaningful cache body, excluding collection timestamps."""
+    """Hash meaningful data, excluding clocks that change on every poll."""
+
+    volatile_keys = {
+        "created_at",
+        "created_date",
+        "created_time",
+        "source_max_observed_at",
+        "observed_at",
+        "source_observed_at",
+        "last_collected_at",
+        "last_detail_collected_at",
+        "status_observed_at",
+    }
+
+    def stable(child: Any) -> Any:
+        if isinstance(child, dict):
+            return {
+                key: stable(nested)
+                for key, nested in child.items()
+                if key not in volatile_keys
+            }
+        if isinstance(child, list):
+            return [stable(nested) for nested in child]
+        return child
 
     return hashlib.sha256(
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        json.dumps(stable(value), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
 
 
@@ -577,7 +600,11 @@ def _upsert_month(
     )
 
 
-def save_result(result: dict[str, Any], observed_at: datetime) -> None:
+def save_result(
+    result: dict[str, Any],
+    observed_at: datetime,
+    previous_result: dict[str, Any] | None = None,
+) -> None:
     """Persist a compatible result JSON and normalized month rows atomically."""
 
     payload = dict(result)
@@ -585,35 +612,126 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
 
     with connect() as conn:
         with conn.transaction():
-            # One bounded query per save cycle.  Never query sessions once per
-            # member/month: that would turn a 123-member cycle into hundreds
-            # of DB round trips and undo the cached-dashboard speedup.
-            session_rows = conn.execute(
-                """
-                SELECT streamer_id, broadcast_no, reporting_date, today_balloons, daily_fans
-                FROM streamer_live_sessions
-                WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 120
-                ORDER BY observed_at, broadcast_no
-                """
-            ).fetchall()
+            previous_by_id = {
+                str(item.get("user_id") or "").lower(): item
+                for item in (previous_result or {}).get("items") or []
+            }
+            current_by_id = {
+                str(item.get("user_id") or "").lower(): item
+                for item in payload.get("items") or []
+            }
+            period_layout_changed = _content_hash(
+                {
+                    key: payload.get(key)
+                    for key in ("current_period", "previous_period", "older_period")
+                }
+            ) != _content_hash(
+                {
+                    key: (previous_result or {}).get(key)
+                    for key in ("current_period", "previous_period", "older_period")
+                }
+            )
+            changed_items = [
+                item
+                for item in payload.get("items") or []
+                if _content_hash(item)
+                != _content_hash(previous_by_id.get(str(item.get("user_id") or "").lower()) or {})
+            ]
+            metadata_changed = set(previous_by_id) != set(current_by_id)
+            changed_slots: set[str] = set()
+            item_changed_slots: dict[str, set[str]] = {}
+            metadata_changed_ids: set[str] = set()
+            month_slots = ("current_month", "previous_month", "older_month")
+            for item in changed_items:
+                user_id = str(item.get("user_id") or "").lower()
+                previous_item = previous_by_id.get(user_id) or {}
+                current_metadata = {
+                    key: value for key, value in item.items() if key not in month_slots
+                }
+                previous_metadata = {
+                    key: value
+                    for key, value in previous_item.items()
+                    if key not in month_slots
+                }
+                if _content_hash(current_metadata) != _content_hash(previous_metadata):
+                    metadata_changed = True
+                    metadata_changed_ids.add(user_id)
+                for slot in month_slots:
+                    if _content_hash(item.get(slot) or {}) != _content_hash(
+                        previous_item.get(slot) or {}
+                    ):
+                        changed_slots.add(slot)
+                        item_changed_slots.setdefault(user_id, set()).add(slot)
+            month_changed_ids = [
+                str(item.get("user_id") or "")
+                for item in changed_items
+                if item_changed_slots.get(str(item.get("user_id") or "").lower())
+            ]
+            # Session donor JSON is one of the largest rows in the database.
+            # Read it only for streamers whose normalized month row changed.
+            session_rows = []
+            if month_changed_ids:
+                session_rows = conn.execute(
+                    """
+                    SELECT streamer_id, broadcast_no, reporting_date, today_balloons, daily_fans
+                    FROM streamer_live_sessions
+                    WHERE streamer_id = ANY(%s)
+                      AND reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 120
+                    ORDER BY observed_at, broadcast_no
+                    """,
+                    (month_changed_ids,),
+                ).fetchall()
             session_days = _index_session_days(aggregate_days(session_rows))
             fallback_fan_days = {}  # Calendar-day snapshots are not session truth.
-            for item in payload.get("items") or []:
-                _upsert_month(
-                    conn, item, item.get("current_month") or {}, observed_at,
-                    session_days, fallback_fan_days
-                )
-                _upsert_month(
-                    conn, item, item.get("previous_month") or {}, observed_at,
-                    session_days, fallback_fan_days
-                )
-                _upsert_month(
-                    conn, item, item.get("older_month") or {}, observed_at,
-                    session_days, fallback_fan_days
-                )
+            for item in changed_items:
+                user_id = str(item.get("user_id") or "").lower()
+                slots = item_changed_slots.get(user_id) or set()
+                for slot in slots:
+                    _upsert_month(
+                        conn,
+                        item,
+                        item.get(slot) or {},
+                        observed_at,
+                        session_days,
+                        fallback_fan_days,
+                    )
+                if user_id in metadata_changed_ids:
+                    # Live/viewer/nickname changes must not read and rewrite
+                    # unrelated months of donor JSON. The cached response is
+                    # authoritative; normalized rows only need light metadata.
+                    conn.execute(
+                        """
+                        UPDATE streamer_month_current
+                        SET crew_name = %s,
+                            nickname = COALESCE(%s, nickname),
+                            profile_image_url = COALESCE(%s, profile_image_url),
+                            note = %s,
+                            is_on_leave = %s,
+                            broadcast_start = %s,
+                            is_live = %s,
+                            is_password_broadcast = %s,
+                            last_collected_at = %s
+                        WHERE streamer_id = %s
+                        """,
+                        (
+                            item.get("crew_name") or "",
+                            item.get("nickname"),
+                            item.get("profile_image_url"),
+                            item.get("note") or "",
+                            bool(item.get("is_on_leave")),
+                            _as_datetime(item.get("broadcast_start")),
+                            bool(item.get("is_live")),
+                            bool(item.get("is_password_broadcast")),
+                            observed_at,
+                            item.get("user_id"),
+                        ),
+                    )
 
             _save_cache(conn, "current", payload, observed_at)
-            _save_cache(conn, "dashboard:current", build_dashboard(payload), observed_at)
+            if period_layout_changed or metadata_changed or changed_slots.intersection(
+                {"current_month", "previous_month"}
+            ):
+                _save_cache(conn, "dashboard:current", build_dashboard(payload), observed_at)
 
             # Keep the same response shape for each selectable month.  The
             # browser therefore only switches PostgreSQL cache keys; it never
@@ -621,14 +739,21 @@ def save_result(result: dict[str, Any], observed_at: datetime) -> None:
             current = payload.get("current_period") or {}
             previous = payload.get("previous_period") or {}
             period_pairs = [
-                (current, "current_month", "previous_month"),
-                (previous, "previous_month", "older_month"),
-                (payload.get("older_period") or {}, "older_month", "missing_month"),
+                (current, "current_month", "previous_month", {"current_month", "previous_month"}),
+                (previous, "previous_month", "older_month", {"previous_month", "older_month"}),
+                (payload.get("older_period") or {}, "older_month", "missing_month", {"older_month"}),
             ]
-            for period, current_key, previous_key in period_pairs:
+            for period, current_key, previous_key, dependent_slots in period_pairs:
                 year = int(period.get("year") or 0)
                 month = int(period.get("month") or 0)
                 if not year or not month:
+                    continue
+                if (
+                    previous_result is not None
+                    and not period_layout_changed
+                    and not metadata_changed
+                    and not changed_slots.intersection(dependent_slots)
+                ):
                     continue
                 period_payload = dict(payload)
                 period_payload["current_period"] = {"year": year, "month": month}

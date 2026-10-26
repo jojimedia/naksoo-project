@@ -4,7 +4,7 @@ import threading
 from unittest.mock import patch
 from datetime import datetime
 
-from realtime_worker import RealtimeCollector
+from realtime_worker import RealtimeCollector, result_data_hash
 from live_totals import KST
 
 
@@ -114,7 +114,7 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
         release = threading.Event()
         writes = []
 
-        def save(output, now):
+        def save(output, now, previous=None):
             writes.append(output)
             entered.set()
             if not release.wait(2):
@@ -127,7 +127,11 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
             second = None
             try:
                 self.assertTrue(await asyncio.to_thread(entered.wait, 1))
-                second = asyncio.create_task(collector._save_result_async({"items": []}, datetime.now(KST)))
+                second = asyncio.create_task(
+                    collector._save_result_async(
+                        {"items": [], "revision": 2}, datetime.now(KST)
+                    )
+                )
                 await asyncio.sleep(0.02)
                 self.assertEqual(len(writes), 1)
                 collector.poonggo_live.publish_live_status({"user_id": "test", "is_live": False})
@@ -138,6 +142,30 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 if second is not None:
                     await second
             self.assertEqual(len(writes), 2)
+
+    async def test_unchanged_result_skips_database_write(self):
+        collector = RealtimeCollector()
+        initial = {
+            "items": [],
+            "count": 0,
+            "created_at": "2026-10-27T10:00:00+09:00",
+        }
+        collector.latest_result = initial
+        collector.latest_result_hash = result_data_hash(initial)
+        changed_clock_only = {
+            "items": [],
+            "count": 0,
+            "created_at": "2026-10-27T10:00:10+09:00",
+        }
+        with (
+            patch("realtime_worker.get_collector_members", return_value=[]),
+            patch("realtime_worker.save_result") as save,
+        ):
+            saved = await collector._save_result_async(
+                changed_clock_only, datetime.now(KST)
+            )
+        self.assertFalse(saved)
+        save.assert_not_called()
 
     def test_status_overlay_preserves_start_only_for_same_broadcast(self):
         service = RealtimeCollector().poonggo_live
