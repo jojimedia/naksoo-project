@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
@@ -42,6 +43,23 @@ def live_page(user_id: str, stream_no: str, amount: int, started_ms: int) -> str
 
 
 class PoonggoLiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stream_sync_reuses_collector_memory(self):
+        service = PoonggoLiveService()
+        provider = AsyncMock(return_value={"items": []})
+        service.ranking_provider = provider
+        with (
+            patch("poonggo_live.get_cached_result") as database_read,
+            patch(
+                "poonggo_live.asyncio.sleep",
+                new_callable=AsyncMock,
+                side_effect=asyncio.CancelledError,
+            ),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                await service.sync_streams()
+        provider.assert_awaited_once_with()
+        database_read.assert_not_called()
+
     def test_connected_stream_is_positive_live_evidence_only(self):
         service = PoonggoLiveService()
         service.live_statuses["test"] = {

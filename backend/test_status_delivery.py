@@ -167,6 +167,26 @@ class StatusDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(saved)
         save.assert_not_called()
 
+    async def test_live_roster_does_not_copy_month_payloads(self):
+        collector = RealtimeCollector()
+        collector.latest_result = {
+            "items": [
+                {
+                    "user_id": "test",
+                    "crew_name": "crew",
+                    "nickname": "nick",
+                    "is_live": True,
+                    "broadcast_no": "123",
+                    "broadcast_start": "2026-10-27T10:00:00+09:00",
+                    "current_month": {"fans": [{"nickname": "large"}]},
+                }
+            ]
+        }
+        roster = await collector._get_live_roster_async()
+        item = roster["items"][0]
+        self.assertEqual(item["broadcast_no"], "123")
+        self.assertNotIn("current_month", item)
+
     def test_status_overlay_preserves_start_only_for_same_broadcast(self):
         service = RealtimeCollector().poonggo_live
         service.publish_live_status({"user_id": "iluvbin", "is_live": True, "broadcast_no": "new", "status_observed_at": datetime.now(KST).isoformat()})

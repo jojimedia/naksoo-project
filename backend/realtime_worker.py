@@ -260,6 +260,7 @@ class RealtimeCollector:
         self.latest_result: dict[str, Any] | None = None
         self.latest_result_hash: str | None = None
         self.ready_period_keys: set[str] = set()
+        self.poonggo_live.ranking_provider = self._get_live_roster_async
 
     def _restore_state(self, now: datetime) -> None:
         if self.state_restored:
@@ -780,6 +781,29 @@ class RealtimeCollector:
                 self.latest_result = deepcopy(loaded)
                 self.latest_result_hash = result_data_hash(loaded)
         return deepcopy(self.latest_result) if self.latest_result is not None else None
+
+    async def _get_live_roster_async(self) -> dict[str, Any] | None:
+        """Return only fields needed to maintain Poonggo SSE connections."""
+
+        if self.latest_result is None:
+            await self._get_latest_result_async()
+        if self.latest_result is None:
+            return None
+        fields = (
+            "user_id",
+            "crew_name",
+            "nickname",
+            "is_live",
+            "broadcast_no",
+            "broadcast_start",
+            "status_observed_at",
+        )
+        return {
+            "items": [
+                {key: item.get(key) for key in fields}
+                for item in self.latest_result.get("items") or []
+            ]
+        }
 
     async def _save_result_async(self, output, now):
         # Serialize dashboard writers while keeping HTTP/SSE on the event loop.

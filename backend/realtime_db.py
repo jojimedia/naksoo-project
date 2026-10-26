@@ -810,7 +810,7 @@ def load_live_totals() -> list[dict[str, Any]]:
             """SELECT streamer_id, broadcast_no, crew_name, nickname, reporting_date, today_balloons,
                       daily_fans, month_balloons, year, month, source, finalized, observed_at
                FROM streamer_live_sessions
-               WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 120
+               WHERE reporting_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - 2
                ORDER BY observed_at"""
         ).fetchall()
     by_user = {}

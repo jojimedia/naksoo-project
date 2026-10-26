@@ -16,7 +16,7 @@ from collections import deque
 from contextlib import suppress
 from copy import deepcopy
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import httpx
 from fastapi import FastAPI, Request
@@ -341,6 +341,12 @@ class PoonggoLiveService:
         self.lock = asyncio.Lock()
         self.changed = asyncio.Event()
         self.started_at = _iso_now()
+        # The collector and live service share one process. Reuse the
+        # collector's in-memory result instead of downloading ranking_cache
+        # from PostgreSQL every five seconds.
+        self.ranking_provider: Callable[
+            [], Awaitable[dict[str, Any] | None]
+        ] | None = None
 
     def _remember_id(self, donation_id: str) -> bool:
         if not donation_id or donation_id in self.seen_ids:
@@ -841,7 +847,11 @@ class PoonggoLiveService:
         semaphore = asyncio.Semaphore(2)
         while True:
             try:
-                cached = get_cached_result() or {}
+                cached = (
+                    await self.ranking_provider()
+                    if self.ranking_provider is not None
+                    else await asyncio.to_thread(get_cached_result)
+                ) or {}
             except Exception as error:
                 print(f"Poonggo live roster delayed: {error}")
                 await asyncio.sleep(5)
